@@ -1,0 +1,49 @@
+/* Dock themes. Each sets the same tokens; M3 adds the wallpaper refraction under Glass. */
+:root {
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --radius-pill: 999px;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.dock[data-theme="glass"] {
+  --dock-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08));
+  --dock-border: rgba(255, 255, 255, 0.35);
+  --dock-fg: #ffffff;
+  --dock-hover: rgba(255, 255, 255, 0.16);
+  --dock-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+.dock[data-theme="iosGlass"] {
+  --dock-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.16));
+  --dock-border: rgba(255, 255, 255, 0.55);
+  --dock-fg: #ffffff;
+  --dock-hover: rgba(255, 255, 255, 0.22);
+  --dock-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(255, 255, 255, 0.15);
+}
+.dock[data-theme="midnight"] {
+  --dock-bg: linear-gradient(180deg, rgba(22, 27, 48, 0.82), rgba(10, 12, 24, 0.86));
+  --dock-border: rgba(120, 140, 255, 0.25);
+  --dock-fg: #e6e9ff;
+  --dock-hover: rgba(120, 140, 255, 0.18);
+  --dock-highlight: inset 0 1px 0 rgba(160, 175, 255, 0.18);
+}
+.dock[data-theme="white"] {
+  --dock-bg: rgba(250, 250, 252, 0.94);
+  --dock-border: rgba(0, 0, 0, 0.08);
+  --dock-fg: #16171d;
+  --dock-hover: rgba(0, 0, 0, 0.06);
+  --dock-highlight: inset 0 1px 0 rgba(255, 255, 255, 1);
+}
+.dock[data-theme="black"] {
+  --dock-bg: rgba(8, 8, 10, 0.94);
+  --dock-border: rgba(255, 255, 255, 0.08);
+  --dock-fg: #f4f4f6;
+  --dock-hover: rgba(255, 255, 255, 0.1);
+  --dock-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.dock[data-theme="clear"] {
+  --dock-bg: rgba(255, 255, 255, 0.04);
+  --dock-border: rgba(255, 255, 255, 0.18);
+  --dock-fg: #ffffff;
+  --dock-hover: rgba(255, 255, 255, 0.12);
+  --dock-highlight: none;
+}

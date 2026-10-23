@@ -1,0 +1,21 @@
+import React from "react";
+import ReactDOM from "react-dom/client";
+
+import { Dock } from "./dock/Dock";
+import { SettingsApp } from "./settings/SettingsApp";
+import { useSettings } from "./settings/store";
+import "./design/tokens.css";
+import "./index.css";
+
+useSettings
+  .getState()
+  .load()
+  .catch((error) => console.error("failed to load settings", error));
+
+// One bundle serves both windows: the dock (default) and settings (#settings).
+const isSettingsWindow = window.location.hash.startsWith("#settings");
+document.documentElement.classList.add(isSettingsWindow ? "settings-window" : "dock-window");
+
+ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
+  <React.StrictMode>{isSettingsWindow ? <SettingsApp /> : <Dock />}</React.StrictMode>,
+);

@@ -1,0 +1,150 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  font-family: var(--font);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* ---------- Dock window: transparent; the bar draws itself ---------- */
+.dock-window,
+.dock-window body {
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+}
+
+.dock {
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  color: var(--dock-fg);
+}
+
+.dock-content {
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 10px;
+  background: var(--dock-bg);
+  border: 1px solid var(--dock-border);
+  box-shadow: var(--dock-highlight);
+  border-radius: var(--radius-pill);
+  backdrop-filter: blur(24px) saturate(160%);
+}
+
+.dock[data-style="full"] .dock-content {
+  width: 100%;
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+}
+.dock[data-style="full"][data-edge="bottom"] .dock-content {
+  border-bottom: 0;
+}
+.dock[data-style="full"][data-edge="top"] .dock-content {
+  border-top: 0;
+}
+
+.dock-spacer {
+  flex: 1;
+  min-width: 24px;
+}
+
+.dock-logo,
+.dock-icon-button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  cursor: default;
+  transition: background 160ms var(--ease);
+}
+.dock-logo:hover,
+.dock-icon-button:hover {
+  background: var(--dock-hover);
+}
+.dock[data-size="small"] :is(.dock-logo, .dock-icon-button) {
+  width: 34px;
+  height: 34px;
+}
+.dock[data-size="large"] :is(.dock-logo, .dock-icon-button) {
+  width: 46px;
+  height: 46px;
+}
+
+.dock-logo-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #7dd3fc, #6366f1);
+}
+
+/* ---------- Settings window ---------- */
+.settings-window body {
+  background: #f6f7f9;
+  color: #16171d;
+}
+@media (prefers-color-scheme: dark) {
+  .settings-window body {
+    background: #15161a;
+    color: #ececf1;
+  }
+}
+
+.settings {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 24px;
+}
+.settings h1 {
+  font-size: 22px;
+  margin: 0 0 16px;
+}
+.settings h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.6;
+  margin: 24px 0 8px;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+}
+.choice {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.choice button {
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  background: transparent;
+  border-radius: 8px;
+  padding: 4px 10px;
+}
+.choice .choice-on {
+  background: #6366f1;
+  border-color: #6366f1;
+  color: #fff;
+}
