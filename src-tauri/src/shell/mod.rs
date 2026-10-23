@@ -1,31 +1,58 @@
 //! The dock window, the settings window and the tray icon.
 
+#[cfg(windows)]
+mod appbar;
 pub mod placement;
+pub mod taskbar;
+#[cfg(windows)]
+mod watch;
 
-use std::sync::Mutex;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Mutex,
+};
 
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder,
 };
 
-use crate::{error::AppResult, settings::SettingsStore};
+use crate::{
+    error::AppResult,
+    settings::{Edge, SettingsStore},
+};
 use placement::Rect;
 
 pub const DOCK_LABEL: &str = "dock";
 const SETTINGS_LABEL: &str = "settings";
+/// Event telling the dock page whether it is showing or waiting as an auto-hide sliver.
+pub const DOCK_REVEALED: &str = "dock-revealed";
 
-/// What the page last reported about the dock's content.
+/// The dock's live state, beyond the saved settings.
 pub struct ShellState {
-    /// Pill content width in logical pixels.
+    /// Pill content width in logical pixels, as the page measured it.
     pub content_width: Mutex<f64>,
+    /// With auto-hide on: whether the dock is out (the cursor is on it).
+    revealed: AtomicBool,
+    /// Hidden from the tray: a fullscreen app closing must not bring it back.
+    hidden_by_user: AtomicBool,
+    /// A fullscreen app covers the dock's screen.
+    fullscreen: AtomicBool,
+    /// The strip last claimed from Windows, so unchanged layouts don't re-claim it (each claim
+    /// changes the work area, which would come back as another layout change).
+    reserved: Mutex<Option<(Rect, Edge)>>,
 }
 
 impl Default for ShellState {
     fn default() -> Self {
         Self {
             content_width: Mutex::new(placement::MIN_PILL_WIDTH),
+            revealed: AtomicBool::new(false),
+            hidden_by_user: AtomicBool::new(false),
+            fullscreen: AtomicBool::new(false),
+            reserved: Mutex::new(None),
         }
     }
 }
@@ -34,30 +61,156 @@ pub fn dock_window(app: &AppHandle) -> Option<WebviewWindow> {
     app.get_webview_window(DOCK_LABEL)
 }
 
-/// Size and move the dock for the current settings on the primary monitor.
-pub fn place_dock(app: &AppHandle) -> AppResult<()> {
-    let Some(window) = dock_window(app) else {
-        return Ok(());
-    };
+fn monitor_rect(window: &WebviewWindow) -> AppResult<Option<(Rect, f64)>> {
     let Some(monitor) = window.primary_monitor()?.or(window.current_monitor()?) else {
-        return Ok(());
+        return Ok(None);
     };
-    let screen = Rect {
+    let rect = Rect {
         x: monitor.position().x,
         y: monitor.position().y,
         width: monitor.size().width,
         height: monitor.size().height,
     };
+    Ok(Some((rect, monitor.scale_factor())))
+}
+
+/// Size and move the dock for the current settings on the primary monitor, and claim (or give
+/// back) its strip of the screen.
+pub fn place_dock(app: &AppHandle) -> AppResult<()> {
+    let Some(window) = dock_window(app) else {
+        return Ok(());
+    };
+    let Some((screen, scale)) = monitor_rect(&window)? else {
+        return Ok(());
+    };
     let settings = app.state::<SettingsStore>().get();
-    let content_width = *app
-        .state::<ShellState>()
-        .content_width
-        .lock()
-        .expect("shell lock");
-    let rect = placement::dock_rect(screen, monitor.scale_factor(), &settings, content_width);
+    let shell = app.state::<ShellState>();
+    let content_width = *shell.content_width.lock().expect("shell lock");
+    let dock = placement::dock_rect(screen, scale, &settings, content_width);
+    let tucked_away = settings.auto_hide && !shell.revealed.load(Ordering::SeqCst);
+    let rect = if tucked_away {
+        placement::sliver_rect(screen, settings.edge)
+    } else {
+        dock
+    };
     window.set_size(PhysicalSize::new(rect.width, rect.height))?;
     window.set_position(PhysicalPosition::new(rect.x, rect.y))?;
+
+    // An auto-hiding or user-hidden dock claims nothing: windows may use the whole screen.
+    let claims = !settings.auto_hide && !shell.hidden_by_user.load(Ordering::SeqCst);
+    let strip = if claims {
+        placement::reserved_rect(screen, dock, settings.edge)
+    } else {
+        Rect {
+            height: 0,
+            ..placement::sliver_rect(screen, settings.edge)
+        }
+    };
+    let mut reserved = shell.reserved.lock().expect("shell lock");
+    if *reserved != Some((strip, settings.edge)) {
+        *reserved = Some((strip, settings.edge));
+        #[cfg(windows)]
+        appbar::reserve(
+            windows::Win32::Foundation::HWND(window.hwnd()?.0),
+            strip,
+            settings.edge,
+        );
+    }
     Ok(())
+}
+
+/// Re-place after a layout change, re-claiming the strip even if it looks unchanged (another
+/// app bar or the taskbar may have taken part of it).
+pub fn relayout(app: &AppHandle) {
+    *app.state::<ShellState>().reserved.lock().expect("shell lock") = None;
+    if let Err(error) = place_dock(app) {
+        tracing::warn!(%error, "failed to re-place the dock");
+    }
+}
+
+/// The page says the cursor arrived on (or left) an auto-hiding dock.
+pub fn set_revealed(app: &AppHandle, revealed: bool) -> AppResult<()> {
+    let shell = app.state::<ShellState>();
+    if shell.revealed.swap(revealed, Ordering::SeqCst) != revealed {
+        place_dock(app)?;
+        app.emit(DOCK_REVEALED, revealed)?;
+    }
+    Ok(())
+}
+
+/// Whether the page should draw the dock (not just the auto-hide sliver).
+pub fn is_revealed(app: &AppHandle) -> bool {
+    let auto_hide = app.state::<SettingsStore>().get().auto_hide;
+    !auto_hide || app.state::<ShellState>().revealed.load(Ordering::SeqCst)
+}
+
+/// A drag of the dock ended: snap to whichever edge it was dropped nearer.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn snap_after_drag(app: &AppHandle) {
+    let result = (|| -> AppResult<()> {
+        let Some(window) = dock_window(app) else {
+            return Ok(());
+        };
+        let Some((screen, _)) = monitor_rect(&window)? else {
+            return Ok(());
+        };
+        let (position, size) = (window.outer_position()?, window.outer_size()?);
+        let dropped = Rect {
+            x: position.x,
+            y: position.y,
+            width: size.width,
+            height: size.height,
+        };
+        let store = app.state::<SettingsStore>();
+        let mut settings = store.get();
+        let edge = placement::edge_for_drop(screen, dropped);
+        if edge != settings.edge {
+            settings.edge = edge;
+            store.set(settings.clone())?;
+            app.emit(crate::commands::SETTINGS_CHANGED, &settings)?;
+        }
+        // Back into place either way: a drag along the same edge just springs back.
+        relayout(app);
+        Ok(())
+    })();
+    if let Err(error) = result {
+        tracing::warn!(%error, "failed to snap the dock after a drag");
+    }
+}
+
+/// A fullscreen app started or stopped covering the dock's screen.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn set_fullscreen(app: &AppHandle, active: bool) {
+    let shell = app.state::<ShellState>();
+    if shell.fullscreen.swap(active, Ordering::SeqCst) == active {
+        return;
+    }
+    tracing::debug!(active, "fullscreen app changed");
+    let Some(window) = dock_window(app) else { return };
+    let result = if active {
+        window.hide().map_err(Into::into)
+    } else if shell.hidden_by_user.load(Ordering::SeqCst) {
+        Ok(())
+    } else {
+        show_dock(&window)
+    };
+    if let Err(error) = result {
+        tracing::warn!(%error, "failed to follow a fullscreen app");
+    }
+}
+
+/// Explorer restarted: it forgot the dock's app bar and shows its taskbar again.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn explorer_restarted(app: &AppHandle) {
+    tracing::info!("explorer restarted; setting up the dock again");
+    taskbar::apply_system(app.state::<SettingsStore>().get().taskbar_mode);
+    #[cfg(windows)]
+    if let Some(Ok(raw)) = dock_window(app).map(|w| w.hwnd()) {
+        let hwnd = windows::Win32::Foundation::HWND(raw.0);
+        appbar::unregister(hwnd);
+        appbar::register(hwnd);
+    }
+    relayout(app);
 }
 
 /// Show the dock and keep it out of Alt+Tab. Use this instead of `window.show()`.
@@ -117,12 +270,17 @@ pub fn open_settings_window(app: &AppHandle) -> AppResult<()> {
 
 fn toggle_dock(app: &AppHandle) {
     let Some(window) = dock_window(app) else { return };
-    let result = if window.is_visible().unwrap_or(false) {
+    let hide = window.is_visible().unwrap_or(false);
+    app.state::<ShellState>()
+        .hidden_by_user
+        .store(hide, Ordering::SeqCst);
+    let result = if hide {
         window.hide().map_err(Into::into)
     } else {
         show_dock(&window)
     };
-    if let Err(error) = result {
+    // A hidden dock gives its strip of the screen back.
+    if let Err(error) = result.and_then(|()| place_dock(app)) {
         tracing::warn!(%error, "failed to toggle dock");
     }
 }
@@ -166,9 +324,16 @@ fn setup_tray(app: &AppHandle) -> AppResult<()> {
 
 pub fn init(app: &AppHandle) -> AppResult<()> {
     setup_tray(app)?;
+    // The taskbar goes first: once it auto-hides, its strip is free for the dock to claim.
+    taskbar::apply_system(app.state::<SettingsStore>().get().taskbar_mode);
+    let Some(window) = dock_window(app) else {
+        return Ok(());
+    };
+    #[cfg(windows)]
+    watch::install(&window, app);
     place_dock(app)?;
-    if let Some(window) = dock_window(app) {
-        show_dock(&window)?;
-    }
+    show_dock(&window)?;
+    #[cfg(windows)]
+    watch::refresh_fullscreen(app);
     Ok(())
 }

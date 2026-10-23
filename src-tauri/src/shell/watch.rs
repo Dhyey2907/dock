@@ -1,0 +1,194 @@
+//! System changes the dock reacts to. Tauri doesn't surface these, so the dock's window
+//! procedure is subclassed and the front window is watched with a WinEvent hook:
+//! - display layout or work area changes, and app-bar position notices: re-place the dock,
+//!   collapsing bursts until the layout settles;
+//! - a drag of the dock ends: snap it to the nearer edge;
+//! - fullscreen apps opening or closing: hide the dock while one covers its screen;
+//! - Explorer restarting (it forgets app bars and re-shows the taskbar): set everything again;
+//! - signing out or shutting down: put the taskbar back before the dock is killed.
+
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Once, OnceLock,
+};
+use std::time::Duration;
+
+use tauri::{AppHandle, WebviewWindow};
+use windows::{
+    core::w,
+    Win32::{
+        Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM},
+        Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST},
+        UI::{
+            Accessibility::{SetWinEventHook, HWINEVENTHOOK},
+            Shell::{DefSubclassProc, SetWindowSubclass, ABN_FULLSCREENAPP, ABN_POSCHANGED},
+            WindowsAndMessaging::{
+                GetClassNameW, GetForegroundWindow, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId,
+                IsZoomed, RegisterWindowMessageW, EVENT_OBJECT_LOCATIONCHANGE, EVENT_SYSTEM_FOREGROUND,
+                GWL_STYLE, OBJID_WINDOW, SPI_SETWORKAREA, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
+                WM_DISPLAYCHANGE, WM_ENDSESSION, WM_EXITSIZEMOVE, WM_NCDESTROY, WM_SETTINGCHANGE, WS_CAPTION,
+            },
+        },
+    },
+};
+
+use super::{appbar, taskbar};
+
+static APP: OnceLock<AppHandle> = OnceLock::new();
+/// `RegisterWindowMessage("TaskbarCreated")`: broadcast when Explorer (re)starts.
+static TASKBAR_CREATED: OnceLock<u32> = OnceLock::new();
+
+/// Run `work` once, `delay` after the first of a burst of calls guarded by `pending`.
+fn coalesce(pending: &'static AtomicBool, delay: Duration, work: fn(&AppHandle)) {
+    if pending.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let Some(app) = APP.get().cloned() else {
+        pending.store(false, Ordering::SeqCst);
+        return;
+    };
+    // Off the window procedure: moving windows and emitting reach back into this thread.
+    std::thread::spawn(move || {
+        std::thread::sleep(delay);
+        pending.store(false, Ordering::SeqCst);
+        work(&app);
+    });
+}
+
+fn relayout_soon() {
+    static PENDING: AtomicBool = AtomicBool::new(false);
+    coalesce(&PENDING, Duration::from_millis(400), super::relayout);
+}
+
+fn fullscreen_soon() {
+    static PENDING: AtomicBool = AtomicBool::new(false);
+    coalesce(&PENDING, Duration::from_millis(150), refresh_fullscreen);
+}
+
+unsafe extern "system" fn subclass(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+    _id: usize,
+    _data: usize,
+) -> LRESULT {
+    match msg {
+        appbar::CALLBACK if wparam.0 == ABN_FULLSCREENAPP as usize => fullscreen_soon(),
+        appbar::CALLBACK if wparam.0 == ABN_POSCHANGED as usize => relayout_soon(),
+        WM_DISPLAYCHANGE => relayout_soon(),
+        WM_SETTINGCHANGE if wparam.0 == SPI_SETWORKAREA.0 as usize => relayout_soon(),
+        WM_EXITSIZEMOVE => {
+            if let Some(app) = APP.get().cloned() {
+                std::thread::spawn(move || super::snap_after_drag(&app));
+            }
+        }
+        // Sign-out or shutdown is going ahead: the dock is about to be killed.
+        WM_ENDSESSION if wparam.0 != 0 => taskbar::restore_system(),
+        WM_NCDESTROY => appbar::unregister(hwnd),
+        _ if Some(&msg) == TASKBAR_CREATED.get() => {
+            if let Some(app) = APP.get().cloned() {
+                std::thread::spawn(move || super::explorer_restarted(&app));
+            }
+        }
+        _ => {}
+    }
+    // SAFETY: forwarding the unmodified message to the next window procedure.
+    unsafe { DefSubclassProc(hwnd, msg, wparam, lparam) }
+}
+
+/// Install the subclass and the front-window hook. Call once, on the main thread.
+pub fn install(window: &WebviewWindow, app: &AppHandle) {
+    let _ = APP.set(app.clone());
+    // SAFETY: registering (or looking up) a named broadcast message.
+    let _ = TASKBAR_CREATED.set(unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) });
+    let Ok(raw) = window.hwnd() else { return };
+    let hwnd = HWND(raw.0);
+    // SAFETY: called on the main thread that owns this live window; the callback only reads
+    // statics and forwards every message unchanged.
+    if !unsafe { SetWindowSubclass(hwnd, Some(subclass), 1, 0) }.as_bool() {
+        tracing::warn!("could not watch for system changes; the dock may drift until restart");
+    }
+    if !appbar::register(hwnd) {
+        tracing::warn!("could not register the dock as an app bar");
+    }
+    watch_front_window();
+}
+
+/// App-bar notices miss some fullscreen changes (F11 in a browser), so also re-check whenever
+/// the front window changes or moves. Bursts (dragging a window) collapse into one check.
+fn watch_front_window() {
+    static INSTALL: Once = Once::new();
+
+    unsafe extern "system" fn on_event(
+        _hook: HWINEVENTHOOK,
+        event: u32,
+        hwnd: HWND,
+        id_object: i32,
+        id_child: i32,
+        _thread: u32,
+        _time: u32,
+    ) {
+        // Location changes fire for every window and caret; only the front window matters.
+        if event == EVENT_OBJECT_LOCATIONCHANGE
+            // SAFETY: a plain query with no arguments.
+            && (id_object != OBJID_WINDOW.0 || id_child != 0 || hwnd != unsafe { GetForegroundWindow() })
+        {
+            return;
+        }
+        fullscreen_soon();
+    }
+
+    INSTALL.call_once(|| {
+        let flags = WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS;
+        for event in [EVENT_SYSTEM_FOREGROUND, EVENT_OBJECT_LOCATIONCHANGE] {
+            // SAFETY: an out-of-context hook with a `'static` callback, installed on the UI
+            // thread for the life of the app; the callback only reads statics.
+            let hook = unsafe { SetWinEventHook(event, event, None, Some(on_event), 0, 0, flags) };
+            if hook.is_invalid() {
+                tracing::warn!(event, "could not watch the front window for fullscreen apps");
+            }
+        }
+    });
+}
+
+/// Whether the front window fills the dock's screen (a video, a game, a browser in F11).
+pub fn refresh_fullscreen(app: &AppHandle) {
+    let Some(dock) = super::dock_window(app).and_then(|w| w.hwnd().ok()) else {
+        return;
+    };
+    let dock = HWND(dock.0);
+    // SAFETY: read-only queries on the foreground window and our own dock window; every
+    // out-parameter is a local of the right type and size.
+    let covered = unsafe {
+        let front = GetForegroundWindow();
+        let mut class = [0u16; 32];
+        let len = GetClassNameW(front, &mut class) as usize;
+        let class = String::from_utf16_lossy(&class[..len]);
+        let mut pid = 0;
+        GetWindowThreadProcessId(front, Some(&mut pid));
+        // The desktop fills the screen too, and the dock itself is never "fullscreen".
+        let ignored =
+            front.is_invalid() || pid == std::process::id() || class == "Progman" || class == "WorkerW";
+        let monitor = MonitorFromWindow(front, MONITOR_DEFAULTTONEAREST);
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        let mut rect = RECT::default();
+        // With the taskbar and dock auto-hiding, an ordinary maximized window covers the
+        // monitor too. Fullscreen apps (F11, video, games) have no title bar.
+        let maximized_window = IsZoomed(front).as_bool()
+            && (GetWindowLongW(front, GWL_STYLE) as u32 & WS_CAPTION.0) == WS_CAPTION.0;
+        !ignored
+            && !maximized_window
+            && monitor == MonitorFromWindow(dock, MONITOR_DEFAULTTONEAREST)
+            && GetMonitorInfoW(monitor, &mut info).as_bool()
+            && GetWindowRect(front, &mut rect).is_ok()
+            && rect.left <= info.rcMonitor.left
+            && rect.top <= info.rcMonitor.top
+            && rect.right >= info.rcMonitor.right
+            && rect.bottom >= info.rcMonitor.bottom
+    };
+    super::set_fullscreen(app, covered);
+}

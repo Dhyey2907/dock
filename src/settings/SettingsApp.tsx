@@ -5,6 +5,7 @@ import type { DockStyle } from "../core/generated/DockStyle";
 import type { Edge } from "../core/generated/Edge";
 import type { TaskbarMode } from "../core/generated/TaskbarMode";
 import type { Theme } from "../core/generated/Theme";
+import { ipc } from "../core/ipc";
 import { useSettings } from "./store";
 
 function Choice<T extends string>({
@@ -128,6 +129,14 @@ export function SettingsApp() {
             checked={settings.launchAtStartup}
             onChange={(e) => save({ launchAtStartup: e.target.checked })}
           />
+        </Row>
+        <Row label="Quit the dock and bring back the Windows taskbar">
+          <button
+            className="settings-quit"
+            onClick={() => ipc.appQuit().catch((error) => console.error("failed to quit", error))}
+          >
+            Quit Dock
+          </button>
         </Row>
       </section>
     </main>

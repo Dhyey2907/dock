@@ -26,6 +26,7 @@ button {
 }
 
 .dock {
+  position: relative;
   height: 100%;
   display: flex;
   justify-content: center;
@@ -56,6 +57,41 @@ button {
 }
 .dock[data-style="full"][data-edge="top"] .dock-content {
   border-top: 0;
+}
+
+/* Auto-hide: tucked away, the window is a thin strip that only has to catch the cursor. The
+   bar stays laid out (hidden) so its width is still measured. */
+.dock-sliver {
+  position: absolute;
+  inset: 0;
+  /* Not fully transparent, so the strip is always hit-testable. */
+  background: rgba(255, 255, 255, 0.01);
+}
+.dock[data-revealed="false"] .dock-content {
+  visibility: hidden;
+}
+.dock[data-auto-hide="true"][data-revealed="true"][data-edge="bottom"] .dock-content {
+  animation: dock-in-bottom 220ms var(--ease);
+}
+.dock[data-auto-hide="true"][data-revealed="true"][data-edge="top"] .dock-content {
+  animation: dock-in-top 220ms var(--ease);
+}
+@keyframes dock-in-bottom {
+  from {
+    transform: translateY(60%);
+    opacity: 0;
+  }
+}
+@keyframes dock-in-top {
+  from {
+    transform: translateY(-60%);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dock-content {
+    animation: none !important;
+  }
 }
 
 .dock-spacer {
@@ -142,6 +178,13 @@ button {
   background: transparent;
   border-radius: 8px;
   padding: 4px 10px;
+}
+.settings-quit {
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  background: transparent;
+  border-radius: 8px;
+  padding: 4px 12px;
+  white-space: nowrap;
 }
 .choice .choice-on {
   background: #6366f1;

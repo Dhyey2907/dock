@@ -41,6 +41,48 @@ pub fn dock_rect(monitor: Rect, scale: f64, settings: &Settings, content_width: 
     }
 }
 
+/// The screen strip the dock claims so maximized windows stop short of it: the whole monitor
+/// width, from the edge to the dock's far side (a pill's margin included).
+pub fn reserved_rect(monitor: Rect, dock: Rect, edge: Edge) -> Rect {
+    let (top, bottom) = match edge {
+        Edge::Bottom => (dock.y, monitor.y + monitor.height as i32),
+        Edge::Top => (monitor.y, dock.y + dock.height as i32),
+    };
+    Rect {
+        x: monitor.x,
+        y: top,
+        width: monitor.width,
+        height: (bottom - top).max(0) as u32,
+    }
+}
+
+/// Height in physical pixels of the strip an auto-hidden dock leaves to catch the cursor.
+pub const SLIVER: u32 = 3;
+
+/// Where an auto-hidden dock waits: a thin full-width strip along its edge.
+pub fn sliver_rect(monitor: Rect, edge: Edge) -> Rect {
+    let y = match edge {
+        Edge::Bottom => monitor.y + monitor.height as i32 - SLIVER as i32,
+        Edge::Top => monitor.y,
+    };
+    Rect {
+        x: monitor.x,
+        y,
+        width: monitor.width,
+        height: SLIVER,
+    }
+}
+
+/// The edge a dragged dock snaps to: whichever half of the screen its middle was dropped in.
+pub fn edge_for_drop(monitor: Rect, window: Rect) -> Edge {
+    let middle = window.y as i64 + window.height as i64 / 2;
+    if middle < monitor.y as i64 + monitor.height as i64 / 2 {
+        Edge::Top
+    } else {
+        Edge::Bottom
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -112,5 +154,52 @@ mod tests {
         };
         let rect = dock_rect(monitor, 1.0, &settings, 0.0);
         assert_eq!((rect.x, rect.y), (-1920, 200 + 1080 - 56));
+    }
+
+    #[test]
+    fn reserved_strip_covers_the_pill_and_its_margin() {
+        let dock = dock_rect(SCREEN, 1.5, &Settings::default(), 600.0);
+        let strip = reserved_rect(SCREEN, dock, Edge::Bottom);
+        assert_eq!(
+            strip,
+            Rect {
+                x: 0,
+                y: 1800 - 84 - 12,
+                width: 2880,
+                height: 84 + 12
+            }
+        );
+    }
+
+    #[test]
+    fn reserved_strip_on_top_ends_below_the_dock() {
+        let settings = Settings {
+            edge: Edge::Top,
+            ..Settings::default()
+        };
+        let dock = dock_rect(SCREEN, 1.0, &settings, 600.0);
+        let strip = reserved_rect(SCREEN, dock, Edge::Top);
+        assert_eq!((strip.y, strip.height), (0, 8 + 56));
+    }
+
+    #[test]
+    fn sliver_hugs_the_edge() {
+        assert_eq!(sliver_rect(SCREEN, Edge::Bottom).y, 1800 - SLIVER as i32);
+        assert_eq!(sliver_rect(SCREEN, Edge::Top).y, 0);
+        assert_eq!(sliver_rect(SCREEN, Edge::Top).width, 2880);
+    }
+
+    #[test]
+    fn dropping_in_the_upper_half_snaps_to_the_top() {
+        let at = |y| Rect {
+            x: 100,
+            y,
+            width: 600,
+            height: 84,
+        };
+        assert_eq!(edge_for_drop(SCREEN, at(300)), Edge::Top);
+        assert_eq!(edge_for_drop(SCREEN, at(1200)), Edge::Bottom);
+        // Exactly in the middle counts as the bottom, where it started.
+        assert_eq!(edge_for_drop(SCREEN, at(900 - 42)), Edge::Bottom);
     }
 }

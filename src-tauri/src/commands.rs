@@ -25,9 +25,33 @@ pub fn settings_set(app: AppHandle, settings: Settings) -> AppResult<Settings> {
     if before.launch_at_startup != settings.launch_at_startup {
         sync_autostart(&app, settings.launch_at_startup);
     }
-    shell::place_dock(&app)?;
+    if before.taskbar_mode != settings.taskbar_mode {
+        shell::taskbar::apply_system(settings.taskbar_mode);
+    }
+    if before.auto_hide != settings.auto_hide {
+        // Turning auto-hide on tucks the dock away; off brings it out for good.
+        shell::set_revealed(&app, false)?;
+        app.emit(shell::DOCK_REVEALED, shell::is_revealed(&app))?;
+    }
+    if before.edge != settings.edge {
+        shell::relayout(&app);
+    } else {
+        shell::place_dock(&app)?;
+    }
     app.emit(SETTINGS_CHANGED, &settings)?;
     Ok(settings)
+}
+
+/// The cursor arrived on (true) or left (false) an auto-hiding dock.
+#[tauri::command]
+pub fn dock_reveal(app: AppHandle, revealed: bool) -> AppResult<()> {
+    shell::set_revealed(&app, revealed)
+}
+
+/// Whether the page should draw the dock rather than the auto-hide sliver.
+#[tauri::command]
+pub fn dock_is_revealed(app: AppHandle) -> bool {
+    shell::is_revealed(&app)
 }
 
 /// The page measured the pill's content; resize the dock to fit it.
@@ -46,6 +70,12 @@ pub fn dock_set_content_width(app: AppHandle, width: f64) -> AppResult<()> {
 #[tauri::command]
 pub fn open_settings(app: AppHandle) -> AppResult<()> {
     shell::open_settings_window(&app)
+}
+
+/// Quit the dock; the exit handler puts the Windows taskbar back.
+#[tauri::command]
+pub fn app_quit(app: AppHandle) {
+    app.exit(0);
 }
 
 /// Make Windows' "run at sign-in" entry match the setting.

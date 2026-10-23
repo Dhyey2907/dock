@@ -10,7 +10,7 @@ use crate::{settings::SettingsStore, shell::ShellState};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         // A second launch just shows the running dock.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = shell::dock_window(app) {
@@ -25,6 +25,8 @@ pub fn run() {
             let handle = app.handle();
             let log_guard = logging::init(&handle.path().app_log_dir()?);
             app.manage(log_guard);
+            // Before anything touches the taskbar, so a panic from here on restores it.
+            shell::taskbar::init(&handle.path().app_data_dir()?);
 
             let store = SettingsStore::open(&handle.path().app_config_dir()?);
             let launch_at_startup = store.get().launch_at_startup;
@@ -36,12 +38,32 @@ pub fn run() {
             tracing::info!(version = env!("CARGO_PKG_VERSION"), "dock started");
             Ok(())
         })
+        // The dock only quits from the tray or Settings, never from Alt+F4 or WM_CLOSE: quitting
+        // must go through the exit path that restores the taskbar.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == shell::DOCK_LABEL {
+                    api.prevent_close();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::settings_get,
             commands::settings_set,
             commands::dock_set_content_width,
+            commands::dock_reveal,
+            commands::dock_is_revealed,
             commands::open_settings,
+            commands::app_quit,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|_app, event| {
+        // Quit from the tray, or the last window closing: the taskbar comes back.
+        if let tauri::RunEvent::Exit = event {
+            shell::taskbar::restore_system();
+            tracing::info!("dock stopped; taskbar restored");
+        }
+    });
 }
