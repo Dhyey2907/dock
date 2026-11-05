@@ -157,6 +157,32 @@ mod tests {
     }
 
     #[test]
+    fn each_screen_gets_its_own_dock_strip_and_sliver() {
+        // The user's layout: a 150% laptop screen and a 100% screen to its right.
+        let laptop = Rect {
+            x: 0,
+            y: 0,
+            width: 2560,
+            height: 1600,
+        };
+        let side = Rect {
+            x: 2560,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        };
+        let settings = Settings::default();
+        let a = dock_rect(laptop, 1.5, &settings, 600.0);
+        let b = dock_rect(side, 1.0, &settings, 600.0);
+        assert_eq!((a.width, a.height, a.y), (900, 84, 1600 - 84 - 12));
+        assert_eq!((b.width, b.height, b.y), (600, 56, 1080 - 56 - 8));
+        assert_eq!(b.x, 2560 + (1920 - 600) / 2);
+        let strip = reserved_rect(side, b, Edge::Bottom);
+        assert_eq!((strip.x, strip.width, strip.y), (2560, 1920, 1080 - 64));
+        assert_eq!(sliver_rect(side, Edge::Bottom).x, 2560);
+    }
+
+    #[test]
     fn reserved_strip_covers_the_pill_and_its_margin() {
         let dock = dock_rect(SCREEN, 1.5, &Settings::default(), 600.0);
         let strip = reserved_rect(SCREEN, dock, Edge::Bottom);

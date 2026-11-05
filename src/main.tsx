@@ -5,6 +5,7 @@ import { BubbleApp } from "./bubble/BubbleApp";
 import { Dock } from "./dock/Dock";
 import { useApps } from "./dock/apps";
 import { useGlass } from "./dock/glass/store";
+import { isMainDock } from "./core/ipc";
 import { PanelApp } from "./panel/PanelApp";
 import { SettingsApp } from "./settings/SettingsApp";
 import { WelcomeApp } from "./settings/WelcomeApp";
@@ -33,7 +34,9 @@ const page = hash.startsWith("#settings")
 document.documentElement.classList.add(`${page}-window`);
 
 useSettings.getState().load().catch(report("settings"));
-if (page === "dock" || page === "panel") useWidgets.getState().load().catch(report("widgets"));
+// Widgets live on the main dock only; docks on other screens show just their screen's windows.
+const widgets = page === "panel" || (page === "dock" && isMainDock());
+if (widgets) useWidgets.getState().load().catch(report("widgets"));
 if (page === "dock") {
   useApps.getState().load().catch(report("apps"));
   useGlass.getState().load().catch(report("the glass"));
@@ -50,7 +53,7 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     ) : page === "welcome" ? (
       <WelcomeApp />
     ) : (
-      <Dock />
+      <Dock main={isMainDock()} />
     )}
   </React.StrictMode>,
 );

@@ -1,7 +1,9 @@
-//! Keeps the glass picture current: built once at start and again whenever Windows reports a
-//! wallpaper change (or the screen layout changes). Nothing is polled.
+//! Keeps each dock's glass picture current: built once at start and again whenever Windows
+//! reports a wallpaper change, the screen layout changes, or docks come and go. Each dock gets
+//! the desktop of its own screen. Nothing is polled.
 
 use std::{
+    collections::HashMap,
     io::Cursor,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -18,15 +20,17 @@ use crate::{error::AppResult, shell::placement::Rect};
 
 #[derive(Default)]
 pub struct GlassState {
-    frame: Mutex<Option<GlassFrame>>,
+    /// The picture each dock last got, by window label.
+    frames: Mutex<HashMap<String, GlassFrame>>,
 }
 
-pub fn current(app: &AppHandle) -> Option<GlassFrame> {
+pub fn current(app: &AppHandle, label: &str) -> Option<GlassFrame> {
     app.state::<GlassState>()
-        .frame
+        .frames
         .lock()
         .expect("glass lock")
-        .clone()
+        .get(label)
+        .cloned()
 }
 
 /// Rebuild the picture soon; bursts of change notices collapse into one rebuild.
@@ -44,25 +48,41 @@ pub fn refresh_soon(app: &AppHandle) {
 }
 
 fn refresh(app: &AppHandle) {
-    let Some(screen) = crate::shell::dock_screen(app) else {
-        return;
-    };
-    match build(screen) {
-        Ok(frame) => {
-            let state = app.state::<GlassState>();
-            let mut current = state.frame.lock().expect("glass lock");
-            if current.as_ref() == Some(&frame) {
-                return;
-            }
-            *current = Some(frame.clone());
-            drop(current);
-            if let Err(error) = app.emit(GLASS_CHANGED, &frame) {
-                tracing::warn!(%error, "failed to send the glass picture");
-            }
+    let docks = crate::shell::dock_screens(app);
+    // Screens built in this pass, so two docks on one screen (never, today) share the work.
+    let mut built: Vec<(Rect, GlassFrame)> = Vec::new();
+    let state = app.state::<GlassState>();
+    for (label, screen) in &docks {
+        let frame = match built.iter().find(|(r, _)| r == screen) {
+            Some((_, frame)) => frame.clone(),
+            None => match build(*screen) {
+                Ok(frame) => {
+                    built.push((*screen, frame.clone()));
+                    frame
+                }
+                // The dock still works without it: the page falls back to a plain tint.
+                Err(error) => {
+                    tracing::warn!(%error, label, "could not read the wallpaper for the glass");
+                    continue;
+                }
+            },
+        };
+        let mut frames = state.frames.lock().expect("glass lock");
+        if frames.get(label) == Some(&frame) {
+            continue;
         }
-        // The dock still works without it: the page falls back to a plain tint.
-        Err(error) => tracing::warn!(%error, "could not read the wallpaper for the glass"),
+        frames.insert(label.clone(), frame.clone());
+        drop(frames);
+        if let Err(error) = app.emit_to(label.as_str(), GLASS_CHANGED, &frame) {
+            tracing::warn!(%error, "failed to send the glass picture");
+        }
     }
+    // Forget docks that are gone.
+    state
+        .frames
+        .lock()
+        .expect("glass lock")
+        .retain(|label, _| docks.iter().any(|(l, _)| l == label));
 }
 
 #[cfg(windows)]

@@ -19,6 +19,7 @@ const defaults: Settings = {
   quietHours: { enabled: false, start: "22:00", end: "08:00" },
   toggleShortcut: "Ctrl+Alt+D",
   screen: "",
+  docksOn: "one",
   onboarded: true,
 };
 

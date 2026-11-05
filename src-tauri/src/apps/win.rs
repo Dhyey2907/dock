@@ -14,8 +14,9 @@ use windows::{
         Graphics::{
             Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED},
             Gdi::{
-                DeleteObject, GetDC, GetDIBits, GetObjectW, ReleaseDC, BITMAP, BITMAPINFO, BITMAPINFOHEADER,
-                BI_RGB, DIB_RGB_COLORS, HBITMAP, HGDIOBJ,
+                DeleteObject, GetDC, GetDIBits, GetMonitorInfoW, GetObjectW, MonitorFromWindow, ReleaseDC,
+                BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP, HGDIOBJ, MONITORINFO,
+                MONITOR_DEFAULTTONEAREST,
             },
         },
         Storage::{
@@ -52,10 +53,10 @@ use windows::{
                 EnumWindows, GetForegroundWindow, GetWindow, GetWindowLongW, GetWindowTextLengthW,
                 GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindowVisible, PostMessageW,
                 SetForegroundWindow, ShowWindowAsync, CHILDID_SELF, EVENT_OBJECT_CLOAKED,
-                EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE, EVENT_OBJECT_NAMECHANGE, EVENT_OBJECT_UNCLOAKED,
-                EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND, EVENT_SYSTEM_MINIMIZESTART, GWL_EXSTYLE,
-                GW_OWNER, OBJID_WINDOW, SW_MINIMIZE, SW_RESTORE, SW_SHOWNORMAL, WINEVENT_OUTOFCONTEXT,
-                WINEVENT_SKIPOWNPROCESS, WM_CLOSE,
+                EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_NAMECHANGE,
+                EVENT_OBJECT_UNCLOAKED, EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND,
+                EVENT_SYSTEM_MINIMIZESTART, GWL_EXSTYLE, GW_OWNER, OBJID_WINDOW, SW_MINIMIZE, SW_RESTORE,
+                SW_SHOWNORMAL, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WM_CLOSE,
             },
         },
     },
@@ -387,9 +388,28 @@ pub fn windows() -> Vec<WinInfo> {
                 app_id,
                 minimized,
                 app_name,
+                screen: window_screen(hwnd),
             })
         })
         .collect()
+}
+
+/// The full rectangle of the screen a window is on. For a minimized window Windows answers
+/// with the screen it will come back to.
+fn window_screen(hwnd: HWND) -> Option<crate::shell::placement::Rect> {
+    let mut info = MONITORINFO {
+        cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+        ..Default::default()
+    };
+    // SAFETY: read-only queries; `info` is a correctly sized local.
+    let ok = unsafe { GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mut info) };
+    let r = info.rcMonitor;
+    ok.as_bool().then(|| crate::shell::placement::Rect {
+        x: r.left,
+        y: r.top,
+        width: (r.right - r.left).max(0) as u32,
+        height: (r.bottom - r.top).max(0) as u32,
+    })
 }
 
 pub fn foreground() -> isize {
@@ -623,6 +643,16 @@ static WINDOW_CHANGED: Mutex<Option<Box<dyn Fn() + Send>>> = Mutex::new(None);
 /// Call `changed` when windows open, close, retitle, minimize, restore, hide, move to another
 /// desktop, or come to the front. Install on the main thread, whose message loop delivers the
 /// events; callers should coalesce, since these come in bursts.
+/// Whether `hwnd` is now on another screen than when it was last seen here. Remembers only the
+/// latest window: the front window is the one being moved.
+fn moved_screen(hwnd: isize, monitor: isize) -> bool {
+    static LAST: Mutex<(isize, isize)> = Mutex::new((0, 0));
+    let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+    let moved = last.0 == hwnd && last.1 != monitor;
+    *last = (hwnd, monitor);
+    moved
+}
+
 pub fn watch_windows(changed: impl Fn() + Send + 'static) {
     static INSTALL: Once = Once::new();
     *WINDOW_CHANGED.lock().unwrap_or_else(|e| e.into_inner()) = Some(Box::new(changed));
@@ -630,7 +660,7 @@ pub fn watch_windows(changed: impl Fn() + Send + 'static) {
     unsafe extern "system" fn on_event(
         _hook: HWINEVENTHOOK,
         event: u32,
-        _hwnd: HWND,
+        hwnd: HWND,
         id_object: i32,
         id_child: i32,
         _thread: u32,
@@ -638,6 +668,20 @@ pub fn watch_windows(changed: impl Fn() + Send + 'static) {
     ) {
         // Events also fire for controls, carets and menus; only whole windows matter.
         let whole_window = id_object == OBJID_WINDOW.0 && id_child == CHILDID_SELF as i32;
+        if event == EVENT_OBJECT_LOCATIONCHANGE {
+            // Moves fire constantly; only the front window landing on another screen matters
+            // (with a dock per screen, it moves to that screen's dock).
+            // SAFETY: plain queries on a window handle Windows just reported.
+            let screen_changed = whole_window
+                && hwnd == unsafe { GetForegroundWindow() }
+                && moved_screen(
+                    hwnd.0 as isize,
+                    unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) }.0 as isize,
+                );
+            if !screen_changed {
+                return;
+            }
+        }
         if whole_window || event == EVENT_SYSTEM_FOREGROUND {
             if let Some(changed) = WINDOW_CHANGED.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
                 changed();
@@ -653,6 +697,7 @@ pub fn watch_windows(changed: impl Fn() + Send + 'static) {
             (EVENT_OBJECT_CLOAKED, EVENT_OBJECT_UNCLOAKED),
             (EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_FOREGROUND),
             (EVENT_SYSTEM_MINIMIZESTART, EVENT_SYSTEM_MINIMIZEEND),
+            (EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE),
         ];
         for (first, last) in ranges {
             // SAFETY: an out-of-context hook with a `'static` callback, installed on the UI

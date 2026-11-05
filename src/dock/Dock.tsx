@@ -22,8 +22,11 @@ function StartMark() {
   );
 }
 
-/** The dock bar. A pill reports its content width so the window can hug it. */
-export function Dock() {
+/**
+ * The dock bar. A pill reports its content width so the window can hug it. `main` is the dock
+ * with the widgets; docks on other screens (`main` false) leave them out.
+ */
+export function Dock({ main = true }: { main?: boolean }) {
   const settings = useSettings((s) => s.settings);
   const apps = useApps((s) => s.apps);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -89,7 +92,7 @@ export function Dock() {
           ))}
         </div>
         <div className="dock-spacer" data-tauri-drag-region />
-        <WidgetBar />
+        {main && <WidgetBar />}
         <button
           className="dock-icon-button"
           aria-label="Settings"

@@ -92,7 +92,15 @@ unsafe extern "system" fn subclass(
         }
         WM_EXITSIZEMOVE => {
             if let Some(app) = APP.get().cloned() {
-                std::thread::spawn(move || super::snap_after_drag(&app));
+                let raw = hwnd.0 as isize;
+                std::thread::spawn(move || {
+                    let dragged = super::dock_windows(&app)
+                        .into_iter()
+                        .find(|w| w.hwnd().is_ok_and(|h| h.0 as isize == raw));
+                    if let Some(window) = dragged {
+                        super::snap_after_drag(&app, window.label());
+                    }
+                });
             }
         }
         // Sign-out or shutdown is going ahead: the dock is about to be killed.
@@ -109,11 +117,17 @@ unsafe extern "system" fn subclass(
     unsafe { DefSubclassProc(hwnd, msg, wparam, lparam) }
 }
 
-/// Install the subclass and the front-window hook. Call once, on the main thread.
-pub fn install(window: &WebviewWindow, app: &AppHandle) {
+/// Start watching the system. Call once, on the main thread, before `attach`.
+pub fn install(app: &AppHandle) {
     let _ = APP.set(app.clone());
     // SAFETY: registering (or looking up) a named broadcast message.
     let _ = TASKBAR_CREATED.set(unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) });
+    watch_front_window();
+}
+
+/// Subclass a dock window and register it as an app bar. Call on the main thread (the thread
+/// that owns the window), once per dock.
+pub fn attach(window: &WebviewWindow) {
     let Ok(raw) = window.hwnd() else { return };
     let hwnd = HWND(raw.0);
     // SAFETY: called on the main thread that owns this live window; the callback only reads
@@ -122,9 +136,11 @@ pub fn install(window: &WebviewWindow, app: &AppHandle) {
         tracing::warn!("could not watch for system changes; the dock may drift until restart");
     }
     if !appbar::register(hwnd) {
-        tracing::warn!("could not register the dock as an app bar");
+        tracing::warn!(
+            label = window.label(),
+            "could not register the dock as an app bar"
+        );
     }
-    watch_front_window();
 }
 
 /// App-bar notices miss some fullscreen changes (F11 in a browser), so also re-check whenever
@@ -164,22 +180,19 @@ fn watch_front_window() {
     });
 }
 
-/// Whether the front window fills the dock's screen (a video, a game, a browser in F11).
+/// Whether the front window fills a dock's screen (a video, a game, a browser in F11); each
+/// dock hides only for a fullscreen app on its own screen.
 pub fn refresh_fullscreen(app: &AppHandle) {
-    let Some(dock) = super::dock_window(app).and_then(|w| w.hwnd().ok()) else {
-        return;
-    };
-    let dock = HWND(dock.0);
-    // SAFETY: read-only queries on the foreground window and our own dock window; every
-    // out-parameter is a local of the right type and size.
-    let covered = unsafe {
+    // SAFETY: read-only queries on the foreground window; every out-parameter is a local of
+    // the right type and size.
+    let covered_monitor = unsafe {
         let front = GetForegroundWindow();
         let mut class = [0u16; 32];
         let len = GetClassNameW(front, &mut class) as usize;
         let class = String::from_utf16_lossy(&class[..len]);
         let mut pid = 0;
         GetWindowThreadProcessId(front, Some(&mut pid));
-        // The desktop fills the screen too, and the dock itself is never "fullscreen".
+        // The desktop fills the screen too, and a dock itself is never "fullscreen".
         let ignored =
             front.is_invalid() || pid == std::process::id() || class == "Progman" || class == "WorkerW";
         let monitor = MonitorFromWindow(front, MONITOR_DEFAULTTONEAREST);
@@ -192,15 +205,21 @@ pub fn refresh_fullscreen(app: &AppHandle) {
         // monitor too. Fullscreen apps (F11, video, games) have no title bar.
         let maximized_window = IsZoomed(front).as_bool()
             && (GetWindowLongW(front, GWL_STYLE) as u32 & WS_CAPTION.0) == WS_CAPTION.0;
-        !ignored
+        let covers = !ignored
             && !maximized_window
-            && monitor == MonitorFromWindow(dock, MONITOR_DEFAULTTONEAREST)
             && GetMonitorInfoW(monitor, &mut info).as_bool()
             && GetWindowRect(front, &mut rect).is_ok()
             && rect.left <= info.rcMonitor.left
             && rect.top <= info.rcMonitor.top
             && rect.right >= info.rcMonitor.right
-            && rect.bottom >= info.rcMonitor.bottom
+            && rect.bottom >= info.rcMonitor.bottom;
+        covers.then_some(monitor)
     };
-    super::set_fullscreen(app, covered);
+    for window in super::dock_windows(app) {
+        let Ok(raw) = window.hwnd() else { continue };
+        // SAFETY: a read-only query on our own live dock window.
+        let on_covered_screen = covered_monitor
+            .is_some_and(|m| m == unsafe { MonitorFromWindow(HWND(raw.0), MONITOR_DEFAULTTONEAREST) });
+        super::set_fullscreen(app, window.label(), on_covered_screen);
+    }
 }

@@ -18,11 +18,9 @@ use crate::{settings::SettingsStore, shell::ShellState};
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
-        // A second launch just shows the running dock.
+        // A second launch just shows the running docks.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(window) = shell::dock_window(app) {
-                let _ = shell::show_dock(&window);
-            }
+            shell::show_docks(app);
         }))
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -75,7 +73,7 @@ pub fn run() {
         // The dock only quits from the tray or Settings, never from Alt+F4 or WM_CLOSE: quitting
         // must go through the exit path that restores the taskbar.
         .on_window_event(|window, event| match event {
-            tauri::WindowEvent::CloseRequested { api, .. } if window.label() == shell::DOCK_LABEL => {
+            tauri::WindowEvent::CloseRequested { api, .. } if shell::is_dock_label(window.label()) => {
                 api.prevent_close();
             }
             // A popup closes as soon as you click anywhere else.

@@ -1,12 +1,12 @@
 //! Everything the webview may call.
 
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 use tauri_plugin_autostart::ManagerExt;
 
 use crate::{
     error::{AppError, AppResult},
     settings::{Settings, SettingsStore},
-    shell::{self, ShellState},
+    shell,
 };
 
 /// Event sent to every window after settings change.
@@ -29,16 +29,15 @@ pub fn settings_set(app: AppHandle, settings: Settings) -> AppResult<Settings> {
         shell::taskbar::apply_system(settings.taskbar_mode);
     }
     if before.auto_hide != settings.auto_hide {
-        // Turning auto-hide on tucks the dock away; off brings it out for good.
-        shell::set_revealed(&app, false)?;
-        app.emit(shell::DOCK_REVEALED, shell::is_revealed(&app))?;
+        // Turning auto-hide on tucks the docks away; off brings them out for good.
+        shell::reset_revealed(&app)?;
     }
-    if before.screen != settings.screen {
-        // Another screen: a new place, strip and wallpaper.
-        shell::relayout(&app);
-        crate::glass::service::refresh_soon(&app);
-    } else if before.edge != settings.edge {
-        shell::relayout(&app);
+    let screens_changed = before.screen != settings.screen || before.docks_on != settings.docks_on;
+    if screens_changed || before.edge != settings.edge {
+        // Docks may move, appear or go (new places, strips, wallpapers and app lists), or
+        // claim the other edge. Off this (main) thread, since it may create windows.
+        let app = app.clone();
+        std::thread::spawn(move || shell::relayout(&app));
     } else {
         shell::place_dock(&app)?;
     }
@@ -47,29 +46,25 @@ pub fn settings_set(app: AppHandle, settings: Settings) -> AppResult<Settings> {
     Ok(settings)
 }
 
-/// The cursor arrived on (true) or left (false) an auto-hiding dock.
+/// The cursor arrived on (true) or left (false) the calling dock while it auto-hides.
 #[tauri::command]
-pub fn dock_reveal(app: AppHandle, revealed: bool) -> AppResult<()> {
-    shell::set_revealed(&app, revealed)
+pub fn dock_reveal(app: AppHandle, window: WebviewWindow, revealed: bool) -> AppResult<()> {
+    shell::set_revealed(&app, window.label(), revealed)
 }
 
-/// Whether the page should draw the dock rather than the auto-hide sliver.
+/// Whether the calling dock's page should draw the dock rather than the auto-hide sliver.
 #[tauri::command]
-pub fn dock_is_revealed(app: AppHandle) -> bool {
-    shell::is_revealed(&app)
+pub fn dock_is_revealed(app: AppHandle, window: WebviewWindow) -> bool {
+    shell::is_revealed(&app, window.label())
 }
 
-/// The page measured the pill's content; resize the dock to fit it.
+/// The calling dock's page measured its pill's content; resize the dock to fit it.
 #[tauri::command]
-pub fn dock_set_content_width(app: AppHandle, width: f64) -> AppResult<()> {
+pub fn dock_set_content_width(app: AppHandle, window: WebviewWindow, width: f64) -> AppResult<()> {
     if !width.is_finite() || width < 0.0 {
         return Err(AppError::InvalidInput("content width".into()));
     }
-    *app.state::<ShellState>()
-        .content_width
-        .lock()
-        .expect("shell lock") = width;
-    shell::place_dock(&app)
+    shell::set_content_width(&app, window.label(), width)
 }
 
 /// Open settings, at `section` if given. Async: creating a window from the main thread can
@@ -116,9 +111,10 @@ pub fn onboarding_done(app: AppHandle, open_settings: bool) -> AppResult<()> {
     Ok(())
 }
 
+/// The apps on the calling dock.
 #[tauri::command]
-pub fn apps_list(app: AppHandle) -> Vec<crate::apps::DockApp> {
-    crate::apps::service::list(&app)
+pub fn apps_list(app: AppHandle, window: WebviewWindow) -> Vec<crate::apps::DockApp> {
+    crate::apps::service::list(&app, window.label())
 }
 
 /// An app's icon as a data URL (none if it has no icon).
@@ -128,8 +124,8 @@ pub fn app_icon(app: AppHandle, source: String) -> Option<String> {
 }
 
 #[tauri::command(async)]
-pub fn app_click(app: AppHandle, key: String) -> AppResult<()> {
-    crate::apps::service::click(&app, &key)
+pub fn app_click(app: AppHandle, window: WebviewWindow, key: String) -> AppResult<()> {
+    crate::apps::service::click(&app, window.label(), &key)
 }
 
 #[tauri::command(async)]
@@ -138,8 +134,8 @@ pub fn app_launch(app: AppHandle, key: String) -> AppResult<()> {
 }
 
 #[tauri::command(async)]
-pub fn app_menu(app: AppHandle, key: String) -> AppResult<()> {
-    crate::apps::service::show_menu(&app, &key)
+pub fn app_menu(app: AppHandle, window: WebviewWindow, key: String) -> AppResult<()> {
+    crate::apps::service::show_menu(&app, &window, &key)
 }
 
 /// Open the Start menu (as the Windows key does).
@@ -159,16 +155,16 @@ pub fn shell_search() {
     ]);
 }
 
-/// Where the dock sits on its screen (for drawing the glass).
+/// Where the calling dock sits on its screen (for drawing the glass).
 #[tauri::command]
-pub fn dock_geometry(app: AppHandle) -> Option<shell::DockGeometry> {
-    shell::geometry(&app)
+pub fn dock_geometry(app: AppHandle, window: WebviewWindow) -> Option<shell::DockGeometry> {
+    shell::geometry_of(&app, window.label())
 }
 
-/// The desktop picture behind the glass, if it has been read.
+/// The desktop picture behind the calling dock's glass, if it has been read.
 #[tauri::command]
-pub fn glass_get(app: AppHandle) -> Option<crate::glass::GlassFrame> {
-    crate::glass::service::current(&app)
+pub fn glass_get(app: AppHandle, window: WebviewWindow) -> Option<crate::glass::GlassFrame> {
+    crate::glass::service::current(&app, window.label())
 }
 
 /// Open a widget's popup at `anchor_x` (the widget's centre, screen pixels), or close it if

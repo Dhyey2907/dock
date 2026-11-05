@@ -9,8 +9,12 @@ pub mod service;
 #[cfg(windows)]
 pub mod win;
 
+use std::collections::HashMap;
+
 use serde::Serialize;
 use ts_rs::TS;
+
+use crate::shell::{placement::Rect, screens::dock_for_window, DOCK_LABEL};
 
 /// Event carrying the full app list whenever it changes.
 pub const APPS_CHANGED: &str = "apps-changed";
@@ -50,6 +54,9 @@ pub struct WinInfo {
     pub minimized: bool,
     /// A friendly name for its app, for apps that aren't pinned.
     pub app_name: String,
+    /// The full rectangle of the screen it is on (for a minimized window, the screen it comes
+    /// back to), if Windows could say.
+    pub screen: Option<Rect>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -284,6 +291,43 @@ pub fn build(pins: &[Pin], windows: &[WinInfo], foreground: isize) -> (Vec<DockA
     (apps, launchables)
 }
 
+/// The app list for each dock, by label. `docks` is each dock's label and screen rectangle.
+/// The main dock gets the pins plus the windows on its screen (and on any screen without a
+/// dock); every other dock gets just the windows on its own screen. Launchables are merged:
+/// a key means the same app on every dock.
+pub fn build_per_dock(
+    pins: &[Pin],
+    windows: &[WinInfo],
+    foreground: isize,
+    docks: &[(String, Rect)],
+) -> (HashMap<String, Vec<DockApp>>, Vec<Launchable>) {
+    let mut lists = HashMap::new();
+    let mut launchables: Vec<Launchable> = Vec::new();
+    let labels = docks
+        .iter()
+        .map(|(l, _)| l.as_str())
+        .chain(std::iter::once(DOCK_LABEL));
+    for label in labels {
+        if lists.contains_key(label) {
+            continue;
+        }
+        let mine: Vec<WinInfo> = windows
+            .iter()
+            .filter(|w| dock_for_window(w.screen, docks) == label)
+            .cloned()
+            .collect();
+        let pins: &[Pin] = if label == DOCK_LABEL { pins } else { &[] };
+        let (apps, more) = build(pins, &mine, foreground);
+        for launchable in more {
+            if !launchables.iter().any(|l| l.key == launchable.key) {
+                launchables.push(launchable);
+            }
+        }
+        lists.insert(label.to_string(), apps);
+    }
+    (lists, launchables)
+}
+
 /// What a click on an app does, the way the taskbar behaves.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ClickAction {
@@ -429,7 +473,75 @@ mod tests {
             app_id: app_id.map(Into::into),
             minimized: false,
             app_name: format!("app of {hwnd}"),
+            screen: None,
         }
+    }
+
+    const LEFT: Rect = Rect {
+        x: 0,
+        y: 0,
+        width: 2560,
+        height: 1600,
+    };
+    const RIGHT: Rect = Rect {
+        x: 2560,
+        y: 0,
+        width: 1920,
+        height: 1080,
+    };
+
+    fn on(screen: Rect, w: WinInfo) -> WinInfo {
+        WinInfo {
+            screen: Some(screen),
+            ..w
+        }
+    }
+
+    #[test]
+    fn each_dock_lists_the_windows_on_its_screen_and_only_the_main_one_has_pins() {
+        let pins = [pin("Chrome", Some("Chrome"), None)];
+        let windows = [
+            on(LEFT, window(1, Some("Chrome"), None)),
+            on(RIGHT, window(2, Some("Chrome"), None)),
+            on(RIGHT, window(3, None, Some(r"c:\notepad.exe"))),
+            window(4, None, Some(r"c:\calc.exe")), // screen unknown: main dock
+        ];
+        let docks = vec![("dock".to_string(), LEFT), ("dock-2".to_string(), RIGHT)];
+        let (lists, launchables) = build_per_dock(&pins, &windows, 2, &docks);
+        let main = &lists["dock"];
+        assert_eq!(
+            main.iter()
+                .map(|a| (a.key.as_str(), a.windows.len()))
+                .collect::<Vec<_>>(),
+            [(r"pin:c:\pins\chrome.lnk", 1), (r"exe:c:\calc.exe", 1)]
+        );
+        let second = &lists["dock-2"];
+        assert_eq!(
+            second.iter().map(|a| a.key.as_str()).collect::<Vec<_>>(),
+            ["app:chrome", r"exe:c:\notepad.exe"]
+        );
+        assert!(second.iter().all(|a| !a.pinned));
+        assert!(second[0].windows[0].active);
+        // Every app either dock shows can be launched by its key, listed once.
+        for key in [
+            r"pin:c:\pins\chrome.lnk",
+            "app:chrome",
+            r"exe:c:\notepad.exe",
+            r"exe:c:\calc.exe",
+        ] {
+            assert_eq!(launchables.iter().filter(|l| l.key == key).count(), 1, "{key}");
+        }
+    }
+
+    #[test]
+    fn with_one_dock_every_window_is_on_it() {
+        let windows = [
+            on(LEFT, window(1, None, Some("a.exe"))),
+            on(RIGHT, window(2, None, Some("b.exe"))),
+        ];
+        let (lists, _) = build_per_dock(&[], &windows, 0, &[("dock".to_string(), RIGHT)]);
+        assert_eq!(lists.len(), 1);
+        assert_eq!(lists["dock"].len(), 2);
     }
 
     #[test]

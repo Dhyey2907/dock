@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 
 import type { DockSize } from "../core/generated/DockSize";
+import type { DocksOn } from "../core/generated/DocksOn";
 import type { DockStyle } from "../core/generated/DockStyle";
 import type { Edge } from "../core/generated/Edge";
 import type { ScreenInfo } from "../core/generated/ScreenInfo";
@@ -59,11 +60,31 @@ export function AppearanceSection({ settings, save }: { settings: Settings; save
         />
       </Row>
       {screens.length > 1 && (
-        <Row label="Screen" hint="Which screen the dock lives on.">
+        <Row label="Docks on" hint="One dock, or one on every screen showing that screen's windows.">
+          <Choice<DocksOn>
+            label="Docks on"
+            value={settings.docksOn}
+            options={[
+              ["one", "This screen"],
+              ["every", "Every screen"],
+            ]}
+            onChange={(docksOn) => save({ docksOn })}
+          />
+        </Row>
+      )}
+      {screens.length > 1 && (
+        <Row
+          label={settings.docksOn === "every" ? "Main dock" : "Screen"}
+          hint={
+            settings.docksOn === "every"
+              ? "The screen whose dock has your pinned apps and widgets."
+              : "Which screen the dock lives on."
+          }
+        >
           <select
             value={settings.screen}
             onChange={(e) => save({ screen: e.target.value })}
-            aria-label="Screen"
+            aria-label={settings.docksOn === "every" ? "Main dock" : "Screen"}
           >
             {screens.map((s) => (
               <option key={s.name} value={s.primary ? "" : s.name}>

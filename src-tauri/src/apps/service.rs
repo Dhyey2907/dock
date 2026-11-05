@@ -1,6 +1,6 @@
-//! Keeps the dock's app list current and acts on it. Pins are re-read when the taskbar's record
-//! changes; windows are re-listed when Windows reports a window event, with bursts collapsed
-//! into one pass. Nothing is polled.
+//! Keeps each dock's app list current and acts on it. Pins are re-read when the taskbar's
+//! record changes; windows are re-listed when Windows reports a window event (or docks come and
+//! go), with bursts collapsed into one pass. Nothing is polled.
 
 use std::{
     collections::HashMap,
@@ -19,6 +19,7 @@ use tauri::{
 
 use super::{click_action, ClickAction, DockApp, Launchable, Pin, APPS_CHANGED};
 use crate::error::{AppError, AppResult};
+use crate::shell::DOCK_LABEL;
 
 /// Icons are drawn at about 28 logical pixels; 64 stays sharp up to 225% scaling.
 const ICON_SIZE: i32 = 64;
@@ -30,7 +31,8 @@ const MENU_TITLE_CHARS: usize = 60;
 #[derive(Default)]
 pub struct AppsState {
     pins: Mutex<Vec<Pin>>,
-    apps: Mutex<Vec<DockApp>>,
+    /// Each dock's apps, by window label.
+    apps: Mutex<HashMap<String, Vec<DockApp>>>,
     launchables: Mutex<Vec<Launchable>>,
     /// Data URLs by icon source; `None` when the source has no icon.
     icons: Mutex<HashMap<String, Option<String>>>,
@@ -76,7 +78,15 @@ fn rescan_soon(app: &AppHandle) {
     });
 }
 
-/// Re-list windows, rebuild the app list, and tell the page if anything changed.
+/// Docks were added, removed or moved to another screen: their lists change.
+pub fn docks_changed(app: &AppHandle) {
+    #[cfg(windows)]
+    rescan_soon(app);
+    #[cfg(not(windows))]
+    let _ = app;
+}
+
+/// Re-list windows, rebuild every dock's app list, and tell each dock whose list changed.
 #[cfg(windows)]
 fn rescan(app: &AppHandle) {
     // One pass at a time, so two passes can't publish out of order.
@@ -84,26 +94,39 @@ fn rescan(app: &AppHandle) {
     let _guard = RUNNING.lock().unwrap_or_else(|e| e.into_inner());
     let windows = super::win::windows();
     let foreground = super::win::foreground();
+    let docks = crate::shell::dock_screens(app);
     let state = app.state::<AppsState>();
     let pins = state.pins.lock().expect("apps lock").clone();
-    let (apps, launchables) = super::build(&pins, &windows, foreground);
+    let (lists, launchables) = super::build_per_dock(&pins, &windows, foreground, &docks);
     *state.launchables.lock().expect("apps lock") = launchables;
     let mut current = state.apps.lock().expect("apps lock");
-    if *current != apps {
-        *current = apps.clone();
-        drop(current);
-        if let Err(error) = app.emit(APPS_CHANGED, &apps) {
+    let changed: Vec<(String, Vec<DockApp>)> = lists
+        .iter()
+        .filter(|(label, apps)| current.get(*label) != Some(*apps))
+        .map(|(label, apps)| (label.clone(), apps.clone()))
+        .collect();
+    *current = lists;
+    drop(current);
+    for (label, apps) in changed {
+        if let Err(error) = app.emit_to(label.as_str(), APPS_CHANGED, &apps) {
             tracing::warn!(%error, "failed to send the app list");
         }
     }
 }
 
-pub fn list(app: &AppHandle) -> Vec<DockApp> {
-    app.state::<AppsState>().apps.lock().expect("apps lock").clone()
+/// The apps on the dock labelled `label`.
+pub fn list(app: &AppHandle, label: &str) -> Vec<DockApp> {
+    app.state::<AppsState>()
+        .apps
+        .lock()
+        .expect("apps lock")
+        .get(label)
+        .cloned()
+        .unwrap_or_default()
 }
 
-fn find(app: &AppHandle, key: &str) -> AppResult<DockApp> {
-    list(app)
+fn find(app: &AppHandle, label: &str, key: &str) -> AppResult<DockApp> {
+    list(app, label)
         .into_iter()
         .find(|a| a.key == key)
         .ok_or_else(|| AppError::InvalidInput("unknown app".into()))
@@ -153,8 +176,8 @@ fn launch_key(app: &AppHandle, key: &str) -> AppResult<()> {
 }
 
 /// A left click: launch, bring forward, or minimize, as the taskbar would.
-pub fn click(app: &AppHandle, key: &str) -> AppResult<()> {
-    let dock_app = find(app, key)?;
+pub fn click(app: &AppHandle, label: &str, key: &str) -> AppResult<()> {
+    let dock_app = find(app, label, key)?;
     #[cfg(windows)]
     match click_action(&dock_app) {
         ClickAction::Launch => launch_key(app, key)?,
@@ -180,9 +203,10 @@ fn menu_text(text: &str) -> String {
     short.replace('&', "&&")
 }
 
-/// A right click: the app's windows, a new window, and closing.
-pub fn show_menu(app: &AppHandle, key: &str) -> AppResult<()> {
-    let dock_app = find(app, key)?;
+/// A right click on an app on `dock`: the app's windows, a new window, and closing.
+pub fn show_menu(app: &AppHandle, dock: &tauri::WebviewWindow, key: &str) -> AppResult<()> {
+    let label = dock.label();
+    let dock_app = find(app, label, key)?;
     let menu = Menu::new(app)?;
     for window in dock_app.windows.iter().take(12) {
         let title = if window.title.is_empty() {
@@ -221,14 +245,13 @@ pub fn show_menu(app: &AppHandle, key: &str) -> AppResult<()> {
     if let Some(label) = close {
         menu.append(&MenuItem::with_id(
             app,
-            format!("{MENU_PREFIX}close:{key}"),
+            format!("{MENU_PREFIX}close:{label}:{key}"),
             label,
             true,
             None::<&str>,
         )?)?;
     }
-    let window = crate::shell::dock_window(app).ok_or_else(|| AppError::Platform("no dock window".into()))?;
-    window.popup_menu(&menu)?;
+    dock.popup_menu(&menu)?;
     Ok(())
 }
 
@@ -248,8 +271,10 @@ pub fn on_menu(app: &AppHandle, id: &str) {
             }
             Some(("new", key)) => launch_key(app, key)?,
             #[cfg(windows)]
-            Some(("close", key)) => {
-                for window in find(app, key)?.windows {
+            // "<dock label>:<app key>" (labels have no colons; keys may).
+            Some(("close", rest)) => {
+                let (label, key) = rest.split_once(':').unwrap_or((DOCK_LABEL, rest));
+                for window in find(app, label, key)?.windows {
                     super::win::close(window.hwnd);
                 }
             }

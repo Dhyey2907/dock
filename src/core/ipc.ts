@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 import type { Bubble } from "./generated/Bubble";
 import type { CalendarState } from "./generated/CalendarState";
@@ -68,12 +69,33 @@ function on<T>(name: string) {
     listen<T>(name, (event) => handler(event.payload));
 }
 
+/**
+ * Events the backend sends to one dock (its own apps, place and glass). A plain `listen` hears
+ * events sent to every window, so with a dock per screen each would pick up the others'.
+ */
+function onThisWindow<T>(name: string) {
+  return (handler: (payload: T) => void): Promise<UnlistenFn> =>
+    getCurrentWebviewWindow().listen<T>(name, (event) => handler(event.payload));
+}
+
+/** The main dock carries the pinned apps and the widgets; docks on other screens don't. */
+export const MAIN_DOCK_LABEL = "dock";
+
+export function isMainDock(): boolean {
+  try {
+    return getCurrentWebviewWindow().label === MAIN_DOCK_LABEL;
+  } catch {
+    // Outside Tauri (tests): behave as the main dock.
+    return true;
+  }
+}
+
 export const events = {
   onSettingsChanged: on<Settings>("settings-changed"),
-  onDockRevealed: on<boolean>("dock-revealed"),
-  onAppsChanged: on<DockApp[]>("apps-changed"),
-  onDockGeometry: on<DockGeometry>("dock-geometry"),
-  onGlassChanged: on<GlassFrame>("glass-changed"),
+  onDockRevealed: onThisWindow<boolean>("dock-revealed"),
+  onAppsChanged: onThisWindow<DockApp[]>("apps-changed"),
+  onDockGeometry: onThisWindow<DockGeometry>("dock-geometry"),
+  onGlassChanged: onThisWindow<GlassFrame>("glass-changed"),
   onPanelOpen: on<{ kind: WidgetKind }>("panel-open"),
   onPanelClosed: on<null>("panel-closed"),
   onWeather: on<Weather>("widget-weather"),

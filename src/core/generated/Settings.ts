@@ -3,6 +3,7 @@ import type { Automations } from "./Automations";
 import type { CalendarSource } from "./CalendarSource";
 import type { DockSize } from "./DockSize";
 import type { DockStyle } from "./DockStyle";
+import type { DocksOn } from "./DocksOn";
 import type { Edge } from "./Edge";
 import type { QuietHours } from "./QuietHours";
 import type { TaskbarMode } from "./TaskbarMode";
@@ -40,6 +41,10 @@ toggleShortcut: string,
  * main screen. A screen that's been unplugged falls back to the main one.
  */
 screen: string, 
+/**
+ * One dock, or one on every screen.
+ */
+docksOn: DocksOn, 
 /**
  * The welcome has been seen.
  */

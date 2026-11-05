@@ -5,15 +5,21 @@ mod appbar;
 pub mod bubble;
 pub mod panel;
 pub mod placement;
+pub mod screens;
 pub mod shortcut;
 pub mod taskbar;
 #[cfg(windows)]
 mod watch;
 
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Mutex,
+use std::{
+    collections::HashMap,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
 };
+
+use serde::Serialize;
 
 use tauri::{
     menu::{Menu, MenuItem},
@@ -27,16 +33,17 @@ use crate::{
     settings::{Edge, SettingsStore},
 };
 use placement::Rect;
+use screens::ScreenId;
 
-pub const DOCK_LABEL: &str = "dock";
+pub use screens::{is_dock_label, MAIN_LABEL as DOCK_LABEL};
 const SETTINGS_LABEL: &str = "settings";
-/// Event telling the dock page whether it is showing or waiting as an auto-hide sliver.
+/// Event telling a dock page whether it is showing or waiting as an auto-hide sliver.
 pub const DOCK_REVEALED: &str = "dock-revealed";
-/// Event telling the dock page where its window sits on its screen (for the glass).
+/// Event telling a dock page where its window sits on its screen (for the glass).
 pub const DOCK_GEOMETRY: &str = "dock-geometry";
 
-/// Where the dock window is on its screen, in physical pixels.
-#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, ts_rs::TS)]
+/// Where a dock window is on its screen, in physical pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct DockGeometry {
@@ -50,52 +57,113 @@ pub struct DockGeometry {
     pub scale: f64,
 }
 
-/// The dock's live state, beyond the saved settings.
-pub struct ShellState {
+/// One dock's live state, beyond the saved settings.
+#[derive(Debug, Clone)]
+struct DockState {
+    /// The device name of the screen it is on.
+    screen: String,
     /// Pill content width in logical pixels, as the page measured it.
-    pub content_width: Mutex<f64>,
+    content_width: f64,
     /// With auto-hide on: whether the dock is out (the cursor is on it).
-    revealed: AtomicBool,
-    /// Hidden from the tray: a fullscreen app closing must not bring it back.
-    hidden_by_user: AtomicBool,
+    revealed: bool,
     /// A fullscreen app covers the dock's screen.
-    fullscreen: AtomicBool,
+    fullscreen: bool,
     /// The strip last claimed from Windows, so unchanged layouts don't re-claim it (each claim
     /// changes the work area, which would come back as another layout change).
-    reserved: Mutex<Option<(Rect, Edge)>>,
+    reserved: Option<(Rect, Edge)>,
     /// Where the dock last went, as sent to the page.
-    geometry: Mutex<Option<DockGeometry>>,
+    geometry: Option<DockGeometry>,
 }
 
-impl Default for ShellState {
-    fn default() -> Self {
+impl DockState {
+    fn new(screen: String) -> Self {
         Self {
-            content_width: Mutex::new(placement::MIN_PILL_WIDTH),
-            revealed: AtomicBool::new(false),
-            hidden_by_user: AtomicBool::new(false),
-            fullscreen: AtomicBool::new(false),
-            reserved: Mutex::new(None),
-            geometry: Mutex::new(None),
+            screen,
+            content_width: placement::MIN_PILL_WIDTH,
+            revealed: false,
+            fullscreen: false,
+            reserved: None,
+            geometry: None,
         }
     }
 }
 
+/// The docks' live state, by window label.
+pub struct ShellState {
+    docks: Mutex<HashMap<String, DockState>>,
+    /// Hidden from the tray or the shortcut (all docks together): a fullscreen app closing
+    /// must not bring them back, and a newly plugged-in screen's dock stays hidden too.
+    hidden_by_user: AtomicBool,
+    /// One pass of adding and removing docks at a time.
+    syncing: Mutex<()>,
+}
+
+impl Default for ShellState {
+    fn default() -> Self {
+        let mut docks = HashMap::new();
+        docks.insert(DOCK_LABEL.to_string(), DockState::new(String::new()));
+        Self {
+            docks: Mutex::new(docks),
+            hidden_by_user: AtomicBool::new(false),
+            syncing: Mutex::new(()),
+        }
+    }
+}
+
+impl ShellState {
+    fn docks(&self) -> std::sync::MutexGuard<'_, HashMap<String, DockState>> {
+        self.docks.lock().expect("shell lock")
+    }
+
+    fn labels(&self) -> Vec<String> {
+        let mut labels: Vec<String> = self.docks().keys().cloned().collect();
+        labels.sort_by_key(|l| (l != DOCK_LABEL, l.clone()));
+        labels
+    }
+}
+
+/// The main dock: pinned apps, widgets, and what popups and reminder cards line up with.
 pub fn dock_window(app: &AppHandle) -> Option<WebviewWindow> {
     app.get_webview_window(DOCK_LABEL)
 }
 
-/// The full rectangle of the dock's screen, in physical pixels.
-pub fn dock_screen(app: &AppHandle) -> Option<Rect> {
-    let window = dock_window(app)?;
-    monitor_rect(&window).ok().flatten().map(|(rect, _)| rect)
+/// Every dock window, the main one first.
+pub fn dock_windows(app: &AppHandle) -> Vec<WebviewWindow> {
+    app.state::<ShellState>()
+        .labels()
+        .into_iter()
+        .filter_map(|l| app.get_webview_window(&l))
+        .collect()
 }
 
+/// Each dock's label and the full rectangle of its screen in physical pixels, main dock first.
+pub fn dock_screens(app: &AppHandle) -> Vec<(String, Rect)> {
+    let Ok(monitors) = monitors(app) else {
+        return Vec::new();
+    };
+    let shell = app.state::<ShellState>();
+    let docks = shell.docks().clone();
+    shell
+        .labels()
+        .into_iter()
+        .filter_map(|label| {
+            let monitor = find_monitor(&monitors, &docks.get(&label)?.screen, &label)?;
+            Some((label, monitor.rect))
+        })
+        .collect()
+}
+
+/// Where the main dock sits on its screen.
 pub fn geometry(app: &AppHandle) -> Option<DockGeometry> {
-    *app.state::<ShellState>().geometry.lock().expect("shell lock")
+    geometry_of(app, DOCK_LABEL)
+}
+
+pub fn geometry_of(app: &AppHandle, label: &str) -> Option<DockGeometry> {
+    app.state::<ShellState>().docks().get(label)?.geometry
 }
 
 /// A screen the dock can be put on.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, ts_rs::TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct ScreenInfo {
@@ -106,33 +174,35 @@ pub struct ScreenInfo {
     pub primary: bool,
 }
 
+/// A connected screen, in physical pixels.
+#[derive(Debug, Clone)]
+struct Monitor {
+    name: String,
+    rect: Rect,
+    scale: f64,
+    primary: bool,
+}
+
 /// The screens connected now, main screen first.
-pub fn screens(app: &AppHandle) -> AppResult<Vec<ScreenInfo>> {
+fn monitors(app: &AppHandle) -> AppResult<Vec<Monitor>> {
     let Some(window) = dock_window(app) else {
         return Ok(Vec::new());
     };
     let primary = window.primary_monitor()?.and_then(|m| m.name().cloned());
-    let mut list: Vec<ScreenInfo> = window
+    let mut list: Vec<Monitor> = window
         .available_monitors()?
         .into_iter()
         .filter_map(|m| {
             let name = m.name()?.clone();
-            let number: String = name
-                .chars()
-                .rev()
-                .take_while(char::is_ascii_digit)
-                .collect::<Vec<_>>()
-                .into_iter()
-                .rev()
-                .collect();
-            Some(ScreenInfo {
-                label: format!(
-                    "Screen {} · {}×{}",
-                    if number.is_empty() { "?" } else { &number },
-                    m.size().width,
-                    m.size().height
-                ),
+            Some(Monitor {
                 primary: primary.as_ref() == Some(&name),
+                rect: Rect {
+                    x: m.position().x,
+                    y: m.position().y,
+                    width: m.size().width,
+                    height: m.size().height,
+                },
+                scale: m.scale_factor(),
                 name,
             })
         })
@@ -141,47 +211,182 @@ pub fn screens(app: &AppHandle) -> AppResult<Vec<ScreenInfo>> {
     Ok(list)
 }
 
-/// The dock's screen: the one chosen in settings if it's connected, else the main screen.
-fn monitor_rect(window: &WebviewWindow) -> AppResult<Option<(Rect, f64)>> {
-    let chosen = window.app_handle().state::<SettingsStore>().get().screen;
-    let picked = if chosen.is_empty() {
-        None
-    } else {
-        window
-            .available_monitors()?
-            .into_iter()
-            .find(|m| m.name().is_some_and(|n| *n == chosen))
-    };
-    let Some(monitor) = picked.or(window.primary_monitor()?).or(window.current_monitor()?) else {
-        return Ok(None);
-    };
-    let rect = Rect {
-        x: monitor.position().x,
-        y: monitor.position().y,
-        width: monitor.size().width,
-        height: monitor.size().height,
-    };
-    Ok(Some((rect, monitor.scale_factor())))
+fn screen_ids(monitors: &[Monitor]) -> Vec<ScreenId> {
+    monitors
+        .iter()
+        .map(|m| ScreenId {
+            name: m.name.clone(),
+            primary: m.primary,
+        })
+        .collect()
 }
 
-/// Size and move the dock for the current settings on the primary monitor, and claim (or give
-/// back) its strip of the screen.
-pub fn place_dock(app: &AppHandle) -> AppResult<()> {
-    let Some(window) = dock_window(app) else {
-        return Ok(());
-    };
-    let Some((screen, scale)) = monitor_rect(&window)? else {
-        return Ok(());
-    };
-    let settings = app.state::<SettingsStore>().get();
+/// A dock's screen. The main dock falls back to the main screen if its own is gone; a
+/// secondary dock whose screen is gone has none (it is about to be removed).
+fn find_monitor<'a>(monitors: &'a [Monitor], screen: &str, label: &str) -> Option<&'a Monitor> {
+    monitors.iter().find(|m| m.name == screen).or_else(|| {
+        (label == DOCK_LABEL)
+            .then(|| monitors.iter().find(|m| m.primary).or(monitors.first()))
+            .flatten()
+    })
+}
+
+/// The screens connected now, main screen first, for Settings.
+pub fn screens(app: &AppHandle) -> AppResult<Vec<ScreenInfo>> {
+    Ok(monitors(app)?
+        .into_iter()
+        .map(|m| ScreenInfo {
+            label: format!(
+                "Screen {} · {}×{}",
+                screens::screen_number(&m.name).unwrap_or("?"),
+                m.rect.width,
+                m.rect.height
+            ),
+            primary: m.primary,
+            name: m.name,
+        })
+        .collect())
+}
+
+/// Make the set of docks match the screens and settings: the main dock onto its screen, a dock
+/// added for each screen that needs one and removed from each screen that's gone. Then place
+/// them all. Creates windows, so never call it on the main thread (WebView2 can deadlock).
+pub fn sync_docks(app: &AppHandle) {
     let shell = app.state::<ShellState>();
-    let content_width = *shell.content_width.lock().expect("shell lock");
-    let dock = placement::dock_rect(screen, scale, &settings, content_width);
-    let tucked_away = settings.auto_hide && !shell.revealed.load(Ordering::SeqCst);
+    let _one_at_a_time = shell.syncing.lock().unwrap_or_else(|e| e.into_inner());
+    let settings = app.state::<SettingsStore>().get();
+    let monitors = match monitors(app) {
+        Ok(monitors) => monitors,
+        Err(error) => {
+            tracing::warn!(%error, "could not list screens");
+            return;
+        }
+    };
+    let slots = screens::plan(&screen_ids(&monitors), &settings.screen, settings.docks_on);
+    let mut changed = false;
+
+    // Docks no longer wanted (or whose screen changed) go first, giving their strips back.
+    let existing: Vec<(String, String)> = shell
+        .docks()
+        .iter()
+        .map(|(label, dock)| (label.clone(), dock.screen.clone()))
+        .collect();
+    for (label, screen) in existing {
+        let wanted = slots.iter().find(|s| s.label == label);
+        if label == DOCK_LABEL {
+            // The main dock is never removed; it moves.
+            if let Some(slot) = wanted.filter(|s| s.screen != screen) {
+                if let Some(dock) = shell.docks().get_mut(&label) {
+                    dock.screen = slot.screen.clone();
+                    dock.fullscreen = false;
+                }
+                changed = true;
+            }
+            continue;
+        }
+        if wanted.is_some_and(|s| s.screen == screen) {
+            continue;
+        }
+        shell.docks().remove(&label);
+        if let Some(window) = app.get_webview_window(&label) {
+            // Destroy skips the close request docks refuse; the window procedure gives the
+            // app-bar strip back as the window goes.
+            if let Err(error) = window.destroy() {
+                tracing::warn!(%error, label, "could not remove a dock");
+            }
+        }
+        tracing::info!(label, "removed a dock");
+        changed = true;
+    }
+
+    for slot in slots.iter().filter(|s| s.label != DOCK_LABEL) {
+        if shell.docks().contains_key(&slot.label) {
+            continue;
+        }
+        match create_dock(app, &slot.label) {
+            Ok(window) => {
+                shell
+                    .docks()
+                    .insert(slot.label.clone(), DockState::new(slot.screen.clone()));
+                tracing::info!(label = slot.label, screen = slot.screen, "added a dock");
+                let shown = place_one(app, &slot.label).and_then(|()| {
+                    if shell.hidden_by_user.load(Ordering::SeqCst) {
+                        Ok(())
+                    } else {
+                        show_dock(&window)
+                    }
+                });
+                if let Err(error) = shown {
+                    tracing::warn!(%error, label = slot.label, "could not show a new dock");
+                }
+                changed = true;
+            }
+            Err(error) => tracing::warn!(%error, label = slot.label, "could not add a dock"),
+        }
+    }
+
+    relayout_all(app);
+    if changed {
+        crate::glass::service::refresh_soon(app);
+        crate::apps::service::docks_changed(app);
+        #[cfg(windows)]
+        watch::refresh_fullscreen(app);
+    }
+}
+
+/// A secondary dock window, set up like the main one in the app config.
+fn create_dock(app: &AppHandle, label: &str) -> AppResult<WebviewWindow> {
+    let window = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
+        .title("Dock")
+        .inner_size(640.0, 64.0)
+        .transparent(true)
+        .decorations(false)
+        .always_on_top(true)
+        .skip_taskbar(true)
+        .shadow(false)
+        .resizable(false)
+        .maximizable(false)
+        .minimizable(false)
+        .visible(false)
+        .build()?;
+    // The subclass must be installed on the thread that owns the window.
+    #[cfg(windows)]
+    {
+        let attached = window.clone();
+        app.run_on_main_thread(move || watch::attach(&attached))?;
+    }
+    Ok(window)
+}
+
+/// Size and move every dock for the current settings, and claim (or give back) their strips.
+pub fn place_dock(app: &AppHandle) -> AppResult<()> {
+    for label in app.state::<ShellState>().labels() {
+        place_one(app, &label)?;
+    }
+    Ok(())
+}
+
+/// Size and move one dock, and claim (or give back) its strip of its screen.
+pub fn place_one(app: &AppHandle, label: &str) -> AppResult<()> {
+    let Some(window) = app.get_webview_window(label) else {
+        return Ok(());
+    };
+    let shell = app.state::<ShellState>();
+    let Some(dock) = shell.docks().get(label).cloned() else {
+        return Ok(());
+    };
+    let monitors = monitors(app)?;
+    let Some(monitor) = find_monitor(&monitors, &dock.screen, label) else {
+        return Ok(());
+    };
+    let (screen, scale) = (monitor.rect, monitor.scale);
+    let settings = app.state::<SettingsStore>().get();
+    let full = placement::dock_rect(screen, scale, &settings, dock.content_width);
+    let tucked_away = settings.auto_hide && !dock.revealed;
     let rect = if tucked_away {
         placement::sliver_rect(screen, settings.edge)
     } else {
-        dock
+        full
     };
     window.set_size(PhysicalSize::new(rect.width, rect.height))?;
     window.set_position(PhysicalPosition::new(rect.x, rect.y))?;
@@ -195,24 +400,31 @@ pub fn place_dock(app: &AppHandle) -> AppResult<()> {
         y: rect.y,
         scale,
     };
-    let moved = shell.geometry.lock().expect("shell lock").replace(geometry) != Some(geometry);
-    if moved {
-        app.emit(DOCK_GEOMETRY, geometry)?;
-    }
-
     // An auto-hiding or user-hidden dock claims nothing: windows may use the whole screen.
     let claims = !settings.auto_hide && !shell.hidden_by_user.load(Ordering::SeqCst);
     let strip = if claims {
-        placement::reserved_rect(screen, dock, settings.edge)
+        placement::reserved_rect(screen, full, settings.edge)
     } else {
         Rect {
             height: 0,
             ..placement::sliver_rect(screen, settings.edge)
         }
     };
-    let mut reserved = shell.reserved.lock().expect("shell lock");
-    if *reserved != Some((strip, settings.edge)) {
-        *reserved = Some((strip, settings.edge));
+    let (moved, reserve) = {
+        let mut docks = shell.docks();
+        let Some(state) = docks.get_mut(label) else {
+            return Ok(());
+        };
+        let moved = state.geometry.replace(geometry) != Some(geometry);
+        let reserve = state.reserved != Some((strip, settings.edge));
+        state.reserved = Some((strip, settings.edge));
+        (moved, reserve)
+    };
+    if moved {
+        app.emit_to(label, DOCK_GEOMETRY, geometry)?;
+    }
+    if reserve {
+        tracing::debug!(label, ?strip, "claiming the dock's strip");
         #[cfg(windows)]
         appbar::reserve(
             windows::Win32::Foundation::HWND(window.hwnd()?.0),
@@ -223,39 +435,77 @@ pub fn place_dock(app: &AppHandle) -> AppResult<()> {
     Ok(())
 }
 
-/// Re-place after a layout change, re-claiming the strip even if it looks unchanged (another
-/// app bar or the taskbar may have taken part of it).
-pub fn relayout(app: &AppHandle) {
-    *app.state::<ShellState>().reserved.lock().expect("shell lock") = None;
+/// Re-place every dock, re-claiming strips even if they look unchanged (another app bar or the
+/// taskbar may have taken part of one).
+fn relayout_all(app: &AppHandle) {
+    for dock in app.state::<ShellState>().docks().values_mut() {
+        dock.reserved = None;
+    }
     if let Err(error) = place_dock(app) {
-        tracing::warn!(%error, "failed to re-place the dock");
+        tracing::warn!(%error, "failed to re-place the docks");
     }
 }
 
-/// The page says the cursor arrived on (or left) an auto-hiding dock.
-pub fn set_revealed(app: &AppHandle, revealed: bool) -> AppResult<()> {
+/// After a layout or settings change: add or remove docks for the screens there are now, and
+/// re-place them all. Creates windows, so never call it on the main thread.
+pub fn relayout(app: &AppHandle) {
+    sync_docks(app);
+}
+
+/// A dock's page says the cursor arrived on (or left) it while it auto-hides.
+pub fn set_revealed(app: &AppHandle, label: &str, revealed: bool) -> AppResult<()> {
     let shell = app.state::<ShellState>();
-    if shell.revealed.swap(revealed, Ordering::SeqCst) != revealed {
-        place_dock(app)?;
-        app.emit(DOCK_REVEALED, revealed)?;
+    let was = {
+        let mut docks = shell.docks();
+        let Some(dock) = docks.get_mut(label) else {
+            return Ok(());
+        };
+        std::mem::replace(&mut dock.revealed, revealed)
+    };
+    if was != revealed {
+        place_one(app, label)?;
+        app.emit_to(label, DOCK_REVEALED, revealed)?;
     }
     Ok(())
 }
 
-/// Whether the page should draw the dock (not just the auto-hide sliver).
-pub fn is_revealed(app: &AppHandle) -> bool {
-    let auto_hide = app.state::<SettingsStore>().get().auto_hide;
-    !auto_hide || app.state::<ShellState>().revealed.load(Ordering::SeqCst)
+/// Auto-hide was switched: tuck every dock away (on) or bring them out for good (off).
+pub fn reset_revealed(app: &AppHandle) -> AppResult<()> {
+    for label in app.state::<ShellState>().labels() {
+        set_revealed(app, &label, false)?;
+        app.emit_to(label.as_str(), DOCK_REVEALED, is_revealed(app, &label))?;
+    }
+    Ok(())
 }
 
-/// A drag of the dock ended: snap to whichever edge it was dropped nearer.
+/// Whether a dock's page should draw the dock (not just the auto-hide sliver).
+pub fn is_revealed(app: &AppHandle, label: &str) -> bool {
+    let auto_hide = app.state::<SettingsStore>().get().auto_hide;
+    !auto_hide
+        || app
+            .state::<ShellState>()
+            .docks()
+            .get(label)
+            .is_some_and(|d| d.revealed)
+}
+
+/// A dock's page measured its pill's content; resize that dock to fit it.
+pub fn set_content_width(app: &AppHandle, label: &str, width: f64) -> AppResult<()> {
+    match app.state::<ShellState>().docks().get_mut(label) {
+        Some(dock) => dock.content_width = width,
+        None => return Ok(()),
+    }
+    place_one(app, label)
+}
+
+/// A drag of a dock ended: every dock snaps to whichever edge it was dropped nearer.
 #[cfg_attr(not(windows), allow(dead_code))]
-fn snap_after_drag(app: &AppHandle) {
+fn snap_after_drag(app: &AppHandle, label: &str) {
     let result = (|| -> AppResult<()> {
-        let Some(window) = dock_window(app) else {
+        let Some(window) = app.get_webview_window(label) else {
             return Ok(());
         };
-        let Some((screen, _)) = monitor_rect(&window)? else {
+        let Some((_, screen)) = dock_screens(app).into_iter().find(|(l, _)| l == label) else {
             return Ok(());
         };
         let (position, size) = (window.outer_position()?, window.outer_size()?);
@@ -274,7 +524,7 @@ fn snap_after_drag(app: &AppHandle) {
             app.emit(crate::commands::SETTINGS_CHANGED, &settings)?;
         }
         // Back into place either way: a drag along the same edge just springs back.
-        relayout(app);
+        relayout_all(app);
         Ok(())
     })();
     if let Err(error) = result {
@@ -282,15 +532,18 @@ fn snap_after_drag(app: &AppHandle) {
     }
 }
 
-/// A fullscreen app started or stopped covering the dock's screen.
+/// A fullscreen app started or stopped covering a dock's screen.
 #[cfg_attr(not(windows), allow(dead_code))]
-fn set_fullscreen(app: &AppHandle, active: bool) {
+fn set_fullscreen(app: &AppHandle, label: &str, active: bool) {
     let shell = app.state::<ShellState>();
-    if shell.fullscreen.swap(active, Ordering::SeqCst) == active {
-        return;
+    match shell.docks().get_mut(label) {
+        Some(dock) if dock.fullscreen != active => dock.fullscreen = active,
+        _ => return,
     }
-    tracing::debug!(active, "fullscreen app changed");
-    let Some(window) = dock_window(app) else { return };
+    tracing::debug!(label, active, "fullscreen app changed");
+    let Some(window) = app.get_webview_window(label) else {
+        return;
+    };
     let result = if active {
         window.hide().map_err(Into::into)
     } else if shell.hidden_by_user.load(Ordering::SeqCst) {
@@ -303,18 +556,20 @@ fn set_fullscreen(app: &AppHandle, active: bool) {
     }
 }
 
-/// Explorer restarted: it forgot the dock's app bar and shows its taskbar again.
+/// Explorer restarted: it forgot the docks' app bars and shows its taskbar again.
 #[cfg_attr(not(windows), allow(dead_code))]
 fn explorer_restarted(app: &AppHandle) {
-    tracing::info!("explorer restarted; setting up the dock again");
+    tracing::info!("explorer restarted; setting up the docks again");
     taskbar::apply_system(app.state::<SettingsStore>().get().taskbar_mode);
     #[cfg(windows)]
-    if let Some(Ok(raw)) = dock_window(app).map(|w| w.hwnd()) {
-        let hwnd = windows::Win32::Foundation::HWND(raw.0);
-        appbar::unregister(hwnd);
-        appbar::register(hwnd);
+    for window in dock_windows(app) {
+        if let Ok(raw) = window.hwnd() {
+            let hwnd = windows::Win32::Foundation::HWND(raw.0);
+            appbar::unregister(hwnd);
+            appbar::register(hwnd);
+        }
     }
-    relayout(app);
+    relayout_all(app);
 }
 
 /// Show the dock and keep it out of Alt+Tab. Use this instead of `window.show()`.
@@ -366,7 +621,6 @@ fn make_tool_window(window: &WebviewWindow, no_activate: bool) -> AppResult<()> 
     Ok(())
 }
 
-/// Open (or focus) the settings window.
 /// Event telling an open settings window which section to show.
 pub const SETTINGS_SECTION: &str = "settings-section";
 const WELCOME_LABEL: &str = "welcome";
@@ -428,23 +682,45 @@ pub fn close_welcome_window(app: &AppHandle) -> AppResult<()> {
     Ok(())
 }
 
+/// Show or hide every dock together (tray and shortcut).
 pub fn toggle_dock(app: &AppHandle) {
-    let Some(window) = dock_window(app) else { return };
-    let hide = window.is_visible().unwrap_or(false);
-    app.state::<ShellState>()
-        .hidden_by_user
-        .store(hide, Ordering::SeqCst);
-    let result = if hide {
-        window.hide().map_err(Into::into)
-    } else {
-        show_dock(&window)
-    };
+    let windows = dock_windows(app);
+    let shell = app.state::<ShellState>();
+    // Hide if any dock shows. A dock hidden for a fullscreen app doesn't count as showing,
+    // and stays hidden when the others come back.
+    let hide = windows.iter().any(|w| w.is_visible().unwrap_or(false));
+    shell.hidden_by_user.store(hide, Ordering::SeqCst);
+    let fullscreen: Vec<String> = shell
+        .docks()
+        .iter()
+        .filter(|(_, d)| d.fullscreen)
+        .map(|(l, _)| l.clone())
+        .collect();
+    for window in windows {
+        let result = if hide {
+            window.hide().map_err(Into::into)
+        } else if fullscreen.iter().any(|l| l == window.label()) {
+            Ok(())
+        } else {
+            show_dock(&window)
+        };
+        if let Err(error) = result {
+            tracing::warn!(%error, label = window.label(), "failed to toggle a dock");
+        }
+    }
     // A hidden dock gives its strip of the screen back.
-    if let Err(error) = result.and_then(|()| place_dock(app)) {
+    if let Err(error) = place_dock(app) {
         tracing::warn!(%error, "failed to toggle dock");
     }
 }
 
+/// Bring every dock back (a second launch of the app does this).
+pub fn show_docks(app: &AppHandle) {
+    let shell = app.state::<ShellState>();
+    if shell.hidden_by_user.load(Ordering::SeqCst) {
+        toggle_dock(app);
+    }
+}
 fn setup_tray(app: &AppHandle) -> AppResult<()> {
     let toggle = MenuItem::with_id(app, "toggle", "Show / hide dock", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
@@ -490,10 +766,26 @@ pub fn init(app: &AppHandle) -> AppResult<()> {
         return Ok(());
     };
     #[cfg(windows)]
-    watch::install(&window, app);
-    place_dock(app)?;
+    {
+        watch::install(app);
+        watch::attach(&window);
+    }
+    // The main dock's screen, before it is first placed.
+    let settings = app.state::<SettingsStore>().get();
+    let slots = screens::plan(&screen_ids(&monitors(app)?), &settings.screen, settings.docks_on);
+    if let Some(main) = slots.first() {
+        if let Some(dock) = app.state::<ShellState>().docks().get_mut(DOCK_LABEL) {
+            dock.screen = main.screen.clone();
+        }
+    }
+    place_one(app, DOCK_LABEL)?;
     show_dock(&window)?;
     #[cfg(windows)]
     watch::refresh_fullscreen(app);
+    // Docks for the other screens, off the main thread: creating windows there can deadlock.
+    if slots.len() > 1 {
+        let app = app.clone();
+        std::thread::spawn(move || sync_docks(&app));
+    }
     Ok(())
 }
