@@ -6,7 +6,7 @@ import type { DockApp } from "../core/generated/DockApp";
 const calls = {
   appClick: vi.fn(async (_key: string) => {}),
   appLaunch: vi.fn(async (_key: string) => {}),
-  appMenu: vi.fn(async (_key: string) => {}),
+  appMenu: vi.fn(async (_key: string, _anchorX: number) => {}),
   appIcon: vi.fn(async (_source: string) => "data:image/png;base64,AAAA"),
 };
 vi.mock("../core/ipc", () => ({ ipc: calls }));
@@ -35,7 +35,7 @@ describe("AppButton", () => {
     fireEvent(button, new MouseEvent("auxclick", { bubbles: true, button: 1 }));
     expect(calls.appLaunch).toHaveBeenCalledWith("pin:chrome");
     fireEvent.contextMenu(button);
-    expect(calls.appMenu).toHaveBeenCalledWith("pin:chrome");
+    expect(calls.appMenu).toHaveBeenCalledWith("pin:chrome", expect.any(Number));
   });
 
   it("marks running, active and several windows, and titles with the active window", () => {

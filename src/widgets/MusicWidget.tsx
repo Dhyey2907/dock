@@ -2,6 +2,7 @@ import type { MouseEvent } from "react";
 import { Music, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 
 import { ipc } from "../core/ipc";
+import { useIcon } from "../core/useIcon";
 import type { MediaCommand } from "../core/generated/MediaCommand";
 import { formatDuration, playbackPosition } from "./logic";
 import { useWidgets } from "./store";
@@ -13,6 +14,7 @@ function send(command: MediaCommand) {
 
 export function MusicTile() {
   const music = useWidgets((s) => s.music);
+  const appIcon = useIcon(music?.sourceIcon, !music?.artwork);
   if (!music || (!music.title && !music.artist)) {
     return <Music size={18} strokeWidth={1.8} aria-hidden="true" />;
   }
@@ -20,6 +22,8 @@ export function MusicTile() {
     <span className="tile-row music-tile" data-playing={music.status === "playing"}>
       {music.artwork ? (
         <img className="music-art-small" src={music.artwork} alt="" draggable={false} />
+      ) : appIcon ? (
+        <img className="music-art-small music-art-app" src={appIcon} alt="" draggable={false} />
       ) : (
         <Music size={16} aria-hidden="true" />
       )}
@@ -33,6 +37,7 @@ export function MusicTile() {
 
 export function MusicPanel() {
   const music = useWidgets((s) => s.music);
+  const appIcon = useIcon(music?.sourceIcon, !music?.artwork);
   const playing = music?.status === "playing";
   const now = useNow(1000, playing);
   if (!music) {
@@ -58,6 +63,10 @@ export function MusicPanel() {
       <div className="music-head">
         {music.artwork ? (
           <img className="music-art" src={music.artwork} alt="" draggable={false} />
+        ) : appIcon ? (
+          <span className="music-art music-art-empty">
+            <img className="music-art-icon" src={appIcon} alt="" draggable={false} />
+          </span>
         ) : (
           <span className="music-art music-art-empty">
             <Music size={30} />

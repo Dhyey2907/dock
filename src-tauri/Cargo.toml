@@ -40,6 +40,7 @@ notify = "8"
 windows-core = "0.61"
 windows = { version = "0.61", features = [
     "Devices_Geolocation",
+    "Devices_Radios",
     "Foundation",
     "Foundation_Collections",
     "Media_Control",
@@ -58,9 +59,11 @@ windows = { version = "0.61", features = [
     "Win32_Storage_Packaging_Appx",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
+    "Win32_System_Ole",
     "Win32_System_Registry",
     "Win32_System_Threading",
     "Win32_System_Variant",
+    "Win32_System_Wmi",
     "Win32_UI_Accessibility",
     "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",

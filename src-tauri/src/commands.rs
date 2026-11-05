@@ -25,7 +25,7 @@ pub fn settings_set(app: AppHandle, settings: Settings) -> AppResult<Settings> {
     if before.launch_at_startup != settings.launch_at_startup {
         sync_autostart(&app, settings.launch_at_startup);
     }
-    if before.taskbar_mode != settings.taskbar_mode {
+    if before.taskbar_mode != settings.taskbar_mode && !shell::using_windows_taskbar(&app) {
         shell::taskbar::apply_system(settings.taskbar_mode);
     }
     if before.auto_hide != settings.auto_hide {
@@ -133,9 +133,17 @@ pub fn app_launch(app: AppHandle, key: String) -> AppResult<()> {
     crate::apps::service::launch(&app, &key)
 }
 
+/// An app's right-click menu, centred on `anchor_x` (screen pixels). Async: the first open
+/// creates the popup window, and reading jump lists takes a moment.
 #[tauri::command(async)]
-pub fn app_menu(app: AppHandle, window: WebviewWindow, key: String) -> AppResult<()> {
-    crate::apps::service::show_menu(&app, &window, &key)
+pub fn app_menu(app: AppHandle, window: WebviewWindow, key: String, anchor_x: i32) -> AppResult<()> {
+    crate::apps::service::show_menu(&app, window.label(), &key, anchor_x)
+}
+
+/// A choice in the open app menu.
+#[tauri::command(async)]
+pub fn app_menu_action(app: AppHandle, action: crate::apps::jump::MenuAction) -> AppResult<()> {
+    crate::apps::service::menu_action(&app, action)
 }
 
 /// Open the Start menu (as the Windows key does).
@@ -176,7 +184,7 @@ pub fn panel_toggle(app: AppHandle, kind: crate::settings::WidgetKind, anchor_x:
 
 /// Which widget's popup is open (for the popup page when it first loads).
 #[tauri::command]
-pub fn panel_current(app: AppHandle) -> Option<crate::settings::WidgetKind> {
+pub fn panel_current(app: AppHandle) -> Option<shell::panel::PanelContent> {
     shell::panel::current(&app)
 }
 
@@ -234,6 +242,8 @@ pub fn open_windows_settings(page: String) -> AppResult<()> {
         "network" => "ms-settings:network",
         "sound" => "ms-settings:sound",
         "battery" => "ms-settings:batterysaver",
+        "bluetooth" => "ms-settings:bluetooth",
+        "home" => "ms-settings:",
         "datetime" => "ms-settings:dateandtime",
         _ => return Err(AppError::InvalidInput("settings page".into())),
     };
@@ -241,6 +251,36 @@ pub fn open_windows_settings(page: String) -> AppResult<()> {
     crate::apps::win::launch(&crate::apps::Launch::Program(uri.into()));
     #[cfg(not(windows))]
     let _ = uri;
+    Ok(())
+}
+
+/// Wi-Fi, Bluetooth and brightness, for the status popup. Async: the radio and WMI calls
+/// block for a moment.
+#[tauri::command(async)]
+pub fn quick_get() -> crate::quick::QuickState {
+    crate::quick::current()
+}
+
+#[tauri::command(async)]
+pub fn quick_set_radio(kind: crate::quick::RadioKind, on: bool) -> AppResult<crate::quick::QuickState> {
+    crate::quick::set_radio(kind, on)?;
+    Ok(crate::quick::current())
+}
+
+#[tauri::command(async)]
+pub fn quick_set_brightness(level: u8) -> AppResult<()> {
+    crate::quick::set_brightness(level)
+}
+
+/// Windows' own Quick Settings (Win+A), for the toggles only Windows can switch.
+#[tauri::command(async)]
+pub fn quick_open_windows(app: AppHandle) -> AppResult<()> {
+    shell::panel::close(&app)?;
+    #[cfg(windows)]
+    crate::apps::win::press(&[
+        windows::Win32::UI::Input::KeyboardAndMouse::VK_LWIN,
+        windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY(u16::from(b'A')),
+    ]);
     Ok(())
 }
 
@@ -276,6 +316,12 @@ pub async fn calendar_add(app: AppHandle, name: String, link: String) -> AppResu
 #[tauri::command(async)]
 pub fn calendar_remove(app: AppHandle, id: String) -> AppResult<()> {
     crate::calendar::service::remove(&app, &id)
+}
+
+/// Hide the docks and bring back the Windows taskbar; the tray icon or the shortcut switch back.
+#[tauri::command]
+pub fn use_windows_taskbar(app: AppHandle) {
+    shell::use_windows_taskbar(&app, true);
 }
 
 /// Quit the dock; the exit handler puts the Windows taskbar back.

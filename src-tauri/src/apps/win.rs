@@ -423,7 +423,7 @@ pub fn foreground() -> isize {
 pub fn icon_png(source: &str, size: i32) -> Option<Vec<u8>> {
     com_init();
     let parsing = match source.split_once(':')? {
-        ("lnk" | "exe", path) => path.to_string(),
+        ("lnk" | "exe" | "path", path) => path.to_string(),
         ("aumid", id) => format!("shell:AppsFolder\\{id}"),
         _ => return None,
     };

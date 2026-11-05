@@ -7,6 +7,7 @@ mod error;
 mod glass;
 mod logging;
 mod media;
+mod quick;
 mod settings;
 mod shell;
 mod widgets;
@@ -103,8 +104,6 @@ pub fn run() {
             }
             _ => {}
         })
-        // App menus (right-click on an app); the tray handles its own items.
-        .on_menu_event(|app, event| apps::service::on_menu(app, event.id().as_ref()))
         .invoke_handler(tauri::generate_handler![
             commands::settings_get,
             commands::settings_set,
@@ -120,6 +119,7 @@ pub fn run() {
             commands::app_click,
             commands::app_launch,
             commands::app_menu,
+            commands::app_menu_action,
             commands::shell_start,
             commands::shell_search,
             commands::dock_geometry,
@@ -141,6 +141,11 @@ pub fn run() {
             commands::focus_pause,
             commands::focus_reset,
             commands::open_windows_settings,
+            commands::use_windows_taskbar,
+            commands::quick_get,
+            commands::quick_set_radio,
+            commands::quick_set_brightness,
+            commands::quick_open_windows,
             commands::app_quit,
         ])
         .build(tauri::generate_context!())

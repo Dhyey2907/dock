@@ -39,8 +39,8 @@ button {
   height: 100%;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 10px;
+  gap: 2px;
+  padding: 0 8px;
   border-radius: var(--radius-pill);
 }
 /* Everything in the bar sits above the glass. */
@@ -147,20 +147,24 @@ button {
 
 .dock-spacer {
   flex: 1;
-  min-width: 24px;
+  min-width: 10px;
 }
 
-/* Button size and icon size follow the dock size. */
+/* Button size and icon size follow the dock size. App buttons are a little narrower than
+   they are tall, so a row of apps stays compact. */
 .dock {
   --button: 40px;
+  --app-width: 36px;
   --icon: 26px;
 }
 .dock[data-size="small"] {
   --button: 34px;
+  --app-width: 31px;
   --icon: 22px;
 }
 .dock[data-size="large"] {
   --button: 46px;
+  --app-width: 42px;
   --icon: 30px;
 }
 
@@ -184,6 +188,9 @@ button {
 .dock-icon-button:hover,
 .dock-app:hover {
   background: var(--dock-hover);
+}
+.dock-app {
+  width: var(--app-width);
 }
 .dock-app:active {
   transform: scale(0.92);

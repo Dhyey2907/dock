@@ -84,10 +84,10 @@ impl DockSize {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub enum TaskbarMode {
-    /// The Windows taskbar auto-hides while the dock runs.
-    #[default]
+    /// The Windows taskbar auto-hides while the dock runs, peeking out at the screen edge.
     AutoHide,
-    /// The Windows taskbar is hidden completely while the dock runs.
+    /// "Dock only": the Windows taskbar is hidden completely while the dock runs.
+    #[default]
     Hidden,
 }
 

@@ -71,6 +71,7 @@ describe("focus countdown", () => {
 describe("playbackPosition", () => {
   const music: MediaState = {
     sourceApp: "Spotify",
+    sourceIcon: "aumid:Spotify",
     title: "Song",
     artist: "Artist",
     album: "",

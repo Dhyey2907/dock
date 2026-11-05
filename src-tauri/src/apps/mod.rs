@@ -5,6 +5,7 @@
 //! This file is the pure part (parsing, filtering, grouping); `win.rs` talks to Windows and
 //! `service.rs` keeps the list current.
 
+pub mod jump;
 pub mod service;
 #[cfg(windows)]
 pub mod win;
@@ -82,6 +83,10 @@ pub struct DockApp {
     pub icon: String,
     /// Open windows, front-most first.
     pub windows: Vec<DockWindow>,
+    /// Its Windows app id, when known (for its jump list).
+    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub app_id: Option<String>,
 }
 
 /// What the dock knows about a pin it can launch, by app key.
@@ -170,6 +175,8 @@ fn app_ids_in(units: &[u16]) -> Vec<(usize, String)> {
 pub const WS_EX_TOOLWINDOW: u32 = 0x0000_0080;
 pub const WS_EX_APPWINDOW: u32 = 0x0004_0000;
 pub const WS_EX_NOACTIVATE: u32 = 0x0800_0000;
+/// Clicks fall through the window to whatever is under it.
+pub const WS_EX_TRANSPARENT: u32 = 0x0000_0020;
 
 /// What decides whether a top-level window gets a taskbar button.
 #[derive(Debug, Clone, Copy)]
@@ -183,12 +190,15 @@ pub struct WindowTraits {
     pub ours: bool,
 }
 
-/// The taskbar's own rule: visible, unowned, not cloaked, and not a tool or no-activate window
-/// unless it explicitly asks for a button.
+/// The taskbar's own rule: visible, unowned, not cloaked, and not a tool window unless it
+/// explicitly asks for a button. Stricter than the taskbar for background overlays (a notch,
+/// a click-through layer): a window that can't be activated, or that clicks fall through, is
+/// never shown, even if it asks for a button — clicking it on the dock could do nothing.
 pub fn shows_on_taskbar(w: WindowTraits) -> bool {
     let asks = w.ex_style & WS_EX_APPWINDOW != 0;
-    let hidden_style = w.ex_style & (WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE) != 0;
-    w.visible && !w.cloaked && w.has_title && !w.ours && (asks || (!w.has_owner && !hidden_style))
+    let background = w.ex_style & (WS_EX_NOACTIVATE | WS_EX_TRANSPARENT) != 0;
+    let tool = w.ex_style & WS_EX_TOOLWINDOW != 0;
+    w.visible && !w.cloaked && w.has_title && !w.ours && !background && (asks || (!w.has_owner && !tool))
 }
 
 // ---------- Grouping ----------
@@ -235,10 +245,12 @@ pub fn build(pins: &[Pin], windows: &[WinInfo], foreground: isize) -> (Vec<DockA
     for pin in pins {
         let key = pin_key(pin);
         let mut mine = Vec::new();
+        let mut app_id = pin.app_id.clone();
         for (i, window) in windows.iter().enumerate() {
             if !claimed[i] && belongs(pin, window) {
                 claimed[i] = true;
                 mine.push(dock_window(window));
+                app_id = app_id.or_else(|| window.app_id.clone());
             }
         }
         launchables.push(Launchable {
@@ -251,6 +263,7 @@ pub fn build(pins: &[Pin], windows: &[WinInfo], foreground: isize) -> (Vec<DockA
             pinned: true,
             icon: pin.icon.clone(),
             windows: mine,
+            app_id,
         });
     }
     for (i, window) in windows.iter().enumerate() {
@@ -286,6 +299,7 @@ pub fn build(pins: &[Pin], windows: &[WinInfo], foreground: isize) -> (Vec<DockA
             pinned: false,
             icon,
             windows: vec![dock_window(window)],
+            app_id: window.app_id.clone(),
         });
     }
     (apps, launchables)
@@ -453,6 +467,20 @@ mod tests {
             ex_style: WS_EX_TOOLWINDOW | WS_EX_APPWINDOW,
             ..traits()
         }));
+        // ...but not for background overlays. Codenotch's window, as Windows reports it:
+        // layered, app-window, topmost, click-through, no-activate.
+        assert!(!shows_on_taskbar(WindowTraits {
+            ex_style: 0x080C_0138,
+            ..traits()
+        }));
+        assert!(!shows_on_taskbar(WindowTraits {
+            ex_style: WS_EX_APPWINDOW | WS_EX_NOACTIVATE,
+            ..traits()
+        }));
+        assert!(!shows_on_taskbar(WindowTraits {
+            ex_style: WS_EX_APPWINDOW | WS_EX_TRANSPARENT,
+            ..traits()
+        }));
     }
 
     fn pin(name: &str, app_id: Option<&str>, exe: Option<&str>) -> Pin {
@@ -615,6 +643,7 @@ mod tests {
             name: "n".into(),
             pinned: true,
             icon: String::new(),
+            app_id: None,
             windows: active
                 .iter()
                 .enumerate()

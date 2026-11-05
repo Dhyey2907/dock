@@ -560,7 +560,9 @@ fn set_fullscreen(app: &AppHandle, label: &str, active: bool) {
 #[cfg_attr(not(windows), allow(dead_code))]
 fn explorer_restarted(app: &AppHandle) {
     tracing::info!("explorer restarted; setting up the docks again");
-    taskbar::apply_system(app.state::<SettingsStore>().get().taskbar_mode);
+    if !using_windows_taskbar(app) {
+        taskbar::apply_system(app.state::<SettingsStore>().get().taskbar_mode);
+    }
     #[cfg(windows)]
     for window in dock_windows(app) {
         if let Ok(raw) = window.hwnd() {
@@ -682,14 +684,30 @@ pub fn close_welcome_window(app: &AppHandle) -> AppResult<()> {
     Ok(())
 }
 
-/// Show or hide every dock together (tray and shortcut).
+/// Switch between the docks and the Windows taskbar (dock button, tray and shortcut).
 pub fn toggle_dock(app: &AppHandle) {
-    let windows = dock_windows(app);
-    let shell = app.state::<ShellState>();
     // Hide if any dock shows. A dock hidden for a fullscreen app doesn't count as showing,
     // and stays hidden when the others come back.
-    let hide = windows.iter().any(|w| w.is_visible().unwrap_or(false));
+    let hide = dock_windows(app).iter().any(|w| w.is_visible().unwrap_or(false));
+    use_windows_taskbar(app, hide);
+}
+
+/// Whether the user switched to the Windows taskbar.
+pub fn using_windows_taskbar(app: &AppHandle) -> bool {
+    app.state::<ShellState>().hidden_by_user.load(Ordering::SeqCst)
+}
+
+/// Hide every dock and put the Windows taskbar back as the user had it (`true`), or hide the
+/// taskbar again and bring the docks back (`false`).
+pub fn use_windows_taskbar(app: &AppHandle, windows_taskbar: bool) {
+    let hide = windows_taskbar;
+    let windows = dock_windows(app);
+    let shell = app.state::<ShellState>();
     shell.hidden_by_user.store(hide, Ordering::SeqCst);
+    if !hide {
+        // The taskbar goes first, so its strip is free for the docks to claim.
+        taskbar::apply_system(app.state::<SettingsStore>().get().taskbar_mode);
+    }
     let fullscreen: Vec<String> = shell
         .docks()
         .iter()
@@ -712,6 +730,10 @@ pub fn toggle_dock(app: &AppHandle) {
     if let Err(error) = place_dock(app) {
         tracing::warn!(%error, "failed to toggle dock");
     }
+    if hide {
+        taskbar::restore_system();
+    }
+    tracing::info!(windows_taskbar = hide, "switched taskbars");
 }
 
 /// Bring every dock back (a second launch of the app does this).
@@ -722,7 +744,7 @@ pub fn show_docks(app: &AppHandle) {
     }
 }
 fn setup_tray(app: &AppHandle) -> AppResult<()> {
-    let toggle = MenuItem::with_id(app, "toggle", "Show / hide dock", true, None::<&str>)?;
+    let toggle = MenuItem::with_id(app, "toggle", "Switch Dock / Windows taskbar", true, None::<&str>)?;
     let settings = MenuItem::with_id(app, "settings", "Settings…", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "Quit Dock", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&toggle, &settings, &quit])?;

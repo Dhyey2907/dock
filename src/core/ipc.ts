@@ -2,6 +2,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
+import type { MenuAction } from "./generated/MenuAction";
+import type { PanelContent } from "./generated/PanelContent";
+import type { QuickState } from "./generated/QuickState";
+import type { RadioKind } from "./generated/RadioKind";
 import type { Bubble } from "./generated/Bubble";
 import type { CalendarState } from "./generated/CalendarState";
 import type { ClaudeUsage } from "./generated/ClaudeUsage";
@@ -21,7 +25,8 @@ import type { WidgetKind } from "./generated/WidgetKind";
 import type { WidgetSnapshot } from "./generated/WidgetSnapshot";
 
 /** Windows Settings pages the widgets may open. */
-export type WindowsSettingsPage = "location" | "network" | "sound" | "battery" | "datetime";
+export type WindowsSettingsPage =
+  "location" | "network" | "sound" | "battery" | "datetime" | "bluetooth" | "home";
 
 /** Typed wrappers for every backend command, so call sites never spell command names. */
 export const ipc = {
@@ -35,11 +40,20 @@ export const ipc = {
   shortcutSet: (shortcut: string) => invoke<Settings>("shortcut_set", { shortcut }),
   onboardingDone: (openSettings: boolean) => invoke<void>("onboarding_done", { openSettings }),
   appQuit: () => invoke<void>("app_quit"),
+  /** Hide the docks and bring back the Windows taskbar until the user switches back. */
+  switchToWindowsTaskbar: () => invoke<void>("use_windows_taskbar"),
   appsList: () => invoke<DockApp[]>("apps_list"),
   appIcon: (source: string) => invoke<string | null>("app_icon", { source }),
+  quickGet: () => invoke<QuickState>("quick_get"),
+  quickSetRadio: (kind: RadioKind, on: boolean) => invoke<QuickState>("quick_set_radio", { kind, on }),
+  quickSetBrightness: (level: number) => invoke<void>("quick_set_brightness", { level }),
+  /** Windows' own Quick Settings, for Night light, Airplane mode and the rest. */
+  quickOpenWindows: () => invoke<void>("quick_open_windows"),
   appClick: (key: string) => invoke<void>("app_click", { key }),
   appLaunch: (key: string) => invoke<void>("app_launch", { key }),
-  appMenu: (key: string) => invoke<void>("app_menu", { key }),
+  /** An app's right-click menu, centred on `anchorX` (screen pixels). */
+  appMenu: (key: string, anchorX: number) => invoke<void>("app_menu", { key, anchorX: Math.round(anchorX) }),
+  appMenuAction: (action: MenuAction) => invoke<void>("app_menu_action", { action }),
   shellStart: () => invoke<void>("shell_start"),
   shellSearch: () => invoke<void>("shell_search"),
   dockGeometry: () => invoke<DockGeometry | null>("dock_geometry"),
@@ -47,7 +61,7 @@ export const ipc = {
   panelToggle: (kind: WidgetKind, anchorX: number) =>
     invoke<void>("panel_toggle", { kind, anchorX: Math.round(anchorX) }),
   panelClose: () => invoke<void>("panel_close"),
-  panelCurrent: () => invoke<WidgetKind | null>("panel_current"),
+  panelCurrent: () => invoke<PanelContent | null>("panel_current"),
   widgetsSnapshot: () => invoke<WidgetSnapshot>("widgets_snapshot"),
   volumeSet: (level: number) => invoke<void>("volume_set", { level }),
   volumeToggleMute: () => invoke<void>("volume_toggle_mute"),
@@ -96,7 +110,7 @@ export const events = {
   onAppsChanged: onThisWindow<DockApp[]>("apps-changed"),
   onDockGeometry: onThisWindow<DockGeometry>("dock-geometry"),
   onGlassChanged: onThisWindow<GlassFrame>("glass-changed"),
-  onPanelOpen: on<{ kind: WidgetKind }>("panel-open"),
+  onPanelOpen: on<PanelContent>("panel-open"),
   onPanelClosed: on<null>("panel-closed"),
   onWeather: on<Weather>("widget-weather"),
   onStats: on<SystemStats>("widget-stats"),

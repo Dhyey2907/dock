@@ -368,6 +368,7 @@ impl Inner {
             // The Start menu's name ("Prime Video") beats a guess from the id ("PWA").
             source_app: crate::apps::win::installed_app_name(&source_id)
                 .unwrap_or_else(|| display_name(&source_id)),
+            source_icon: format!("aumid:{source_id}"),
             artwork: properties
                 .as_ref()
                 .and_then(|p| self.artwork_for(p, &format!("{title}\u{1f}{artist}\u{1f}{album}"))),

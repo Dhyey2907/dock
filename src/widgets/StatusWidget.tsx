@@ -1,10 +1,18 @@
+import { useEffect, useState } from "react";
 import {
   Battery,
   BatteryCharging,
   BatteryFull,
   BatteryLow,
   BatteryMedium,
+  Bluetooth,
+  BluetoothOff,
   Cable,
+  ChevronRight,
+  LayoutGrid,
+  Settings,
+  SlidersHorizontal,
+  Sun,
   Volume,
   Volume1,
   Volume2,
@@ -19,6 +27,8 @@ import {
 
 import { ipc } from "../core/ipc";
 import type { NetworkState } from "../core/generated/NetworkState";
+import type { QuickState } from "../core/generated/QuickState";
+import type { RadioKind } from "../core/generated/RadioKind";
 import type { SoundState } from "../core/generated/SoundState";
 import { useWidgets } from "./store";
 
@@ -77,60 +87,211 @@ export function StatusTile() {
   );
 }
 
+/** Send the newest value, one call at a time, so dragging a slider never queues up calls. */
+function latestOnly(send: (value: number) => Promise<unknown>) {
+  let busy = false;
+  let next: number | null = null;
+  const run = (value: number) => {
+    busy = true;
+    send(value)
+      .catch((error) => console.error(error))
+      .finally(() => {
+        busy = false;
+        if (next != null) {
+          const value = next;
+          next = null;
+          run(value);
+        }
+      });
+  };
+  return (value: number) => {
+    if (busy) next = value;
+    else run(value);
+  };
+}
+
+const setBrightness = latestOnly((level) => ipc.quickSetBrightness(level));
+
+/** A Windows-style toggle tile: the main part switches, the arrow opens its settings page. */
+function QuickTile({
+  icon: Icon,
+  label,
+  on,
+  onToggle,
+  onMore,
+  disabled,
+}: {
+  icon: LucideIcon;
+  label: string;
+  on: boolean;
+  onToggle?: () => void;
+  onMore?: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="quick-tile" data-on={on}>
+      <div className="quick-tile-face">
+        <button
+          className="quick-tile-main"
+          aria-pressed={onToggle ? on : undefined}
+          aria-label={label}
+          disabled={disabled}
+          onClick={onToggle ?? onMore}
+        >
+          <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
+        </button>
+        {onToggle && onMore && (
+          <button className="quick-tile-more" aria-label={`${label} settings`} onClick={onMore}>
+            <ChevronRight size={16} aria-hidden="true" />
+          </button>
+        )}
+      </div>
+      <span className="quick-tile-label" title={label}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
 export function StatusPanel() {
   const { sound, network, stats } = useWidgets();
+  const [quick, setQuick] = useState<QuickState | null>(null);
+  const [brightness, setLocalBrightness] = useState<number | null>(null);
+  useEffect(() => {
+    let live = true;
+    ipc
+      .quickGet()
+      .then((state) => {
+        if (!live) return;
+        setQuick(state);
+        setLocalBrightness(state.brightness ?? null);
+      })
+      .catch((error) => console.error(error));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const toggle = (kind: RadioKind, on: boolean) => {
+    // Show the change at once; Windows confirms (or not) a moment later.
+    setQuick((q) => (q ? { ...q, [kind]: on } : q));
+    ipc
+      .quickSetRadio(kind, on)
+      .then(setQuick)
+      .catch((error) => {
+        console.error(error);
+        ipc
+          .quickGet()
+          .then(setQuick)
+          .catch(() => {});
+      });
+  };
+
   const VolIcon = VOLUME[volumeKey(sound)];
-  const NetIcon = NETWORK[networkKey(network)];
   const level = Math.round((sound?.level ?? 0) * 100);
   const battery = stats?.battery;
   const BatIcon = battery != null ? BATTERY[batteryKey(battery, stats?.charging ?? false)] : null;
+  const wifiOn = quick?.wifi ?? Boolean(network?.wifi);
+  const wifiLabel = wifiOn && network?.connected && network.wifi ? (network.name ?? "Wi-Fi") : "Wi-Fi";
   return (
-    <div className="panel-body">
-      <section className="status-row">
+    <div className="panel-body quick-panel">
+      <section className="quick-grid">
+        <QuickTile
+          icon={wifiOn ? NETWORK[networkKey(network)] : WifiOff}
+          label={network?.connected && !network.wifi ? "Ethernet" : wifiLabel}
+          on={wifiOn || Boolean(network?.connected && !network.wifi)}
+          disabled={quick != null && quick.wifi == null}
+          onToggle={quick?.wifi != null ? () => toggle("wifi", !wifiOn) : undefined}
+          onMore={() => ipc.openWindowsSettings("network")}
+        />
+        {quick?.bluetooth != null && (
+          <QuickTile
+            icon={quick.bluetooth ? Bluetooth : BluetoothOff}
+            label="Bluetooth"
+            on={quick.bluetooth}
+            onToggle={() => toggle("bluetooth", !quick.bluetooth)}
+            onMore={() => ipc.openWindowsSettings("bluetooth")}
+          />
+        )}
+        <QuickTile
+          icon={LayoutGrid}
+          label="More"
+          on={false}
+          onMore={() => ipc.quickOpenWindows().catch((error) => console.error(error))}
+        />
+      </section>
+
+      <section className="quick-sliders">
+        {brightness != null && (
+          <div className="status-row">
+            <span className="icon-btn" aria-hidden="true">
+              <Sun size={19} />
+            </span>
+            <input
+              className="slider"
+              type="range"
+              min={0}
+              max={100}
+              value={brightness}
+              aria-label="Brightness"
+              onChange={(e) => {
+                const value = Number(e.target.value);
+                setLocalBrightness(value);
+                setBrightness(value);
+              }}
+              style={{ "--fill": `${brightness}%` } as React.CSSProperties}
+            />
+          </div>
+        )}
+        <div className="status-row">
+          <button
+            className="icon-btn"
+            aria-label={sound?.muted ? "Unmute" : "Mute"}
+            onClick={() => ipc.volumeToggleMute()}
+            disabled={!sound}
+          >
+            <VolIcon size={19} />
+          </button>
+          <input
+            className="slider"
+            type="range"
+            min={0}
+            max={100}
+            value={level}
+            aria-label="Volume"
+            disabled={!sound}
+            onChange={(e) => ipc.volumeSet(Number(e.target.value) / 100)}
+            style={{ "--fill": `${level}%` } as React.CSSProperties}
+          />
+          <button
+            className="icon-btn"
+            aria-label="Sound settings"
+            title={sound?.device ?? "Sound settings"}
+            onClick={() => ipc.openWindowsSettings("sound")}
+          >
+            <SlidersHorizontal size={17} />
+          </button>
+        </div>
+      </section>
+
+      <footer className="quick-footer">
+        {BatIcon && battery != null ? (
+          <button className="quick-battery" onClick={() => ipc.openWindowsSettings("battery")}>
+            <BatIcon size={18} aria-hidden="true" />
+            <span>{battery}%</span>
+            {stats?.charging && <span className="panel-faint">Charging</span>}
+          </button>
+        ) : (
+          <span />
+        )}
         <button
           className="icon-btn"
-          aria-label={sound?.muted ? "Unmute" : "Mute"}
-          onClick={() => ipc.volumeToggleMute()}
-          disabled={!sound}
+          aria-label="All settings"
+          title="All settings"
+          onClick={() => ipc.openWindowsSettings("home")}
         >
-          <VolIcon size={20} />
+          <Settings size={17} />
         </button>
-        <input
-          className="slider"
-          type="range"
-          min={0}
-          max={100}
-          value={level}
-          aria-label="Volume"
-          disabled={!sound}
-          onChange={(e) => ipc.volumeSet(Number(e.target.value) / 100)}
-          style={{ "--fill": `${level}%` } as React.CSSProperties}
-        />
-        <span className="status-value">{sound ? level : "—"}</span>
-      </section>
-      {sound?.device && <p className="panel-faint status-sub">{sound.device}</p>}
-
-      <button className="status-line" onClick={() => ipc.openWindowsSettings("network")}>
-        <NetIcon size={18} aria-hidden="true" />
-        <span className="status-text">
-          {network?.connected ? (network.name ?? (network.wifi ? "Wi-Fi" : "Ethernet")) : "Not connected"}
-          <span className="panel-faint">
-            {network?.connected ? (network.internet ? "Connected" : "No internet") : "Network settings"}
-          </span>
-        </span>
-      </button>
-
-      {BatIcon && battery != null && (
-        <button className="status-line" onClick={() => ipc.openWindowsSettings("battery")}>
-          <BatIcon size={18} aria-hidden="true" />
-          <span className="status-text">
-            {battery}%<span className="panel-faint">{stats?.charging ? "Charging" : "On battery"}</span>
-          </span>
-        </button>
-      )}
-      <button className="panel-link" onClick={() => ipc.openWindowsSettings("sound")}>
-        Sound settings
-      </button>
+      </footer>
     </div>
   );
 }

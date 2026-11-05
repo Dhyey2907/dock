@@ -1,5 +1,6 @@
 import { useEffect, useState, type MouseEvent } from "react";
 
+import { useGlass } from "./glass/store";
 import { ipc } from "../core/ipc";
 import type { DockApp } from "../core/generated/DockApp";
 import { loadIcon } from "./apps";
@@ -39,9 +40,13 @@ export function AppButton({ app }: { app: DockApp }) {
   const onAuxClick = (event: MouseEvent) => {
     if (event.button === 1) ipc.appLaunch(app.key).catch(report);
   };
-  const onContextMenu = (event: MouseEvent) => {
+  const onContextMenu = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
-    ipc.appMenu(app.key).catch(report);
+    const rect = event.currentTarget.getBoundingClientRect();
+    const geometry = useGlass.getState().geometry;
+    const centre = rect.left + rect.width / 2;
+    const anchor = geometry ? geometry.x + centre * geometry.scale : event.screenX;
+    ipc.appMenu(app.key, anchor).catch(report);
   };
 
   return (

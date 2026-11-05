@@ -7,9 +7,11 @@ use std::sync::Mutex;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
+use ts_rs::TS;
 
 use super::placement::Rect;
 use crate::{
+    apps::jump::AppMenu,
     error::AppResult,
     settings::{Edge, SettingsStore, Theme, WidgetKind},
 };
@@ -24,16 +26,21 @@ const GAP: f64 = 10.0;
 /// Closest a popup comes to the screen's sides, in logical pixels.
 const SIDE_MARGIN: f64 = 8.0;
 
-/// Which widget's popup is open.
-#[derive(Default)]
-pub struct PanelState {
-    open: Mutex<Option<WidgetKind>>,
+/// What the popup shows.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(tag = "type", rename_all = "camelCase")]
+#[ts(export)]
+pub enum PanelContent {
+    /// A widget's popup.
+    Widget { kind: WidgetKind },
+    /// An app's right-click menu.
+    App { menu: AppMenu },
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct PanelOpen {
-    kind: WidgetKind,
+/// What the popup is showing, while it is open.
+#[derive(Default)]
+pub struct PanelState {
+    open: Mutex<Option<PanelContent>>,
 }
 
 /// A popup's size in logical pixels.
@@ -41,7 +48,7 @@ pub fn panel_size(kind: WidgetKind) -> (f64, f64) {
     match kind {
         WidgetKind::Clock => (300.0, 330.0),
         WidgetKind::Weather => (320.0, 320.0),
-        WidgetKind::Status => (300.0, 250.0),
+        WidgetKind::Status => (340.0, 252.0),
         WidgetKind::System => (300.0, 230.0),
         WidgetKind::Focus => (280.0, 250.0),
         WidgetKind::Music => (340.0, 190.0),
@@ -74,20 +81,45 @@ pub fn panel_rect(screen: Rect, dock: Rect, edge: Edge, anchor_x: i32, size: (u3
 /// Open `kind`'s popup at `anchor_x` (the widget's centre, screen pixels), or close it if it is
 /// already open. Async-safe: creating the window off the main thread avoids a WebView2 deadlock.
 pub fn toggle(app: &AppHandle, kind: WidgetKind, anchor_x: i32) -> AppResult<()> {
+    let content = PanelContent::Widget { kind };
+    if is_showing(app, |open| *open == content)? {
+        return close(app);
+    }
+    show(app, super::DOCK_LABEL, content, panel_size(kind), anchor_x)
+}
+
+/// Open an app's right-click menu above it (or close it, if that menu is already open).
+pub fn show_app_menu(app: &AppHandle, menu: AppMenu, anchor_x: i32) -> AppResult<()> {
+    let same = |open: &PanelContent| matches!(open, PanelContent::App { menu: m } if m.key == menu.key && m.dock == menu.dock);
+    if is_showing(app, same)? {
+        return close(app);
+    }
+    let dock = menu.dock.clone();
+    let size = menu.size();
+    show(app, &dock, PanelContent::App { menu }, size, anchor_x)
+}
+
+/// Whether the popup is on screen showing something `matches` accepts.
+fn is_showing(app: &AppHandle, matches: impl Fn(&PanelContent) -> bool) -> AppResult<bool> {
+    let open = app.state::<PanelState>().open.lock().expect("panel lock").clone();
+    let visible = match app.get_webview_window(PANEL_LABEL) {
+        Some(window) => window.is_visible()?,
+        None => false,
+    };
+    Ok(visible && open.as_ref().is_some_and(matches))
+}
+
+/// Show `content` in the popup, `size` logical pixels, centred on `anchor_x` past `dock_label`.
+fn show(app: &AppHandle, dock_label: &str, content: PanelContent, size: (f64, f64), anchor_x: i32) -> AppResult<()> {
     let state = app.state::<PanelState>();
     let window = match app.get_webview_window(PANEL_LABEL) {
         Some(window) => window,
         None => create(app)?,
     };
-    let already_open = *state.open.lock().expect("panel lock") == Some(kind) && window.is_visible()?;
-    if already_open {
-        return close(app);
-    }
-
-    let Some(dock) = super::dock_window(app) else {
+    let Some(dock) = app.get_webview_window(dock_label) else {
         return Ok(());
     };
-    let Some(geometry) = super::geometry(app) else {
+    let Some(geometry) = super::geometry_of(app, dock_label) else {
         return Ok(());
     };
     let screen = Rect {
@@ -96,25 +128,25 @@ pub fn toggle(app: &AppHandle, kind: WidgetKind, anchor_x: i32) -> AppResult<()>
         width: geometry.screen_width,
         height: geometry.screen_height,
     };
-    let size = dock.outer_size()?;
+    let dock_size = dock.outer_size()?;
     let dock_rect = Rect {
         x: geometry.x,
         y: geometry.y,
-        width: size.width,
-        height: size.height,
+        width: dock_size.width,
+        height: dock_size.height,
     };
     let settings = app.state::<SettingsStore>().get();
 
-    *state.open.lock().expect("panel lock") = Some(kind);
+    *state.open.lock().expect("panel lock") = Some(content.clone());
     // Content first, so the popup never flashes the previous widget. (A popup window opened for
     // the first time asks for this itself once its page has loaded.)
-    app.emit_to(PANEL_LABEL, PANEL_OPEN, PanelOpen { kind })?;
+    app.emit_to(PANEL_LABEL, PANEL_OPEN, &content)?;
     window.set_theme(Some(if settings.theme == Theme::White {
         tauri::Theme::Light
     } else {
         tauri::Theme::Dark
     }))?;
-    let (width, height) = panel_size(kind);
+    let (width, height) = size;
     window.set_size(tauri::LogicalSize::new(width, height))?;
     // Windows makes an undecorated window with a shadow taller than asked; place it by the size
     // it really has, so it never covers the dock.
@@ -135,9 +167,9 @@ pub fn toggle(app: &AppHandle, kind: WidgetKind, anchor_x: i32) -> AppResult<()>
     Ok(())
 }
 
-/// Which widget's popup is open, for a popup page that just loaded.
-pub fn current(app: &AppHandle) -> Option<WidgetKind> {
-    *app.state::<PanelState>().open.lock().expect("panel lock")
+/// What the popup is showing, for a popup page that just loaded.
+pub fn current(app: &AppHandle) -> Option<PanelContent> {
+    app.state::<PanelState>().open.lock().expect("panel lock").clone()
 }
 
 pub fn close(app: &AppHandle) -> AppResult<()> {

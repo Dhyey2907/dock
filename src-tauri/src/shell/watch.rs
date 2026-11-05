@@ -8,7 +8,7 @@
 //! - signing out or shutting down: put the taskbar back before the dock is killed.
 
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicIsize, Ordering},
     Once, OnceLock,
 };
 use std::time::Duration;
@@ -20,11 +20,11 @@ use windows::{
         Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM},
         Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST},
         UI::{
-            Accessibility::{SetWinEventHook, HWINEVENTHOOK},
+            Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK},
             Shell::{DefSubclassProc, SetWindowSubclass, ABN_FULLSCREENAPP, ABN_POSCHANGED},
             WindowsAndMessaging::{
-                GetClassNameW, GetForegroundWindow, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId,
-                IsZoomed, RegisterWindowMessageW, EVENT_OBJECT_LOCATIONCHANGE, EVENT_SYSTEM_FOREGROUND,
+                FindWindowW, GetClassNameW, GetForegroundWindow, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId,
+                IsZoomed, RegisterWindowMessageW, EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_SHOW, EVENT_SYSTEM_FOREGROUND,
                 GWL_STYLE, OBJID_WINDOW, SPI_SETDESKWALLPAPER, SPI_SETWORKAREA, WINEVENT_OUTOFCONTEXT,
                 WINEVENT_SKIPOWNPROCESS, WM_DISPLAYCHANGE, WM_ENDSESSION, WM_EXITSIZEMOVE, WM_NCDESTROY,
                 WM_SETTINGCHANGE, WS_CAPTION,
@@ -107,6 +107,8 @@ unsafe extern "system" fn subclass(
         WM_ENDSESSION if wparam.0 != 0 => taskbar::restore_system(),
         WM_NCDESTROY => appbar::unregister(hwnd),
         _ if Some(&msg) == TASKBAR_CREATED.get() => {
+            // A new Explorer process: watch its taskbar instead.
+            watch_taskbar();
             if let Some(app) = APP.get().cloned() {
                 std::thread::spawn(move || super::explorer_restarted(&app));
             }
@@ -123,6 +125,67 @@ pub fn install(app: &AppHandle) {
     // SAFETY: registering (or looking up) a named broadcast message.
     let _ = TASKBAR_CREATED.set(unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) });
     watch_front_window();
+    watch_taskbar();
+}
+
+fn rehide_taskbar(app: &AppHandle) {
+    use tauri::Manager;
+    taskbar::rehide_system(app.state::<crate::settings::SettingsStore>().get().taskbar_mode);
+}
+
+/// In "Dock only" mode, Windows still shows its taskbar now and then (opening Start, some
+/// notifications). Watch Explorer for its taskbar windows being shown and hide them again.
+/// Only Explorer's own events are delivered, so this costs nothing the rest of the time.
+fn watch_taskbar() {
+    static HOOK: AtomicIsize = AtomicIsize::new(0);
+
+    unsafe extern "system" fn on_show(
+        _hook: HWINEVENTHOOK,
+        _event: u32,
+        hwnd: HWND,
+        id_object: i32,
+        id_child: i32,
+        _thread: u32,
+        _time: u32,
+    ) {
+        if id_object != OBJID_WINDOW.0 || id_child != 0 {
+            return;
+        }
+        let mut class = [0u16; 32];
+        // SAFETY: `class` is a local buffer of the given length.
+        let len = unsafe { GetClassNameW(hwnd, &mut class) } as usize;
+        let class = String::from_utf16_lossy(&class[..len]);
+        if class == "Shell_TrayWnd" || class == "Shell_SecondaryTrayWnd" {
+            static PENDING: AtomicBool = AtomicBool::new(false);
+            coalesce(&PENDING, Duration::from_millis(60), rehide_taskbar);
+        }
+    }
+
+    // SAFETY: a lookup by class name, then a read-only query on the window found.
+    let explorer = unsafe {
+        let Ok(tray) = FindWindowW(w!("Shell_TrayWnd"), None) else {
+            return;
+        };
+        let mut pid = 0;
+        GetWindowThreadProcessId(tray, Some(&mut pid));
+        pid
+    };
+    if explorer == 0 {
+        return;
+    }
+    // SAFETY: an out-of-context hook with a `'static` callback, on the UI thread (the window
+    // procedure or `install`), limited to Explorer's process.
+    let hook = unsafe {
+        SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, None, Some(on_show), explorer, 0, WINEVENT_OUTOFCONTEXT)
+    };
+    if hook.is_invalid() {
+        tracing::warn!("could not watch the Windows taskbar; it may peek out in Dock only mode");
+    }
+    let old = HOOK.swap(hook.0 as isize, Ordering::SeqCst);
+    if old != 0 {
+        // SAFETY: a hook this function installed earlier, for an Explorer that has gone.
+        let _ = unsafe { UnhookWinEvent(HWINEVENTHOOK(old as *mut _)) };
+    }
 }
 
 /// Subclass a dock window and register it as an app bar. Call on the main thread (the thread

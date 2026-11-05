@@ -11,7 +11,7 @@
   flex: none;
   height: var(--button);
   min-width: var(--button);
-  padding: 0 10px;
+  padding: 0 7px;
   border: 0;
   border-radius: 12px;
   background: transparent;
@@ -38,7 +38,7 @@
 .tile-row {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   white-space: nowrap;
 }
 .tile-stack {
@@ -270,6 +270,162 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* App menus: jump lists like the Windows taskbar's */
+.jump {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 12px 6px;
+  overflow-y: auto;
+}
+.jump-section {
+  display: flex;
+  flex-direction: column;
+}
+.jump-title {
+  height: 30px;
+  margin: 0;
+  padding: 8px 12px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--panel-faint);
+}
+.jump-row {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+}
+.jump-row:hover,
+.jump-row:focus-visible {
+  background: var(--panel-hover);
+  outline: none;
+}
+.jump-row[data-active="true"] .jump-label {
+  font-weight: 600;
+}
+.jump-icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+}
+.jump-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.jump-divider {
+  flex: none;
+  width: calc(100% + 12px);
+  height: 1px;
+  margin: 4px -6px;
+  border: 0;
+  background: var(--panel-line);
+}
+
+/* Status: quick settings, laid out like Windows' own */
+.quick-panel {
+  gap: 14px;
+}
+.quick-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px 10px;
+}
+.quick-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.quick-tile-face {
+  display: flex;
+  width: 100%;
+  height: 46px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel-hover);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 10%, transparent);
+}
+.quick-tile[data-on="true"] .quick-tile-face {
+  background: var(--panel-accent);
+  color: #0b1220;
+  box-shadow: none;
+}
+.quick-tile-main,
+.quick-tile-more {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+.quick-tile-main {
+  flex: 1;
+}
+.quick-tile-more {
+  width: 38%;
+  border-left: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+}
+.quick-tile-main:hover:not(:disabled),
+.quick-tile-more:hover {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.quick-tile-main:disabled {
+  opacity: 0.45;
+}
+.quick-tile-label {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.quick-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+}
+.quick-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+}
+.quick-battery {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  margin-left: -6px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+}
+.quick-battery:hover {
+  background: var(--panel-hover);
+}
+
 /* Status */
 .status-row {
   display: flex;
@@ -356,7 +512,7 @@
 
 /* Music */
 .music-tile {
-  max-width: 190px;
+  max-width: 156px;
 }
 .music-art-small {
   width: 26px;
@@ -365,12 +521,22 @@
   object-fit: cover;
   flex: none;
 }
+/* An app icon standing in for artwork keeps its own shape. */
+.music-art-small.music-art-app {
+  object-fit: contain;
+  border-radius: 0;
+}
+.music-art-icon {
+  width: 56%;
+  height: 56%;
+  object-fit: contain;
+}
 .music-text {
   align-items: flex-start;
   min-width: 0;
 }
 .music-text > span {
-  max-width: 150px;
+  max-width: 118px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -458,7 +624,7 @@
 
 /* Calendar */
 .calendar-tile {
-  max-width: 200px;
+  max-width: 164px;
 }
 .calendar-dot {
   width: 8px;

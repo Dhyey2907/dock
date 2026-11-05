@@ -13,4 +13,8 @@ icon: string,
 /**
  * Open windows, front-most first.
  */
-windows: Array<DockWindow>, };
+windows: Array<DockWindow>, 
+/**
+ * Its Windows app id, when known (for its jump list).
+ */
+appId?: string, };

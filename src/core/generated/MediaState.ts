@@ -6,7 +6,12 @@ export type MediaState = {
 /**
  * Friendly name of the app that owns the session, e.g. "Spotify".
  */
-sourceApp: string, title: string, artist: string, album: string, 
+sourceApp: string, 
+/**
+ * The playing app's icon, as an icon source for `app_icon` ("aumid:<app id>"): the
+ * thumbnail when the app shares no artwork (Prime Video, many browsers' videos).
+ */
+sourceIcon: string, title: string, artist: string, album: string, 
 /**
  * Album art as a data URL.
  */

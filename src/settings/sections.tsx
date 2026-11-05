@@ -103,13 +103,20 @@ export function TaskbarSection({ settings, save }: { settings: Settings; save: S
   return (
     <section>
       <h2>Taskbar & startup</h2>
-      <Row label="Windows taskbar" hint="While Dock runs. Quitting Dock always brings it back.">
+      <Row
+        label="Windows taskbar"
+        hint={
+          settings.taskbarMode === "hidden"
+            ? "Only Dock shows. The Windows taskbar never peeks out at the screen edge."
+            : "Auto-hides, and peeks out when the mouse reaches the screen edge."
+        }
+      >
         <Choice<TaskbarMode>
           label="Windows taskbar"
           value={settings.taskbarMode}
           options={[
-            ["autoHide", "Auto-hide"],
-            ["hidden", "Hidden"],
+            ["hidden", "Dock only"],
+            ["autoHide", "Peek at edge"],
           ]}
           onChange={(taskbarMode) => save({ taskbarMode })}
         />

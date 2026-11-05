@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from "react";
-import { Search, Settings2 } from "lucide-react";
+import { PanelBottom, Search, Settings2 } from "lucide-react";
 
 import { ipc } from "../core/ipc";
 import { useSettings } from "../settings/store";
@@ -93,6 +93,15 @@ export function Dock({ main = true }: { main?: boolean }) {
         </div>
         <div className="dock-spacer" data-tauri-drag-region />
         {main && <WidgetBar />}
+        <button
+          className="dock-icon-button"
+          aria-label="Switch to the Windows taskbar"
+          title={`Switch to the Windows taskbar
+Bring Dock back with the tray icon${settings?.toggleShortcut ? ` or ${settings.toggleShortcut}` : ""}`}
+          onClick={() => ipc.switchToWindowsTaskbar().catch((error) => console.error(error))}
+        >
+          <PanelBottom size={18} strokeWidth={1.8} />
+        </button>
         <button
           className="dock-icon-button"
           aria-label="Settings"

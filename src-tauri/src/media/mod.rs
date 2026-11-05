@@ -39,6 +39,9 @@ pub struct MediaCapabilities {
 pub struct MediaState {
     /// Friendly name of the app that owns the session, e.g. "Spotify".
     pub source_app: String,
+    /// The playing app's icon, as an icon source for `app_icon` ("aumid:<app id>"): the
+    /// thumbnail when the app shares no artwork (Prime Video, many browsers' videos).
+    pub source_icon: String,
     pub title: String,
     pub artist: String,
     pub album: String,

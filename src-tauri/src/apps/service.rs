@@ -12,21 +12,13 @@ use std::{
 };
 
 use base64::Engine;
-use tauri::{
-    menu::{Menu, MenuItem, PredefinedMenuItem},
-    AppHandle, Emitter, Manager,
-};
+use tauri::{AppHandle, Emitter, Manager};
 
 use super::{click_action, ClickAction, DockApp, Launchable, Pin, APPS_CHANGED};
 use crate::error::{AppError, AppResult};
-use crate::shell::DOCK_LABEL;
 
 /// Icons are drawn at about 28 logical pixels; 64 stays sharp up to 225% scaling.
 const ICON_SIZE: i32 = 64;
-/// Menu item ids for app menus start with this.
-const MENU_PREFIX: &str = "app:";
-/// Longest window title shown in an app's menu.
-const MENU_TITLE_CHARS: usize = 60;
 
 #[derive(Default)]
 pub struct AppsState {
@@ -194,32 +186,9 @@ pub fn launch(app: &AppHandle, key: &str) -> AppResult<()> {
     launch_key(app, key)
 }
 
-/// `&` marks a keyboard shortcut in menu text; double it to show it literally.
-fn menu_text(text: &str) -> String {
-    let mut short: String = text.chars().take(MENU_TITLE_CHARS).collect();
-    if text.chars().count() > MENU_TITLE_CHARS {
-        short.push('…');
-    }
-    short.replace('&', "&&")
-}
-
-/// A right click on an app on `dock`: the app's windows, a new window, and closing.
-pub fn show_menu(app: &AppHandle, dock: &tauri::WebviewWindow, key: &str) -> AppResult<()> {
-    let label = dock.label();
+/// A right click on an app on dock `label`: its jump list, its windows, a new window, closing.
+pub fn show_menu(app: &AppHandle, label: &str, key: &str, anchor_x: i32) -> AppResult<()> {
     let dock_app = find(app, label, key)?;
-    let menu = Menu::new(app)?;
-    for window in dock_app.windows.iter().take(12) {
-        let title = if window.title.is_empty() {
-            &dock_app.name
-        } else {
-            &window.title
-        };
-        let id = format!("{MENU_PREFIX}win:{}", window.hwnd);
-        menu.append(&MenuItem::with_id(app, id, menu_text(title), true, None::<&str>)?)?;
-    }
-    if !dock_app.windows.is_empty() {
-        menu.append(&PredefinedMenuItem::separator(app)?)?;
-    }
     let launchable = app
         .state::<AppsState>()
         .launchables
@@ -227,75 +196,38 @@ pub fn show_menu(app: &AppHandle, dock: &tauri::WebviewWindow, key: &str) -> App
         .expect("apps lock")
         .iter()
         .any(|l| l.key == key);
-    if launchable {
-        let id = format!("{MENU_PREFIX}new:{key}");
-        menu.append(&MenuItem::with_id(
-            app,
-            id,
-            menu_text(&dock_app.name),
-            true,
-            None::<&str>,
-        )?)?;
-    }
-    let close = match dock_app.windows.len() {
-        0 => None,
-        1 => Some("Close window"),
-        _ => Some("Close all windows"),
+    let menu = super::jump::AppMenu {
+        dock: label.to_string(),
+        key: dock_app.key.clone(),
+        sections: super::jump::sections(dock_app.app_id.as_deref()),
+        windows: dock_app.windows.iter().take(super::jump::MAX_WINDOWS).cloned().collect(),
+        name: dock_app.name,
+        icon: dock_app.icon,
+        launchable,
     };
-    if let Some(label) = close {
-        menu.append(&MenuItem::with_id(
-            app,
-            format!("{MENU_PREFIX}close:{label}:{key}"),
-            label,
-            true,
-            None::<&str>,
-        )?)?;
-    }
-    dock.popup_menu(&menu)?;
-    Ok(())
+    crate::shell::panel::show_app_menu(app, menu, anchor_x)
 }
 
-/// A choice from an app menu.
-pub fn on_menu(app: &AppHandle, id: &str) {
-    let Some(action) = id.strip_prefix(MENU_PREFIX) else {
-        return;
+/// A choice in the open app menu. Only what that menu offered can be done.
+pub fn menu_action(app: &AppHandle, action: super::jump::MenuAction) -> AppResult<()> {
+    use super::jump::MenuAction;
+    let Some(crate::shell::panel::PanelContent::App { menu }) = crate::shell::panel::current(app) else {
+        return Err(AppError::InvalidInput("no app menu is open".into()));
     };
-    let result = (|| -> AppResult<()> {
-        match action.split_once(':') {
-            #[cfg(windows)]
-            Some(("win", hwnd)) => {
-                let hwnd = hwnd
-                    .parse()
-                    .map_err(|_| AppError::InvalidInput("window".into()))?;
-                super::win::activate(hwnd);
+    crate::shell::panel::close(app)?;
+    match action {
+        #[cfg(windows)]
+        MenuAction::Window { hwnd } if menu.windows.iter().any(|w| w.hwnd == hwnd) => super::win::activate(hwnd),
+        #[cfg(windows)]
+        MenuAction::Open { path } if menu.offers(&path) => super::win::launch(&super::Launch::Program(path)),
+        MenuAction::Launch if menu.launchable => launch_key(app, &menu.key)?,
+        #[cfg(windows)]
+        MenuAction::Close => {
+            for window in find(app, &menu.dock, &menu.key)?.windows {
+                super::win::close(window.hwnd);
             }
-            Some(("new", key)) => launch_key(app, key)?,
-            #[cfg(windows)]
-            // "<dock label>:<app key>" (labels have no colons; keys may).
-            Some(("close", rest)) => {
-                let (label, key) = rest.split_once(':').unwrap_or((DOCK_LABEL, rest));
-                for window in find(app, label, key)?.windows {
-                    super::win::close(window.hwnd);
-                }
-            }
-            _ => {}
         }
-        Ok(())
-    })();
-    if let Err(error) = result {
-        tracing::warn!(%error, "app menu action failed");
+        _ => return Err(AppError::InvalidInput("not in this menu".into())),
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::menu_text;
-
-    #[test]
-    fn menu_text_escapes_ampersands_and_shortens() {
-        assert_eq!(menu_text("Tom & Jerry"), "Tom && Jerry");
-        let long = "x".repeat(80);
-        assert_eq!(menu_text(&long).chars().count(), 61);
-        assert!(menu_text(&long).ends_with('…'));
-    }
+    Ok(())
 }

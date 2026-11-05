@@ -7,7 +7,10 @@
 
 use std::{
     path::{Path, PathBuf},
-    sync::{Mutex, OnceLock},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex, OnceLock,
+    },
 };
 
 use serde::{Deserialize, Serialize};
@@ -79,6 +82,9 @@ fn read(file: &Path) -> Option<Saved> {
 static FILE: OnceLock<PathBuf> = OnceLock::new();
 /// One change at a time: quit, panic and settings can race.
 static LOCK: Mutex<()> = Mutex::new(());
+/// Whether the dock is hiding the taskbar right now (between `apply_system` and
+/// `restore_system`). Re-hiding only ever happens while this is set, so it can't undo a restore.
+static ACTIVE: AtomicBool = AtomicBool::new(false);
 
 pub fn init(data_dir: &Path) {
     let _ = FILE.set(data_dir.join(FILE_NAME));
@@ -98,6 +104,7 @@ fn install_panic_hook(restore: fn()) {
 pub fn apply_system(mode: TaskbarMode) {
     let Some(file) = FILE.get() else { return };
     let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    ACTIVE.store(true, Ordering::SeqCst);
     #[cfg(windows)]
     if let Err(error) = apply(&win::System, file, mode) {
         tracing::warn!(%error, "could not hide the Windows taskbar");
@@ -106,10 +113,25 @@ pub fn apply_system(mode: TaskbarMode) {
     let _ = (file, mode);
 }
 
+/// Windows showed its taskbar again (Start, a notification, a setting): in "Dock only" mode
+/// hide it once more, unless the dock has since put it back for good.
+pub fn rehide_system(mode: TaskbarMode) {
+    if mode != TaskbarMode::Hidden {
+        return;
+    }
+    let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    if !ACTIVE.load(Ordering::SeqCst) {
+        return;
+    }
+    #[cfg(windows)]
+    win::System.set_visible(false);
+}
+
 pub fn restore_system() {
     let Some(file) = FILE.get() else { return };
     // A panic while holding the lock must still restore.
     let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    ACTIVE.store(false, Ordering::SeqCst);
     #[cfg(windows)]
     restore(&win::System, file);
     #[cfg(not(windows))]
@@ -130,6 +152,8 @@ mod win {
             },
         },
     };
+
+    use super::TaskbarApi;
 
     pub struct System;
 
@@ -164,7 +188,7 @@ mod win {
         }
     }
 
-    impl super::TaskbarApi for System {
+    impl TaskbarApi for System {
         fn state(&self) -> u32 {
             let Some(tray) = primary() else { return 0 };
             let mut data = data(tray);
