@@ -11,6 +11,7 @@ import type { GlassFrame } from "./generated/GlassFrame";
 import type { MediaCommand } from "./generated/MediaCommand";
 import type { MediaState } from "./generated/MediaState";
 import type { NetworkState } from "./generated/NetworkState";
+import type { ScreenInfo } from "./generated/ScreenInfo";
 import type { Settings } from "./generated/Settings";
 import type { SoundState } from "./generated/SoundState";
 import type { SystemStats } from "./generated/SystemStats";
@@ -28,7 +29,10 @@ export const ipc = {
   dockSetContentWidth: (width: number) => invoke<void>("dock_set_content_width", { width }),
   dockReveal: (revealed: boolean) => invoke<void>("dock_reveal", { revealed }),
   dockIsRevealed: () => invoke<boolean>("dock_is_revealed"),
-  openSettings: () => invoke<void>("open_settings"),
+  openSettings: (section?: string) => invoke<void>("open_settings", { section: section ?? null }),
+  screensList: () => invoke<ScreenInfo[]>("screens_list"),
+  shortcutSet: (shortcut: string) => invoke<Settings>("shortcut_set", { shortcut }),
+  onboardingDone: (openSettings: boolean) => invoke<void>("onboarding_done", { openSettings }),
   appQuit: () => invoke<void>("app_quit"),
   appsList: () => invoke<DockApp[]>("apps_list"),
   appIcon: (source: string) => invoke<string | null>("app_icon", { source }),
@@ -81,4 +85,5 @@ export const events = {
   onCalendar: on<CalendarState>("widget-calendar"),
   onClaude: on<ClaudeUsage>("widget-claude"),
   onBubbles: on<Bubble[]>("bubbles-changed"),
+  onSettingsSection: on<string>("settings-section"),
 };

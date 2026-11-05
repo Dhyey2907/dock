@@ -28,6 +28,7 @@ png = "0.17"
 ts-rs = { version = "12", features = ["serde-compat", "chrono-impl"] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-autostart = "2"
+tauri-plugin-global-shortcut = "2"
 rrule = "0.14.0"
 chrono-tz = "0.10.4"
 keyring = { version = "3", features = ["windows-native"] }

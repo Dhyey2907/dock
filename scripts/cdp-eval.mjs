@@ -14,11 +14,19 @@ if (!arg) {
 const expression = arg.endsWith(".js") && existsSync(arg) ? readFileSync(arg, "utf8") : arg;
 
 const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
-// CDP_WINDOW=settings or CDP_WINDOW=panel targets that window; otherwise the dock.
+// CDP_WINDOW=settings, panel, welcome or bubble targets that window; otherwise the dock.
 // CDP_ALL=1 evaluates in every matching page and prefixes each result.
 const want = process.env.CDP_WINDOW ?? "dock";
 const windowOf = (url) =>
-  url.includes("#settings") ? "settings" : url.includes("#panel") ? "panel" : "dock";
+  url.includes("#settings")
+    ? "settings"
+    : url.includes("#panel")
+      ? "panel"
+      : url.includes("#welcome")
+        ? "welcome"
+        : url.includes("#bubble")
+          ? "bubble"
+          : "dock";
 const pages = targets.filter(
   (t) => t.type === "page" && t.url.includes("localhost:1420") && windowOf(t.url) === want,
 );

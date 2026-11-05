@@ -4,6 +4,9 @@ import { ipc } from "../core/ipc";
 import type { DockApp } from "../core/generated/DockApp";
 import { loadIcon } from "./apps";
 
+/** Waits before asking again for an icon that didn't load. */
+const RETRY_DELAYS = [5_000, 15_000, 45_000];
+
 function report(error: unknown) {
   console.error("app action failed", error);
 }
@@ -14,9 +17,18 @@ export function AppButton({ app }: { app: DockApp }) {
   const [icon, setIcon] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
-    loadIcon(app.icon).then((url) => alive && setIcon(url));
+    let timer: number | undefined;
+    // An icon can fail to load for a moment (an app mid-update); try again a few times.
+    const attempt = (n: number) =>
+      loadIcon(app.icon).then((url) => {
+        if (!alive) return;
+        setIcon(url);
+        if (!url && n < RETRY_DELAYS.length) timer = window.setTimeout(() => attempt(n + 1), RETRY_DELAYS[n]);
+      });
+    attempt(0);
     return () => {
       alive = false;
+      window.clearTimeout(timer);
     };
   }, [app.icon]);
 

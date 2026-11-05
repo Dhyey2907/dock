@@ -17,12 +17,15 @@ const defaults: Settings = {
   calendars: [],
   automations: { meetingMode: true, aiLimitWarnings: true, focusMusic: false, sunsetDarkMode: false },
   quietHours: { enabled: false, start: "22:00", end: "08:00" },
+  toggleShortcut: "Ctrl+Alt+D",
+  screen: "",
+  onboarded: true,
 };
 
 const settingsSet = vi.fn(async (settings: Settings) => settings);
 vi.mock("../core/ipc", () => ({
-  ipc: { settingsSet: (s: Settings) => settingsSet(s) },
-  events: { onSettingsChanged: vi.fn() },
+  ipc: { settingsSet: (s: Settings) => settingsSet(s), screensList: async () => [] },
+  events: { onSettingsChanged: vi.fn(), onSettingsSection: async () => () => {} },
 }));
 
 const { useSettings } = await import("./store");
@@ -45,5 +48,17 @@ describe("SettingsApp", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Midnight" }));
     await vi.waitFor(() => expect(settingsSet).toHaveBeenCalledWith({ ...defaults, theme: "midnight" }));
     expect(useSettings.getState().settings?.theme).toBe("midnight");
+  });
+
+  it("shows one section at a time, chosen from the sidebar", () => {
+    render(<SettingsApp />);
+    expect(screen.getByRole("heading", { name: "Appearance" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Taskbar & startup" }));
+    expect(screen.queryByRole("heading", { name: "Appearance" })).not.toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Auto-hide the dock" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "Taskbar & startup" })).toHaveAttribute("aria-current", "page");
   });
 });

@@ -67,7 +67,7 @@ export function CalendarPanel() {
       <div className="panel-body panel-empty">
         <CalendarDays size={28} strokeWidth={1.6} />
         <p>Add a calendar to see what's coming up.</p>
-        <button className="panel-button" onClick={() => ipc.openSettings()}>
+        <button className="panel-button" onClick={() => ipc.openSettings("calendars")}>
           Add a calendar
         </button>
         <p className="panel-faint">

@@ -226,6 +226,13 @@ pub struct Settings {
     pub calendars: Vec<CalendarSource>,
     pub automations: Automations,
     pub quiet_hours: QuietHours,
+    /// Keyboard shortcut that shows or hides the dock ("Ctrl+Alt+D"); empty for none.
+    pub toggle_shortcut: String,
+    /// The screen the dock lives on, by Windows' device name ("\\.\DISPLAY2"); empty for the
+    /// main screen. A screen that's been unplugged falls back to the main one.
+    pub screen: String,
+    /// The welcome has been seen.
+    pub onboarded: bool,
 }
 
 impl Default for Settings {
@@ -245,6 +252,9 @@ impl Default for Settings {
             calendars: Vec::new(),
             automations: Automations::default(),
             quiet_hours: QuietHours::default(),
+            toggle_shortcut: "Ctrl+Alt+D".into(),
+            screen: String::new(),
+            onboarded: false,
         }
     }
 }

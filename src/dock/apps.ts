@@ -23,18 +23,23 @@ export const useApps = create<AppsState>((set) => ({
   },
 }));
 
-/** Icons by source, fetched once per session; a source with no icon resolves to null. */
+/** Icons by source, fetched once per session. A miss isn't kept, so the next ask retries. */
 const icons = new Map<string, Promise<string | null>>();
 
 export function loadIcon(source: string): Promise<string | null> {
   if (!source) return Promise.resolve(null);
   let icon = icons.get(source);
   if (!icon) {
-    icon = ipc.appIcon(source).catch((error) => {
-      console.error("failed to load app icon", error);
-      icons.delete(source); // try again next time
-      return null;
-    });
+    icon = ipc
+      .appIcon(source)
+      .catch((error) => {
+        console.error("failed to load app icon", error);
+        return null;
+      })
+      .then((url) => {
+        if (!url) icons.delete(source);
+        return url;
+      });
     icons.set(source, icon);
   }
   return icon;

@@ -30,4 +30,17 @@ clock24h?: boolean,
 /**
  * Calendars added by link, in the order they were added.
  */
-calendars: Array<CalendarSource>, automations: Automations, quietHours: QuietHours, };
+calendars: Array<CalendarSource>, automations: Automations, quietHours: QuietHours, 
+/**
+ * Keyboard shortcut that shows or hides the dock ("Ctrl+Alt+D"); empty for none.
+ */
+toggleShortcut: string, 
+/**
+ * The screen the dock lives on, by Windows' device name ("\\.\DISPLAY2"); empty for the
+ * main screen. A screen that's been unplugged falls back to the main one.
+ */
+screen: string, 
+/**
+ * The welcome has been seen.
+ */
+onboarded: boolean, };

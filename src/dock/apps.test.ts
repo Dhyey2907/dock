@@ -6,6 +6,7 @@ const app = (key: string): DockApp => ({ key, name: key, pinned: true, icon: "",
 
 let push: ((apps: DockApp[]) => void) | undefined;
 let resolveList: ((apps: DockApp[]) => void) | undefined;
+const appIcon = vi.fn(async (_source: string): Promise<string | null> => null);
 vi.mock("../core/ipc", () => ({
   events: {
     onAppsChanged: async (handler: (apps: DockApp[]) => void) => {
@@ -15,11 +16,11 @@ vi.mock("../core/ipc", () => ({
   },
   ipc: {
     appsList: () => new Promise<DockApp[]>((resolve) => (resolveList = resolve)),
-    appIcon: async () => null,
+    appIcon: (source: string) => appIcon(source),
   },
 }));
 
-const { useApps } = await import("./apps");
+const { loadIcon, useApps } = await import("./apps");
 
 describe("useApps.load", () => {
   it("keeps a change that arrives while the first list is still loading", async () => {
@@ -31,5 +32,16 @@ describe("useApps.load", () => {
     resolveList?.([app("claude")]);
     await loading;
     expect(useApps.getState().apps.map((a) => a.key)).toEqual(["chrome", "claude"]);
+  });
+});
+
+describe("loadIcon", () => {
+  it("keeps icons that loaded, and asks again after a miss", async () => {
+    appIcon.mockResolvedValueOnce(null).mockResolvedValueOnce("data:image/png;base64,AA");
+    expect(await loadIcon("exe:c:/app.exe")).toBeNull();
+    expect(await loadIcon("exe:c:/app.exe")).toBe("data:image/png;base64,AA");
+    // Now kept: no third request.
+    expect(await loadIcon("exe:c:/app.exe")).toBe("data:image/png;base64,AA");
+    expect(appIcon).toHaveBeenCalledTimes(2);
   });
 });

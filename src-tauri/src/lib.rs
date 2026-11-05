@@ -28,6 +28,7 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
             let handle = app.handle();
             let log_guard = logging::init(&handle.path().app_log_dir()?);
@@ -55,6 +56,19 @@ pub fn run() {
             calendar::service::init(handle);
             claude::service::init(handle);
             automations::service::init(handle);
+            let settings = handle.state::<SettingsStore>().get();
+            if let Err(error) = shell::shortcut::apply(handle, &settings.toggle_shortcut) {
+                tracing::warn!(%error, "show/hide shortcut not set");
+            }
+            if !settings.onboarded {
+                let handle = handle.clone();
+                // Off the main thread: creating a window there can deadlock WebView2.
+                std::thread::spawn(move || {
+                    if let Err(error) = shell::open_welcome_window(&handle) {
+                        tracing::warn!(%error, "could not show the welcome");
+                    }
+                });
+            }
             tracing::info!(version = env!("CARGO_PKG_VERSION"), "dock started");
             Ok(())
         })
@@ -81,6 +95,9 @@ pub fn run() {
             commands::dock_reveal,
             commands::dock_is_revealed,
             commands::open_settings,
+            commands::screens_list,
+            commands::shortcut_set,
+            commands::onboarding_done,
             commands::apps_list,
             commands::app_icon,
             commands::app_click,

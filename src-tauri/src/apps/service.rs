@@ -109,11 +109,12 @@ fn find(app: &AppHandle, key: &str) -> AppResult<DockApp> {
         .ok_or_else(|| AppError::InvalidInput("unknown app".into()))
 }
 
-/// The icon for `source` as a data URL, extracted once and kept in memory.
+/// The icon for `source` as a data URL, extracted once and kept in memory. A miss isn't kept:
+/// extraction can fail for a moment (an app mid-update, say), and a later ask should retry.
 pub fn icon(app: &AppHandle, source: &str) -> Option<String> {
     let state = app.state::<AppsState>();
-    if let Some(cached) = state.icons.lock().expect("apps lock").get(source) {
-        return cached.clone();
+    if let Some(Some(cached)) = state.icons.lock().expect("apps lock").get(source) {
+        return Some(cached.clone());
     }
     #[cfg(windows)]
     let url = super::win::icon_png(source, ICON_SIZE).map(|png| {
@@ -124,11 +125,13 @@ pub fn icon(app: &AppHandle, source: &str) -> Option<String> {
     });
     #[cfg(not(windows))]
     let url = None;
-    state
-        .icons
-        .lock()
-        .expect("apps lock")
-        .insert(source.to_string(), url.clone());
+    if url.is_some() {
+        state
+            .icons
+            .lock()
+            .expect("apps lock")
+            .insert(source.to_string(), url.clone());
+    }
     url
 }
 

@@ -33,7 +33,11 @@ pub fn settings_set(app: AppHandle, settings: Settings) -> AppResult<Settings> {
         shell::set_revealed(&app, false)?;
         app.emit(shell::DOCK_REVEALED, shell::is_revealed(&app))?;
     }
-    if before.edge != settings.edge {
+    if before.screen != settings.screen {
+        // Another screen: a new place, strip and wallpaper.
+        shell::relayout(&app);
+        crate::glass::service::refresh_soon(&app);
+    } else if before.edge != settings.edge {
         shell::relayout(&app);
     } else {
         shell::place_dock(&app)?;
@@ -68,10 +72,48 @@ pub fn dock_set_content_width(app: AppHandle, width: f64) -> AppResult<()> {
     shell::place_dock(&app)
 }
 
-/// Async: creating a window from the main thread can deadlock WebView2.
+/// Open settings, at `section` if given. Async: creating a window from the main thread can
+/// deadlock WebView2.
 #[tauri::command(async)]
-pub fn open_settings(app: AppHandle) -> AppResult<()> {
-    shell::open_settings_window(&app)
+pub fn open_settings(app: AppHandle, section: Option<String>) -> AppResult<()> {
+    shell::open_settings_window(&app, section.as_deref())
+}
+
+/// The screens the dock can be put on.
+#[tauri::command]
+pub fn screens_list(app: AppHandle) -> AppResult<Vec<shell::ScreenInfo>> {
+    shell::screens(&app)
+}
+
+/// Set the show/hide shortcut; it's registered first, so a taken or invalid one isn't saved.
+#[tauri::command]
+pub fn shortcut_set(app: AppHandle, shortcut: String) -> AppResult<Settings> {
+    let store = app.state::<SettingsStore>();
+    if let Err(error) = shell::shortcut::apply(&app, &shortcut) {
+        // Put the working one back.
+        let _ = shell::shortcut::apply(&app, &store.get().toggle_shortcut);
+        return Err(error);
+    }
+    let mut settings = store.get();
+    settings.toggle_shortcut = shortcut.trim().to_string();
+    store.set(settings.clone())?;
+    app.emit(SETTINGS_CHANGED, &settings)?;
+    Ok(store.get())
+}
+
+/// The welcome is finished (or skipped): don't show it again.
+#[tauri::command(async)]
+pub fn onboarding_done(app: AppHandle, open_settings: bool) -> AppResult<()> {
+    let store = app.state::<SettingsStore>();
+    let mut settings = store.get();
+    settings.onboarded = true;
+    store.set(settings.clone())?;
+    app.emit(SETTINGS_CHANGED, &settings)?;
+    shell::close_welcome_window(&app)?;
+    if open_settings {
+        shell::open_settings_window(&app, None)?;
+    }
+    Ok(())
 }
 
 #[tauri::command]

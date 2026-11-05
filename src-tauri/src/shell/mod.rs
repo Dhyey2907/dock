@@ -5,6 +5,7 @@ mod appbar;
 pub mod bubble;
 pub mod panel;
 pub mod placement;
+pub mod shortcut;
 pub mod taskbar;
 #[cfg(windows)]
 mod watch;
@@ -93,8 +94,65 @@ pub fn geometry(app: &AppHandle) -> Option<DockGeometry> {
     *app.state::<ShellState>().geometry.lock().expect("shell lock")
 }
 
+/// A screen the dock can be put on.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ScreenInfo {
+    /// Windows' device name ("\\.\DISPLAY2"), as saved in settings.
+    pub name: String,
+    /// "Screen 2 · 1920×1080".
+    pub label: String,
+    pub primary: bool,
+}
+
+/// The screens connected now, main screen first.
+pub fn screens(app: &AppHandle) -> AppResult<Vec<ScreenInfo>> {
+    let Some(window) = dock_window(app) else {
+        return Ok(Vec::new());
+    };
+    let primary = window.primary_monitor()?.and_then(|m| m.name().cloned());
+    let mut list: Vec<ScreenInfo> = window
+        .available_monitors()?
+        .into_iter()
+        .filter_map(|m| {
+            let name = m.name()?.clone();
+            let number: String = name
+                .chars()
+                .rev()
+                .take_while(char::is_ascii_digit)
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect();
+            Some(ScreenInfo {
+                label: format!(
+                    "Screen {} · {}×{}",
+                    if number.is_empty() { "?" } else { &number },
+                    m.size().width,
+                    m.size().height
+                ),
+                primary: primary.as_ref() == Some(&name),
+                name,
+            })
+        })
+        .collect();
+    list.sort_by(|a, b| b.primary.cmp(&a.primary).then_with(|| a.name.cmp(&b.name)));
+    Ok(list)
+}
+
+/// The dock's screen: the one chosen in settings if it's connected, else the main screen.
 fn monitor_rect(window: &WebviewWindow) -> AppResult<Option<(Rect, f64)>> {
-    let Some(monitor) = window.primary_monitor()?.or(window.current_monitor()?) else {
+    let chosen = window.app_handle().state::<SettingsStore>().get().screen;
+    let picked = if chosen.is_empty() {
+        None
+    } else {
+        window
+            .available_monitors()?
+            .into_iter()
+            .find(|m| m.name().is_some_and(|n| *n == chosen))
+    };
+    let Some(monitor) = picked.or(window.primary_monitor()?).or(window.current_monitor()?) else {
         return Ok(None);
     };
     let rect = Rect {
@@ -309,22 +367,68 @@ fn make_tool_window(window: &WebviewWindow, no_activate: bool) -> AppResult<()> 
 }
 
 /// Open (or focus) the settings window.
-pub fn open_settings_window(app: &AppHandle) -> AppResult<()> {
+/// Event telling an open settings window which section to show.
+pub const SETTINGS_SECTION: &str = "settings-section";
+const WELCOME_LABEL: &str = "welcome";
+
+fn mica() -> tauri::utils::config::WindowEffectsConfig {
+    tauri::utils::config::WindowEffectsConfig {
+        effects: vec![tauri::window::Effect::Mica],
+        ..Default::default()
+    }
+}
+
+/// Open (or focus) the settings window, at `section` if given ("widgets", "calendars", …).
+pub fn open_settings_window(app: &AppHandle, section: Option<&str>) -> AppResult<()> {
     if let Some(window) = app.get_webview_window(SETTINGS_LABEL) {
+        if let Some(section) = section {
+            app.emit_to(SETTINGS_LABEL, SETTINGS_SECTION, section)?;
+        }
         window.unminimize()?;
         window.set_focus()?;
         return Ok(());
     }
-    WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App("index.html#settings".into()))
+    let url = match section {
+        Some(section) => format!("index.html#settings/{section}"),
+        None => "index.html#settings".into(),
+    };
+    WebviewWindowBuilder::new(app, SETTINGS_LABEL, WebviewUrl::App(url.into()))
         .title("Dock settings")
-        .inner_size(560.0, 640.0)
-        .min_inner_size(480.0, 480.0)
+        .inner_size(840.0, 640.0)
+        .min_inner_size(640.0, 480.0)
+        .transparent(true)
+        .effects(mica())
         .center()
         .build()?;
     Ok(())
 }
 
-fn toggle_dock(app: &AppHandle) {
+/// The first-run welcome.
+pub fn open_welcome_window(app: &AppHandle) -> AppResult<()> {
+    if let Some(window) = app.get_webview_window(WELCOME_LABEL) {
+        window.set_focus()?;
+        return Ok(());
+    }
+    WebviewWindowBuilder::new(app, WELCOME_LABEL, WebviewUrl::App("index.html#welcome".into()))
+        .title("Welcome to Dock")
+        .inner_size(620.0, 560.0)
+        .resizable(false)
+        .maximizable(false)
+        .transparent(true)
+        .effects(mica())
+        .center()
+        .build()?;
+    Ok(())
+}
+
+pub fn close_welcome_window(app: &AppHandle) -> AppResult<()> {
+    if let Some(window) = app.get_webview_window(WELCOME_LABEL) {
+        window.close()?;
+    }
+    Ok(())
+}
+
+pub fn toggle_dock(app: &AppHandle) {
     let Some(window) = dock_window(app) else { return };
     let hide = window.is_visible().unwrap_or(false);
     app.state::<ShellState>()
@@ -354,7 +458,7 @@ fn setup_tray(app: &AppHandle) -> AppResult<()> {
         .on_menu_event(|app, event| match event.id.as_ref() {
             "toggle" => toggle_dock(app),
             "settings" => {
-                if let Err(error) = open_settings_window(app) {
+                if let Err(error) = open_settings_window(app, None) {
                     tracing::warn!(%error, "failed to open settings window");
                 }
             }
