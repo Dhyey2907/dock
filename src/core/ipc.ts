@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
+import type { Bubble } from "./generated/Bubble";
 import type { CalendarState } from "./generated/CalendarState";
 import type { ClaudeUsage } from "./generated/ClaudeUsage";
 import type { DockApp } from "./generated/DockApp";
@@ -48,6 +49,8 @@ export const ipc = {
   mediaCommand: (command: MediaCommand) => invoke<void>("media_command", { command }),
   calendarGet: () => invoke<CalendarState>("calendar_get"),
   claudeUsage: () => invoke<ClaudeUsage>("claude_usage"),
+  bubblesGet: () => invoke<Bubble[]>("bubbles_get"),
+  bubbleDismiss: (id: string) => invoke<void>("bubble_dismiss", { id }),
   calendarAdd: (name: string, link: string) => invoke<void>("calendar_add", { name, link }),
   calendarRemove: (id: string) => invoke<void>("calendar_remove", { id }),
   focusStart: () => invoke<void>("focus_start"),
@@ -77,4 +80,5 @@ export const events = {
   onMusic: on<MediaState | null>("widget-music"),
   onCalendar: on<CalendarState>("widget-calendar"),
   onClaude: on<ClaudeUsage>("widget-claude"),
+  onBubbles: on<Bubble[]>("bubbles-changed"),
 };

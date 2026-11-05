@@ -2,6 +2,7 @@
 
 #[cfg(windows)]
 mod appbar;
+pub mod bubble;
 pub mod panel;
 pub mod placement;
 pub mod taskbar;

@@ -382,6 +382,15 @@ button {
   font-size: 13px;
   color: #ef4444;
 }
+.quiet-times {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.settings .quiet-time {
+  min-width: 0;
+  width: 110px;
+}
 .settings-quit {
   border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
   background: transparent;

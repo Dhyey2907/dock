@@ -1,4 +1,5 @@
 mod apps;
+mod automations;
 mod calendar;
 mod claude;
 mod commands;
@@ -44,6 +45,7 @@ pub fn run() {
             app.manage(widgets::service::WidgetsState::default());
             app.manage(calendar::service::CalendarService::default());
             app.manage(claude::service::ClaudeService::default());
+            app.manage(automations::service::AutomationState::default());
             commands::sync_autostart(handle, launch_at_startup);
 
             shell::init(handle)?;
@@ -52,6 +54,7 @@ pub fn run() {
             widgets::service::init(handle);
             calendar::service::init(handle);
             claude::service::init(handle);
+            automations::service::init(handle);
             tracing::info!(version = env!("CARGO_PKG_VERSION"), "dock started");
             Ok(())
         })
@@ -96,6 +99,8 @@ pub fn run() {
             commands::media_command,
             commands::calendar_get,
             commands::claude_usage,
+            commands::bubbles_get,
+            commands::bubble_dismiss,
             commands::calendar_add,
             commands::calendar_remove,
             commands::focus_start,

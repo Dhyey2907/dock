@@ -17,7 +17,11 @@ export function CalendarTile() {
   const soon = next ? startsIn(next, now) : null;
   if (!next || !soon) return <CalendarDays size={18} strokeWidth={1.8} aria-hidden="true" />;
   return (
-    <span className="tile-row calendar-tile" data-now={soon === "now"}>
+    <span
+      className="tile-row calendar-tile"
+      data-now={soon === "now"}
+      data-soon={Date.parse(next.start) > now && Date.parse(next.start) - now <= 5 * 60_000}
+    >
       <span className="calendar-dot" style={{ background: calendarColor(next.calendarId) }} />
       <span className="tile-stack music-text">
         <span className="tile-strong">{next.title}</span>

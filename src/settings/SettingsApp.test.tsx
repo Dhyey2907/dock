@@ -15,6 +15,8 @@ const defaults: Settings = {
   temperatureUnit: "celsius",
   weatherPlace: "",
   calendars: [],
+  automations: { meetingMode: true, aiLimitWarnings: true, focusMusic: false, sunsetDarkMode: false },
+  quietHours: { enabled: false, start: "22:00", end: "08:00" },
 };
 
 const settingsSet = vi.fn(async (settings: Settings) => settings);

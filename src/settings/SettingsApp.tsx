@@ -7,6 +7,7 @@ import type { TaskbarMode } from "../core/generated/TaskbarMode";
 import type { Theme } from "../core/generated/Theme";
 import { ipc } from "../core/ipc";
 import { useSettings } from "./store";
+import { AutomationSettings } from "./AutomationSettings";
 import { CalendarSettings } from "./CalendarSettings";
 import { WidgetSettings } from "./WidgetSettings";
 
@@ -105,6 +106,7 @@ export function SettingsApp() {
       </section>
       <WidgetSettings settings={settings} save={save} />
       <CalendarSettings settings={settings} />
+      <AutomationSettings settings={settings} save={save} />
       <section>
         <h2>Taskbar</h2>
         <Row label="Windows taskbar">

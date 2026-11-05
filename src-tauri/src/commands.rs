@@ -206,6 +206,17 @@ pub fn open_windows_settings(page: String) -> AppResult<()> {
     Ok(())
 }
 
+/// The reminder cards showing now.
+#[tauri::command]
+pub fn bubbles_get(app: AppHandle) -> Vec<crate::automations::Bubble> {
+    crate::automations::service::bubbles(&app)
+}
+
+#[tauri::command]
+pub fn bubble_dismiss(app: AppHandle, id: String) {
+    crate::automations::service::dismiss(&app, &id);
+}
+
 /// Claude usage, estimated from this PC's Claude Code transcripts.
 #[tauri::command]
 pub fn claude_usage(app: AppHandle) -> crate::claude::ClaudeUsage {

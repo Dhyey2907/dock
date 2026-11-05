@@ -145,6 +145,53 @@ pub struct CalendarSource {
     pub name: String,
 }
 
+/// The dock's automations, one switch each.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct Automations {
+    /// Five minutes before a meeting: a reminder, and music pauses.
+    pub meeting_mode: bool,
+    /// Warn as Claude use nears your usual limit, and when a limit is reached.
+    pub ai_limit_warnings: bool,
+    /// Starting the focus timer plays your music; the end of a focus stretch pauses it.
+    pub focus_music: bool,
+    /// Windows switches to dark at sunset and back to light at sunrise. Changes a Windows
+    /// setting, so it starts off.
+    pub sunset_dark_mode: bool,
+}
+
+impl Default for Automations {
+    fn default() -> Self {
+        Self {
+            meeting_mode: true,
+            ai_limit_warnings: true,
+            focus_music: false,
+            sunset_dark_mode: false,
+        }
+    }
+}
+
+/// Hours when reminders stay quiet. Times are "HH:MM", local; the range may cross midnight.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct QuietHours {
+    pub enabled: bool,
+    pub start: String,
+    pub end: String,
+}
+
+impl Default for QuietHours {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            start: "22:00".into(),
+            end: "08:00".into(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
@@ -177,6 +224,8 @@ pub struct Settings {
     pub clock_24h: Option<bool>,
     /// Calendars added by link, in the order they were added.
     pub calendars: Vec<CalendarSource>,
+    pub automations: Automations,
+    pub quiet_hours: QuietHours,
 }
 
 impl Default for Settings {
@@ -194,6 +243,8 @@ impl Default for Settings {
             weather_place: String::new(),
             clock_24h: None,
             calendars: Vec::new(),
+            automations: Automations::default(),
+            quiet_hours: QuietHours::default(),
         }
     }
 }
@@ -214,6 +265,13 @@ impl Settings {
             }
         }
         self.weather_place = self.weather_place.trim().chars().take(80).collect();
+        let valid = |t: &str| chrono::NaiveTime::parse_from_str(t.trim(), "%H:%M").is_ok();
+        if !valid(&self.quiet_hours.start) || !valid(&self.quiet_hours.end) {
+            self.quiet_hours = QuietHours {
+                enabled: self.quiet_hours.enabled,
+                ..QuietHours::default()
+            };
+        }
         let mut ids = Vec::new();
         self.calendars.retain(|c| {
             let keep = !c.id.is_empty() && !ids.contains(&c.id);
