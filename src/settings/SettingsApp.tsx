@@ -7,6 +7,7 @@ import type { TaskbarMode } from "../core/generated/TaskbarMode";
 import type { Theme } from "../core/generated/Theme";
 import { ipc } from "../core/ipc";
 import { useSettings } from "./store";
+import { CalendarSettings } from "./CalendarSettings";
 import { WidgetSettings } from "./WidgetSettings";
 
 function Choice<T extends string>({
@@ -103,6 +104,7 @@ export function SettingsApp() {
         </Row>
       </section>
       <WidgetSettings settings={settings} save={save} />
+      <CalendarSettings settings={settings} />
       <section>
         <h2>Taskbar</h2>
         <Row label="Windows taskbar">

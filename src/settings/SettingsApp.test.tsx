@@ -14,6 +14,7 @@ const defaults: Settings = {
   widgets: [{ kind: "clock", enabled: true }],
   temperatureUnit: "celsius",
   weatherPlace: "",
+  calendars: [],
 };
 
 const settingsSet = vi.fn(async (settings: Settings) => settings);

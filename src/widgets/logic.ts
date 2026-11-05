@@ -1,4 +1,6 @@
+import type { CalendarEvent } from "../core/generated/CalendarEvent";
 import type { FocusState } from "../core/generated/FocusState";
+import type { MediaState } from "../core/generated/MediaState";
 import type { TemperatureUnit } from "../core/generated/TemperatureUnit";
 import type { WidgetEntry } from "../core/generated/WidgetEntry";
 
@@ -33,6 +35,85 @@ export function focusSecondsLeft(focus: FocusState, now: number): number {
   if (focus.pausedSeconds != null) return focus.pausedSeconds;
   if (focus.endsAt) return Math.max(0, Math.ceil((Date.parse(focus.endsAt) - now) / 1000));
   return focus.phaseSeconds;
+}
+
+/** Where playback is now: the last reported position, counted on while playing. */
+export function playbackPosition(music: MediaState, now: number): number | undefined {
+  if (music.positionMs == null) return undefined;
+  const elapsed = music.status === "playing" ? (now - Date.parse(music.positionUpdatedAt)) * music.rate : 0;
+  const position = music.positionMs + Math.max(0, elapsed);
+  return music.durationMs != null ? Math.min(position, music.durationMs) : position;
+}
+
+/** The event happening now, or else the next one to start (all-day events don't count). */
+export function nextEvent(events: CalendarEvent[], now: number): CalendarEvent | undefined {
+  return events.find((e) => !e.allDay && Date.parse(e.end) > now);
+}
+
+/** Whether an event is under way at `now`. */
+export function isOngoing(event: CalendarEvent, now: number): boolean {
+  return Date.parse(event.start) <= now && now < Date.parse(event.end);
+}
+
+/** "now", "in 6 min", "in 2 h 5 min", or `null` when it's further off than a day. */
+export function startsIn(event: CalendarEvent, now: number): string | null {
+  if (isOngoing(event, now)) return "now";
+  const minutes = Math.ceil((Date.parse(event.start) - now) / 60_000);
+  if (minutes > 24 * 60) return null;
+  if (minutes < 60) return `in ${minutes} min`;
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return m ? `in ${h} h ${m} min` : `in ${h} h`;
+}
+
+/** Events from today through `days` days ahead, grouped by local day (days with none left out). */
+export function agenda(events: CalendarEvent[], now: number, days: number) {
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  const groups: { day: Date; events: CalendarEvent[] }[] = [];
+  for (let i = 0; i < days; i++) {
+    const day = new Date(startOfToday.getFullYear(), startOfToday.getMonth(), startOfToday.getDate() + i);
+    const next = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1);
+    const inDay = events.filter((e) => {
+      const start = Date.parse(e.start);
+      const end = Date.parse(e.end);
+      // On this day, and (today) not already over.
+      return start < next.getTime() && end > day.getTime() && (i > 0 || e.allDay || end > now);
+    });
+    if (inDay.length) groups.push({ day, events: inDay });
+  }
+  return groups;
+}
+
+/** "999", "12K", "1.2M". */
+export function formatTokens(tokens: number): string {
+  if (tokens < 1000) return String(tokens);
+  if (tokens < 1_000_000) return `${Math.round(tokens / 1000)}K`;
+  const millions = tokens / 1_000_000;
+  return `${millions < 10 ? millions.toFixed(1) : Math.round(millions)}M`;
+}
+
+/** "Opus 5.5" from "claude-opus-5-5"; other names as they are. */
+export function modelName(model: string): string {
+  const m = /^claude-([a-z]+)-(\d+)-(\d+)/.exec(model);
+  if (!m) return model;
+  return `${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}.${m[3]}`;
+}
+
+/** A steady colour per calendar, from its id. */
+export function calendarColor(id: string): string {
+  let hash = 0;
+  for (const c of id) hash = (hash * 31 + c.charCodeAt(0)) >>> 0;
+  return `hsl(${hash % 360} 70% 62%)`;
+}
+
+/** "3:07" or "1:02:45". */
+export function formatDuration(ms: number): string {
+  const total = Math.floor(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = String(total % 60).padStart(2, "0");
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`;
 }
 
 export function formatCountdown(seconds: number): string {

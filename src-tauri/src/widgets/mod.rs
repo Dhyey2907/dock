@@ -17,6 +17,7 @@ pub const WIDGET_STATS: &str = "widget-stats";
 pub const WIDGET_SOUND: &str = "widget-sound";
 pub const WIDGET_NETWORK: &str = "widget-network";
 pub const WIDGET_FOCUS: &str = "widget-focus";
+pub const WIDGET_MUSIC: &str = "widget-music";
 
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -49,4 +50,8 @@ pub struct WidgetSnapshot {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub network: Option<network::NetworkState>,
     pub focus: focus::FocusState,
+    /// What's playing; `None` when nothing is.
+    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub music: Option<crate::media::MediaState>,
 }

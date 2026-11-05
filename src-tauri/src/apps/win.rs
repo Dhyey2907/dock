@@ -194,6 +194,13 @@ fn wide_to_string(buf: &[u16]) -> String {
     String::from_utf16_lossy(&buf[..len])
 }
 
+/// An installed app's Start-menu name by app id, remembered after the first look; `None` when
+/// the id isn't an installed app (a browser tab's id, say).
+pub fn installed_app_name(id: &str) -> Option<String> {
+    let name = cached_name(&format!("id:{id}"), || app_id_name(id).unwrap_or_default());
+    (!name.is_empty()).then_some(name)
+}
+
 /// An installed app's name, by app id, as the Start menu shows it.
 fn app_id_name(id: &str) -> Option<String> {
     // SAFETY: COM calls on a shell item owned by this function; the name buffer is freed by

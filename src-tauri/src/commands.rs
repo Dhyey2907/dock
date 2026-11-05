@@ -162,6 +162,12 @@ pub fn volume_set(app: AppHandle, level: f32) -> AppResult<()> {
     Ok(())
 }
 
+/// Play/pause, next, previous or seek. Async: the media app may take a moment to answer.
+#[tauri::command(async)]
+pub fn media_command(app: AppHandle, command: crate::media::MediaCommand) -> AppResult<()> {
+    crate::widgets::service::media_command(&app, command)
+}
+
 #[tauri::command]
 pub fn volume_toggle_mute(app: AppHandle) {
     crate::widgets::service::toggle_mute(&app);
@@ -198,6 +204,29 @@ pub fn open_windows_settings(page: String) -> AppResult<()> {
     #[cfg(not(windows))]
     let _ = uri;
     Ok(())
+}
+
+/// Claude usage, estimated from this PC's Claude Code transcripts.
+#[tauri::command]
+pub fn claude_usage(app: AppHandle) -> crate::claude::ClaudeUsage {
+    crate::claude::service::current(&app)
+}
+
+#[tauri::command]
+pub fn calendar_get(app: AppHandle) -> crate::calendar::service::CalendarState {
+    crate::calendar::service::current(&app)
+}
+
+/// Add a calendar by its secret iCal link; the link is checked first and then kept in Windows
+/// Credential Manager.
+#[tauri::command]
+pub async fn calendar_add(app: AppHandle, name: String, link: String) -> AppResult<()> {
+    crate::calendar::service::add(&app, &name, &link).await
+}
+
+#[tauri::command(async)]
+pub fn calendar_remove(app: AppHandle, id: String) -> AppResult<()> {
+    crate::calendar::service::remove(&app, &id)
 }
 
 /// Quit the dock; the exit handler puts the Windows taskbar back.

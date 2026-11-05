@@ -1,8 +1,11 @@
 mod apps;
+mod calendar;
+mod claude;
 mod commands;
 mod error;
 mod glass;
 mod logging;
+mod media;
 mod settings;
 mod shell;
 mod widgets;
@@ -39,12 +42,16 @@ pub fn run() {
             app.manage(glass::service::GlassState::default());
             app.manage(shell::panel::PanelState::default());
             app.manage(widgets::service::WidgetsState::default());
+            app.manage(calendar::service::CalendarService::default());
+            app.manage(claude::service::ClaudeService::default());
             commands::sync_autostart(handle, launch_at_startup);
 
             shell::init(handle)?;
             apps::service::init(handle);
             glass::service::refresh_soon(handle);
             widgets::service::init(handle);
+            calendar::service::init(handle);
+            claude::service::init(handle);
             tracing::info!(version = env!("CARGO_PKG_VERSION"), "dock started");
             Ok(())
         })
@@ -86,6 +93,11 @@ pub fn run() {
             commands::widgets_snapshot,
             commands::volume_set,
             commands::volume_toggle_mute,
+            commands::media_command,
+            commands::calendar_get,
+            commands::claude_usage,
+            commands::calendar_add,
+            commands::calendar_remove,
             commands::focus_start,
             commands::focus_pause,
             commands::focus_reset,

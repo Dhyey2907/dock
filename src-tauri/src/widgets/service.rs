@@ -21,7 +21,7 @@ use super::{
     focus::FocusState,
     network, stats,
     weather::{self, Located, Weather, WeatherStatus},
-    WidgetSnapshot, WIDGET_FOCUS, WIDGET_NETWORK, WIDGET_SOUND, WIDGET_STATS, WIDGET_WEATHER,
+    WidgetSnapshot, WIDGET_FOCUS, WIDGET_MUSIC, WIDGET_NETWORK, WIDGET_SOUND, WIDGET_STATS, WIDGET_WEATHER,
 };
 use crate::settings::{Settings, SettingsStore, WidgetKind};
 
@@ -41,6 +41,8 @@ pub struct WidgetsState {
     focus_generation: AtomicU64,
     #[cfg(windows)]
     audio: std::sync::OnceLock<super::audio::Audio>,
+    #[cfg(windows)]
+    media: std::sync::OnceLock<crate::media::windows::WindowsMediaPort>,
 }
 
 fn enabled(settings: &Settings, kind: WidgetKind) -> bool {
@@ -94,6 +96,16 @@ pub fn init(app: &AppHandle) {
             publish(&handle, WIDGET_SOUND, Some(sound), |s| &mut s.sound);
         });
         let _ = app.state::<WidgetsState>().audio.set(audio);
+
+        let handle = app.clone();
+        let media = crate::media::windows::WindowsMediaPort::new();
+        let started = media.start(std::sync::Arc::new(move |music| {
+            publish(&handle, WIDGET_MUSIC, music, |s| &mut s.music);
+        }));
+        if let Err(error) = started {
+            tracing::warn!(%error, "music unavailable");
+        }
+        let _ = app.state::<WidgetsState>().media.set(media);
     }
 
     let handle = app.clone();
@@ -214,6 +226,26 @@ async fn fetch_weather(http: &reqwest::Client, settings: &Settings) -> Weather {
         None => weather::place_name(http, lat, lon).await,
     };
     weather
+}
+
+// ---------- Music ----------
+
+/// Play/pause, skip or seek in whatever the music widget is showing.
+pub fn media_command(app: &AppHandle, command: crate::media::MediaCommand) -> crate::error::AppResult<()> {
+    #[cfg(windows)]
+    {
+        let state = app.state::<WidgetsState>();
+        let media = state
+            .media
+            .get()
+            .ok_or_else(|| crate::error::AppError::Platform("music unavailable".into()))?;
+        media.command(command)
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (app, command);
+        Ok(())
+    }
 }
 
 // ---------- Volume ----------

@@ -1,10 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
+import type { CalendarState } from "./generated/CalendarState";
+import type { ClaudeUsage } from "./generated/ClaudeUsage";
 import type { DockApp } from "./generated/DockApp";
 import type { DockGeometry } from "./generated/DockGeometry";
 import type { FocusState } from "./generated/FocusState";
 import type { GlassFrame } from "./generated/GlassFrame";
+import type { MediaCommand } from "./generated/MediaCommand";
+import type { MediaState } from "./generated/MediaState";
 import type { NetworkState } from "./generated/NetworkState";
 import type { Settings } from "./generated/Settings";
 import type { SoundState } from "./generated/SoundState";
@@ -41,6 +45,11 @@ export const ipc = {
   widgetsSnapshot: () => invoke<WidgetSnapshot>("widgets_snapshot"),
   volumeSet: (level: number) => invoke<void>("volume_set", { level }),
   volumeToggleMute: () => invoke<void>("volume_toggle_mute"),
+  mediaCommand: (command: MediaCommand) => invoke<void>("media_command", { command }),
+  calendarGet: () => invoke<CalendarState>("calendar_get"),
+  claudeUsage: () => invoke<ClaudeUsage>("claude_usage"),
+  calendarAdd: (name: string, link: string) => invoke<void>("calendar_add", { name, link }),
+  calendarRemove: (id: string) => invoke<void>("calendar_remove", { id }),
   focusStart: () => invoke<void>("focus_start"),
   focusPause: () => invoke<void>("focus_pause"),
   focusReset: () => invoke<void>("focus_reset"),
@@ -65,4 +74,7 @@ export const events = {
   onSound: on<SoundState>("widget-sound"),
   onNetwork: on<NetworkState>("widget-network"),
   onFocus: on<FocusState>("widget-focus"),
+  onMusic: on<MediaState | null>("widget-music"),
+  onCalendar: on<CalendarState>("widget-calendar"),
+  onClaude: on<ClaudeUsage>("widget-claude"),
 };

@@ -28,6 +28,11 @@ png = "0.17"
 ts-rs = { version = "12", features = ["serde-compat", "chrono-impl"] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-autostart = "2"
+rrule = "0.14.0"
+chrono-tz = "0.10.4"
+keyring = { version = "3", features = ["windows-native"] }
+url = "2.5.8"
+notify = "8"
 
 [target.'cfg(windows)'.dependencies]
 # Same major as Tauri's own `windows` dependency so HWND types line up.
@@ -36,6 +41,9 @@ windows = { version = "0.61", features = [
     "Devices_Geolocation",
     "Foundation",
     "Foundation_Collections",
+    "Media_Control",
+    "Storage_Streams",
+    "Win32_System_WinRT",
     "Networking_Connectivity",
     "Win32_Devices_FunctionDiscovery",
     "Win32_Media_Audio",

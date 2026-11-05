@@ -136,6 +136,15 @@ fn default_widgets() -> Vec<WidgetEntry> {
         .collect()
 }
 
+/// A calendar added by link. The link itself is a secret kept in Windows Credential Manager.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CalendarSource {
+    pub id: String,
+    pub name: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
@@ -166,6 +175,8 @@ pub struct Settings {
     #[ts(optional)]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clock_24h: Option<bool>,
+    /// Calendars added by link, in the order they were added.
+    pub calendars: Vec<CalendarSource>,
 }
 
 impl Default for Settings {
@@ -182,6 +193,7 @@ impl Default for Settings {
             temperature_unit: TemperatureUnit::default(),
             weather_place: String::new(),
             clock_24h: None,
+            calendars: Vec::new(),
         }
     }
 }
@@ -202,6 +214,12 @@ impl Settings {
             }
         }
         self.weather_place = self.weather_place.trim().chars().take(80).collect();
+        let mut ids = Vec::new();
+        self.calendars.retain(|c| {
+            let keep = !c.id.is_empty() && !ids.contains(&c.id);
+            ids.push(c.id.clone());
+            keep
+        });
         self
     }
 }
