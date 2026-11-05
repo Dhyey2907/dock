@@ -11,6 +11,9 @@ const defaults: Settings = {
   autoHide: false,
   taskbarMode: "autoHide",
   launchAtStartup: true,
+  widgets: [{ kind: "clock", enabled: true }],
+  temperatureUnit: "celsius",
+  weatherPlace: "",
 };
 
 const settingsSet = vi.fn(async (settings: Settings) => settings);

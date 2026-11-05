@@ -5,6 +5,7 @@ mod glass;
 mod logging;
 mod settings;
 mod shell;
+mod widgets;
 
 use tauri::Manager;
 
@@ -36,22 +37,30 @@ pub fn run() {
             app.manage(ShellState::default());
             app.manage(apps::service::AppsState::default());
             app.manage(glass::service::GlassState::default());
+            app.manage(shell::panel::PanelState::default());
+            app.manage(widgets::service::WidgetsState::default());
             commands::sync_autostart(handle, launch_at_startup);
 
             shell::init(handle)?;
             apps::service::init(handle);
             glass::service::refresh_soon(handle);
+            widgets::service::init(handle);
             tracing::info!(version = env!("CARGO_PKG_VERSION"), "dock started");
             Ok(())
         })
         // The dock only quits from the tray or Settings, never from Alt+F4 or WM_CLOSE: quitting
         // must go through the exit path that restores the taskbar.
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if window.label() == shell::DOCK_LABEL {
-                    api.prevent_close();
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } if window.label() == shell::DOCK_LABEL => {
+                api.prevent_close();
+            }
+            // A popup closes as soon as you click anywhere else.
+            tauri::WindowEvent::Focused(false) if window.label() == shell::panel::PANEL_LABEL => {
+                if let Err(error) = shell::panel::close(window.app_handle()) {
+                    tracing::warn!(%error, "failed to close the popup");
                 }
             }
+            _ => {}
         })
         // App menus (right-click on an app); the tray handles its own items.
         .on_menu_event(|app, event| apps::service::on_menu(app, event.id().as_ref()))
@@ -71,6 +80,16 @@ pub fn run() {
             commands::shell_search,
             commands::dock_geometry,
             commands::glass_get,
+            commands::panel_toggle,
+            commands::panel_current,
+            commands::panel_close,
+            commands::widgets_snapshot,
+            commands::volume_set,
+            commands::volume_toggle_mute,
+            commands::focus_start,
+            commands::focus_pause,
+            commands::focus_reset,
+            commands::open_windows_settings,
             commands::app_quit,
         ])
         .build(tauri::generate_context!())

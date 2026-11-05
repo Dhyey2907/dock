@@ -1,0 +1,388 @@
+/* ---------- Widget tiles on the dock ---------- */
+.dock-widgets {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.dock-widget {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  height: var(--button);
+  min-width: var(--button);
+  padding: 0 10px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  cursor: default;
+  touch-action: none;
+  transition:
+    background 160ms var(--ease),
+    transform 160ms var(--ease);
+}
+.dock-widget:hover,
+.dock-widget[data-open="true"] {
+  background: var(--dock-hover);
+}
+.dock-widget[data-lifted="true"] {
+  transform: scale(1.06);
+  background: var(--dock-hover);
+  z-index: 2;
+}
+.dock-widgets[data-dragging="true"] .dock-widget {
+  transition: transform 160ms var(--ease);
+}
+
+.tile-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.tile-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+.tile-strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.tile-faint {
+  font-size: 11px;
+  opacity: 0.72;
+}
+.tile-mini {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.tile-system {
+  align-items: flex-start;
+  gap: 1px;
+}
+.tile-tabular {
+  font-variant-numeric: tabular-nums;
+}
+.dock[data-size="small"] .tile-faint {
+  display: none;
+}
+
+/* Focus ring: accent while focusing, green on a break. */
+.ring {
+  transform: rotate(-90deg);
+}
+.ring-track {
+  fill: none;
+  stroke: currentColor;
+  opacity: 0.18;
+}
+.ring-fill {
+  fill: none;
+  stroke: var(--dock-accent, #7dd3fc);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 900ms linear;
+}
+[data-phase="break"] .ring-fill {
+  stroke: #4ade80;
+}
+
+/* ---------- The popup window ---------- */
+.panel-window,
+.panel-window body {
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+}
+.panel {
+  --panel-fg: #f4f5f8;
+  --panel-faint: rgba(244, 245, 248, 0.62);
+  --panel-line: rgba(255, 255, 255, 0.1);
+  --panel-hover: rgba(255, 255, 255, 0.09);
+  --panel-accent: #7dd3fc;
+  height: 100%;
+  color: var(--panel-fg);
+  font-family: var(--font);
+  font-size: 13px;
+  /* A light veil over the acrylic so text stays readable over busy windows. */
+  background: rgba(20, 22, 28, 0.38);
+}
+.panel[data-light="true"] {
+  --panel-fg: #16171d;
+  --panel-faint: rgba(22, 23, 29, 0.6);
+  --panel-line: rgba(0, 0, 0, 0.08);
+  --panel-hover: rgba(0, 0, 0, 0.06);
+  --panel-accent: #4f46e5;
+  background: rgba(250, 250, 252, 0.45);
+}
+.panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  padding: 16px;
+}
+.panel-empty {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.panel-empty p {
+  margin: 0;
+  line-height: 1.4;
+}
+.panel-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.panel-big {
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+.panel-faint {
+  color: var(--panel-faint);
+}
+.panel-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--panel-accent);
+  color: #0b0d14;
+  font: inherit;
+  font-weight: 600;
+}
+.panel[data-light="true"] .panel-button {
+  color: #fff;
+}
+.panel-link {
+  align-self: flex-start;
+  margin-top: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--panel-accent);
+  font: inherit;
+}
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+}
+.icon-btn:hover:not(:disabled) {
+  background: var(--panel-hover);
+}
+.icon-btn:disabled {
+  opacity: 0.35;
+}
+
+/* Clock */
+.month-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+.month-title {
+  flex: 1;
+  font-weight: 600;
+}
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  text-align: center;
+}
+.month-weekday {
+  font-size: 11px;
+  color: var(--panel-faint);
+  padding-bottom: 2px;
+}
+.month-day {
+  display: grid;
+  place-items: center;
+  justify-self: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  font-variant-numeric: tabular-nums;
+}
+.month-day[data-other="true"] {
+  opacity: 0.35;
+}
+.month-day[data-today="true"] {
+  background: var(--panel-accent);
+  color: #0b0d14;
+  font-weight: 600;
+}
+.panel[data-light="true"] .month-day[data-today="true"] {
+  color: #fff;
+}
+
+/* Weather */
+.weather-now {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.weather-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  color: var(--panel-faint);
+}
+.weather-facts span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.weather-days {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 8px 0 0;
+  list-style: none;
+  border-top: 1px solid var(--panel-line);
+}
+.weather-days li {
+  display: grid;
+  grid-template-columns: 1fr 28px 1fr;
+  align-items: center;
+  padding: 4px 0;
+}
+.weather-range {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Status */
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.status-value {
+  width: 28px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.status-sub {
+  margin: -8px 0 0 38px;
+  font-size: 12px;
+}
+.status-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  margin: 0 -8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.status-line:hover {
+  background: var(--panel-hover);
+}
+.status-text {
+  display: flex;
+  flex-direction: column;
+}
+.status-text .panel-faint {
+  font-size: 12px;
+}
+.slider {
+  flex: 1;
+  height: 4px;
+  appearance: none;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--panel-accent) var(--fill),
+    color-mix(in srgb, currentColor 22%, transparent) var(--fill)
+  );
+}
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+/* System */
+.meter-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 5px;
+}
+.meter-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--panel-faint);
+}
+.meter-track {
+  height: 6px;
+  border-radius: 3px;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  overflow: hidden;
+}
+.meter-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--panel-accent);
+  transition: width 600ms var(--ease);
+}
+.meter-fill[data-high="true"] {
+  background: #f87171;
+}
+
+/* Focus */
+.focus-panel {
+  align-items: center;
+  text-align: center;
+}
+.focus-dial {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.focus-readout {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.focus-panel .ring-fill {
+  stroke: var(--panel-accent);
+}
+.focus-panel[data-phase="break"] .ring-fill {
+  stroke: #4ade80;
+}
+.focus-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.focus-panel p {
+  margin: 0;
+}

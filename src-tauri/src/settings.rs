@@ -79,6 +79,72 @@ pub enum TaskbarMode {
     Hidden,
 }
 
+/// A widget on the dock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum WidgetKind {
+    Clock,
+    Weather,
+    /// Volume, network and battery at a glance (the taskbar's tray area).
+    Status,
+    /// CPU and memory.
+    System,
+    Focus,
+    Music,
+    Claude,
+    Calendar,
+    /// A widget from a newer version of the dock; dropped on load.
+    #[serde(other)]
+    #[ts(skip)]
+    Unknown,
+}
+
+impl WidgetKind {
+    /// Every widget, in the default order (left to right).
+    pub const ALL: [WidgetKind; 8] = [
+        WidgetKind::Music,
+        WidgetKind::Focus,
+        WidgetKind::Claude,
+        WidgetKind::Calendar,
+        WidgetKind::System,
+        WidgetKind::Status,
+        WidgetKind::Weather,
+        WidgetKind::Clock,
+    ];
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct WidgetEntry {
+    pub kind: WidgetKind,
+    pub enabled: bool,
+}
+
+fn default_widgets() -> Vec<WidgetEntry> {
+    WidgetKind::ALL
+        .iter()
+        .map(|&kind| WidgetEntry {
+            kind,
+            // On by default: the ones that work with no setup.
+            enabled: matches!(
+                kind,
+                WidgetKind::Music | WidgetKind::Status | WidgetKind::Weather | WidgetKind::Clock
+            ),
+        })
+        .collect()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum TemperatureUnit {
+    #[default]
+    Celsius,
+    Fahrenheit,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", default)]
 #[ts(export)]
@@ -91,6 +157,15 @@ pub struct Settings {
     pub auto_hide: bool,
     pub taskbar_mode: TaskbarMode,
     pub launch_at_startup: bool,
+    /// Widgets in dock order, each on or off. Every kind appears exactly once.
+    pub widgets: Vec<WidgetEntry>,
+    pub temperature_unit: TemperatureUnit,
+    /// A town to show weather for; empty means "where this PC is" (Windows location).
+    pub weather_place: String,
+    /// 24-hour clock; `None` follows the system's format.
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clock_24h: Option<bool>,
 }
 
 impl Default for Settings {
@@ -103,7 +178,31 @@ impl Default for Settings {
             auto_hide: false,
             taskbar_mode: TaskbarMode::default(),
             launch_at_startup: true,
+            widgets: default_widgets(),
+            temperature_unit: TemperatureUnit::default(),
+            weather_place: String::new(),
+            clock_24h: None,
         }
+    }
+}
+
+impl Settings {
+    /// Make the widget list sane: unknown kinds and repeats dropped, missing kinds added (off)
+    /// at the end, so older and newer files both load.
+    pub fn normalized(mut self) -> Self {
+        let mut seen = Vec::new();
+        self.widgets.retain(|w| {
+            let keep = w.kind != WidgetKind::Unknown && !seen.contains(&w.kind);
+            seen.push(w.kind);
+            keep
+        });
+        for kind in WidgetKind::ALL {
+            if !self.widgets.iter().any(|w| w.kind == kind) {
+                self.widgets.push(WidgetEntry { kind, enabled: false });
+            }
+        }
+        self.weather_place = self.weather_place.trim().chars().take(80).collect();
+        self
     }
 }
 
@@ -119,11 +218,13 @@ impl SettingsStore {
     pub fn open(dir: &Path) -> Self {
         let path = dir.join(FILE_NAME);
         let current = match std::fs::read_to_string(&path) {
-            Ok(text) => serde_json::from_str(&text).unwrap_or_else(|error| {
-                tracing::warn!(%error, "settings file unreadable; using defaults");
-                let _ = std::fs::rename(&path, path.with_extension("json.bad"));
-                Settings::default()
-            }),
+            Ok(text) => serde_json::from_str::<Settings>(&text)
+                .map(Settings::normalized)
+                .unwrap_or_else(|error| {
+                    tracing::warn!(%error, "settings file unreadable; using defaults");
+                    let _ = std::fs::rename(&path, path.with_extension("json.bad"));
+                    Settings::default()
+                }),
             Err(_) => Settings::default(),
         };
         Self {
@@ -138,6 +239,7 @@ impl SettingsStore {
 
     /// Save to disk (write a temp file, then rename, so a crash never leaves half a file).
     pub fn set(&self, settings: Settings) -> AppResult<()> {
+        let settings = settings.normalized();
         if let Some(dir) = self.path.parent() {
             std::fs::create_dir_all(dir)?;
         }
@@ -187,5 +289,48 @@ mod tests {
         std::fs::write(dir.path().join(FILE_NAME), "{not json").unwrap();
         assert_eq!(SettingsStore::open(dir.path()).get(), Settings::default());
         assert!(dir.path().join("settings.json.bad").exists());
+    }
+
+    #[test]
+    fn widget_lists_are_normalized_on_load() {
+        let dir = tempfile::tempdir().unwrap();
+        // A repeat, a widget from a newer version, and most kinds missing.
+        let file = r#"{"widgets":[
+            {"kind":"clock","enabled":true},
+            {"kind":"hologram","enabled":true},
+            {"kind":"clock","enabled":false},
+            {"kind":"music","enabled":false}]}"#;
+        std::fs::write(dir.path().join(FILE_NAME), file).unwrap();
+        let widgets = SettingsStore::open(dir.path()).get().widgets;
+        assert_eq!(widgets.len(), WidgetKind::ALL.len());
+        assert_eq!(
+            widgets[0],
+            WidgetEntry {
+                kind: WidgetKind::Clock,
+                enabled: true
+            }
+        );
+        assert_eq!(
+            widgets[1],
+            WidgetEntry {
+                kind: WidgetKind::Music,
+                enabled: false
+            }
+        );
+        // Missing kinds were added, switched off.
+        assert!(widgets[2..].iter().all(|w| !w.enabled));
+        for kind in WidgetKind::ALL {
+            assert_eq!(widgets.iter().filter(|w| w.kind == kind).count(), 1);
+        }
+    }
+
+    #[test]
+    fn saved_widget_order_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = SettingsStore::open(dir.path());
+        let mut settings = Settings::default();
+        settings.widgets.reverse();
+        store.set(settings.clone()).unwrap();
+        assert_eq!(SettingsStore::open(dir.path()).get().widgets, settings.widgets);
     }
 }

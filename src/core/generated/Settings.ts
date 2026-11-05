@@ -3,10 +3,24 @@ import type { DockSize } from "./DockSize";
 import type { DockStyle } from "./DockStyle";
 import type { Edge } from "./Edge";
 import type { TaskbarMode } from "./TaskbarMode";
+import type { TemperatureUnit } from "./TemperatureUnit";
 import type { Theme } from "./Theme";
+import type { WidgetEntry } from "./WidgetEntry";
 
 export type Settings = { edge: Edge, style: DockStyle, theme: Theme, size: DockSize, 
 /**
  * The dock slides away and comes back when the cursor touches the edge.
  */
-autoHide: boolean, taskbarMode: TaskbarMode, launchAtStartup: boolean, };
+autoHide: boolean, taskbarMode: TaskbarMode, launchAtStartup: boolean, 
+/**
+ * Widgets in dock order, each on or off. Every kind appears exactly once.
+ */
+widgets: Array<WidgetEntry>, temperatureUnit: TemperatureUnit, 
+/**
+ * A town to show weather for; empty means "where this PC is" (Windows location).
+ */
+weatherPlace: string, 
+/**
+ * 24-hour clock; `None` follows the system's format.
+ */
+clock24h?: boolean, };

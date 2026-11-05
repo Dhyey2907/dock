@@ -38,6 +38,7 @@ pub fn settings_set(app: AppHandle, settings: Settings) -> AppResult<Settings> {
     } else {
         shell::place_dock(&app)?;
     }
+    crate::widgets::service::settings_changed(&app, &before, &settings);
     app.emit(SETTINGS_CHANGED, &settings)?;
     Ok(settings)
 }
@@ -67,7 +68,8 @@ pub fn dock_set_content_width(app: AppHandle, width: f64) -> AppResult<()> {
     shell::place_dock(&app)
 }
 
-#[tauri::command]
+/// Async: creating a window from the main thread can deadlock WebView2.
+#[tauri::command(async)]
 pub fn open_settings(app: AppHandle) -> AppResult<()> {
     shell::open_settings_window(&app)
 }
@@ -125,6 +127,77 @@ pub fn dock_geometry(app: AppHandle) -> Option<shell::DockGeometry> {
 #[tauri::command]
 pub fn glass_get(app: AppHandle) -> Option<crate::glass::GlassFrame> {
     crate::glass::service::current(&app)
+}
+
+/// Open a widget's popup at `anchor_x` (the widget's centre, screen pixels), or close it if
+/// it is already open. Async: the first open creates a window.
+#[tauri::command(async)]
+pub fn panel_toggle(app: AppHandle, kind: crate::settings::WidgetKind, anchor_x: i32) -> AppResult<()> {
+    shell::panel::toggle(&app, kind, anchor_x)
+}
+
+/// Which widget's popup is open (for the popup page when it first loads).
+#[tauri::command]
+pub fn panel_current(app: AppHandle) -> Option<crate::settings::WidgetKind> {
+    shell::panel::current(&app)
+}
+
+#[tauri::command]
+pub fn panel_close(app: AppHandle) -> AppResult<()> {
+    shell::panel::close(&app)
+}
+
+/// Everything the widgets show, for a page that just opened.
+#[tauri::command]
+pub fn widgets_snapshot(app: AppHandle) -> crate::widgets::WidgetSnapshot {
+    crate::widgets::service::snapshot(&app)
+}
+
+#[tauri::command]
+pub fn volume_set(app: AppHandle, level: f32) -> AppResult<()> {
+    if !level.is_finite() {
+        return Err(AppError::InvalidInput("volume".into()));
+    }
+    crate::widgets::service::set_volume(&app, level);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn volume_toggle_mute(app: AppHandle) {
+    crate::widgets::service::toggle_mute(&app);
+}
+
+#[tauri::command]
+pub fn focus_start(app: AppHandle) {
+    crate::widgets::service::focus_update(&app, |s| s.start(chrono::Utc::now()));
+}
+
+#[tauri::command]
+pub fn focus_pause(app: AppHandle) {
+    crate::widgets::service::focus_update(&app, |s| s.pause(chrono::Utc::now()));
+}
+
+#[tauri::command]
+pub fn focus_reset(app: AppHandle) {
+    crate::widgets::service::focus_update(&app, |s| s.reset());
+}
+
+/// Open one of the few Windows Settings pages the widgets link to.
+#[tauri::command(async)]
+pub fn open_windows_settings(page: String) -> AppResult<()> {
+    let uri = match page.as_str() {
+        "location" => "ms-settings:privacy-location",
+        "network" => "ms-settings:network",
+        "sound" => "ms-settings:sound",
+        "battery" => "ms-settings:batterysaver",
+        "datetime" => "ms-settings:dateandtime",
+        _ => return Err(AppError::InvalidInput("settings page".into())),
+    };
+    #[cfg(windows)]
+    crate::apps::win::launch(&crate::apps::Launch::Program(uri.into()));
+    #[cfg(not(windows))]
+    let _ = uri;
+    Ok(())
 }
 
 /// Quit the dock; the exit handler puts the Windows taskbar back.

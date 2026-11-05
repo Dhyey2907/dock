@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the dock and settings windows",
-  "windows": ["dock", "settings"],
+  "description": "Capability for the dock, popup and settings windows",
+  "windows": ["dock", "settings", "panel"],
   "permissions": ["core:default", "core:window:allow-start-dragging"]
 }

@@ -12,9 +12,15 @@ interface SettingsState {
 export const useSettings = create<SettingsState>((set, get) => ({
   settings: null,
   load: async () => {
-    // Listen first so a change made by another window while loading isn't missed.
-    await events.onSettingsChanged((settings) => set({ settings }));
-    set({ settings: await ipc.settingsGet() });
+    // Listen first so a change made by another window while loading isn't missed; a change
+    // that arrives first is newer than the copy being read.
+    let changed = false;
+    await events.onSettingsChanged((settings) => {
+      changed = true;
+      set({ settings });
+    });
+    const settings = await ipc.settingsGet();
+    if (!changed) set({ settings });
   },
   update: async (patch) => {
     const current = get().settings;

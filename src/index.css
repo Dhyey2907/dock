@@ -311,6 +311,60 @@ button {
   border-radius: 8px;
   padding: 4px 10px;
 }
+.settings-hint {
+  display: block;
+  margin: 2px 0 0;
+  font-size: 12px;
+  opacity: 0.6;
+}
+.settings-input,
+.settings select {
+  min-width: 180px;
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.settings select option {
+  color: #16171d;
+}
+.widget-list {
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+.widget-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+}
+.widget-toggle {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.widget-toggle input {
+  margin-top: 3px;
+}
+.widget-move {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+}
+.widget-move:disabled {
+  opacity: 0.3;
+}
 .settings-quit {
   border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
   background: transparent;

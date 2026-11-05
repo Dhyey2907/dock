@@ -11,9 +11,15 @@ interface AppsState {
 export const useApps = create<AppsState>((set) => ({
   apps: [],
   load: async () => {
-    // Listen first so a change while loading isn't missed.
-    await events.onAppsChanged((apps) => set({ apps }));
-    set({ apps: await ipc.appsList() });
+    // Listen first so a change while loading isn't missed. A change that arrives before the
+    // list is newer than it: the list was read before the change.
+    let changed = false;
+    await events.onAppsChanged((apps) => {
+      changed = true;
+      set({ apps });
+    });
+    const apps = await ipc.appsList();
+    if (!changed) set({ apps });
   },
 }));
 

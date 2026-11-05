@@ -20,15 +20,28 @@ tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "query"] }
+tokio = { version = "1", features = ["sync", "time", "macros"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "bmp", "webp"] }
 png = "0.17"
-ts-rs = { version = "12", features = ["serde-compat"] }
+ts-rs = { version = "12", features = ["serde-compat", "chrono-impl"] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-autostart = "2"
 
 [target.'cfg(windows)'.dependencies]
 # Same major as Tauri's own `windows` dependency so HWND types line up.
+windows-core = "0.61"
 windows = { version = "0.61", features = [
+    "Devices_Geolocation",
+    "Foundation",
+    "Foundation_Collections",
+    "Networking_Connectivity",
+    "Win32_Devices_FunctionDiscovery",
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
+    "Win32_System_Power",
+    "Win32_System_SystemInformation",
     "Win32_Foundation",
     "Win32_Graphics_Dwm",
     "Win32_Graphics_Gdi",

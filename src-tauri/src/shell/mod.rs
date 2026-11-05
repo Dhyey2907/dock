@@ -2,6 +2,7 @@
 
 #[cfg(windows)]
 mod appbar;
+pub mod panel;
 pub mod placement;
 pub mod taskbar;
 #[cfg(windows)]
@@ -266,7 +267,7 @@ pub fn show_dock(window: &WebviewWindow) -> AppResult<()> {
     }
     window.show()?;
     #[cfg(windows)]
-    make_tool_window(window)?;
+    make_tool_window(window, true)?;
     Ok(())
 }
 
@@ -275,27 +276,32 @@ pub fn show_dock(window: &WebviewWindow) -> AppResult<()> {
 /// after each show. Windows only re-reads the Alt+Tab list when a window is shown, hence the
 /// raw hide/show (which bypasses Tauri) after changing the style.
 ///
-/// It also gets `WS_EX_NOACTIVATE`: clicking the dock must leave the app you were using in
-/// front, or "click the active app to minimize it" could never work. Bringing a window forward
-/// still works, because the dock received the click.
+/// The dock also gets `WS_EX_NOACTIVATE` (`no_activate`): clicking it must leave the app you
+/// were using in front, or "click the active app to minimize it" could never work. Bringing a
+/// window forward still works, because the dock received the click. Popups take focus instead,
+/// which is how they know to close when you click elsewhere.
 #[cfg(windows)]
-fn make_tool_window(window: &WebviewWindow) -> AppResult<()> {
+fn make_tool_window(window: &WebviewWindow, no_activate: bool) -> AppResult<()> {
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetWindowLongPtrW, SetWindowLongPtrW, ShowWindow, GWL_EXSTYLE, SW_HIDE, SW_SHOWNOACTIVATE,
+        GetWindowLongPtrW, SetWindowLongPtrW, ShowWindow, GWL_EXSTYLE, SW_HIDE, SW_SHOW, SW_SHOWNOACTIVATE,
         WS_EX_APPWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
     };
     // Tauri may link a different `windows` version; both HWNDs wrap the same raw handle.
     let hwnd = windows::Win32::Foundation::HWND(window.hwnd()?.0);
+    let add = if no_activate {
+        WS_EX_TOOLWINDOW.0 | WS_EX_NOACTIVATE.0
+    } else {
+        WS_EX_TOOLWINDOW.0
+    };
     // SAFETY: `hwnd` is a live top-level window owned by this process; we only toggle
     // extended-style bits and visibility on it.
     unsafe {
         let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
-        let tool_style =
-            (style | (WS_EX_TOOLWINDOW.0 | WS_EX_NOACTIVATE.0) as isize) & !(WS_EX_APPWINDOW.0 as isize);
+        let tool_style = (style | add as isize) & !(WS_EX_APPWINDOW.0 as isize);
         if tool_style != style {
             SetWindowLongPtrW(hwnd, GWL_EXSTYLE, tool_style);
             let _ = ShowWindow(hwnd, SW_HIDE);
-            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+            let _ = ShowWindow(hwnd, if no_activate { SW_SHOWNOACTIVATE } else { SW_SHOW });
         }
     }
     Ok(())
