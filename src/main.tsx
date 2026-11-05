@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 
 import { Dock } from "./dock/Dock";
 import { useApps } from "./dock/apps";
+import { useGlass } from "./dock/glass/store";
 import { SettingsApp } from "./settings/SettingsApp";
 import { useSettings } from "./settings/store";
 import "./design/tokens.css";
@@ -20,6 +21,10 @@ if (!isSettingsWindow) {
     .getState()
     .load()
     .catch((error) => console.error("failed to load apps", error));
+  useGlass
+    .getState()
+    .load()
+    .catch((error) => console.error("failed to load the glass", error));
 }
 document.documentElement.classList.add(isSettingsWindow ? "settings-window" : "dock-window");
 

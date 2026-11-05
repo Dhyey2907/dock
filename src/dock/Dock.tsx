@@ -1,10 +1,12 @@
-import { useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Search, Settings2 } from "lucide-react";
 
 import { ipc } from "../core/ipc";
 import { useSettings } from "../settings/store";
 import { AppButton } from "./AppButton";
 import { useApps } from "./apps";
+import { Glass } from "./glass/Glass";
+import type { Ink } from "./glass/styles";
 import { useAutoHide } from "./useAutoHide";
 
 /** Four squares, like the Windows key. */
@@ -26,6 +28,8 @@ export function Dock() {
   const contentRef = useRef<HTMLDivElement>(null);
   const { revealed, onEnter, onLeave } = useAutoHide(settings?.autoHide ?? false);
   const loaded = settings !== null;
+  // Light or dark text, following the wallpaper behind the glass.
+  const [ink, setInk] = useState<Ink>("light");
 
   useLayoutEffect(() => {
     const content = contentRef.current;
@@ -51,6 +55,7 @@ export function Dock() {
       data-size={settings.size}
       data-revealed={revealed}
       data-auto-hide={settings.autoHide}
+      data-ink={ink}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
@@ -59,6 +64,7 @@ export function Dock() {
       {/* Dragging the bar's background moves the dock; dropping it nearer the top or bottom
           snaps it to that edge. Buttons inside stay clickable. */}
       <div className="dock-content" ref={contentRef} data-tauri-drag-region>
+        <Glass theme={settings.theme} rounded={settings.style === "pill"} onInk={setInk} />
         <button
           className="dock-icon-button dock-start"
           aria-label="Start"

@@ -29,6 +29,23 @@ pub const DOCK_LABEL: &str = "dock";
 const SETTINGS_LABEL: &str = "settings";
 /// Event telling the dock page whether it is showing or waiting as an auto-hide sliver.
 pub const DOCK_REVEALED: &str = "dock-revealed";
+/// Event telling the dock page where its window sits on its screen (for the glass).
+pub const DOCK_GEOMETRY: &str = "dock-geometry";
+
+/// Where the dock window is on its screen, in physical pixels.
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DockGeometry {
+    pub screen_x: i32,
+    pub screen_y: i32,
+    pub screen_width: u32,
+    pub screen_height: u32,
+    pub x: i32,
+    pub y: i32,
+    /// Physical pixels per CSS pixel (1.5 at 150%).
+    pub scale: f64,
+}
 
 /// The dock's live state, beyond the saved settings.
 pub struct ShellState {
@@ -43,6 +60,8 @@ pub struct ShellState {
     /// The strip last claimed from Windows, so unchanged layouts don't re-claim it (each claim
     /// changes the work area, which would come back as another layout change).
     reserved: Mutex<Option<(Rect, Edge)>>,
+    /// Where the dock last went, as sent to the page.
+    geometry: Mutex<Option<DockGeometry>>,
 }
 
 impl Default for ShellState {
@@ -53,12 +72,23 @@ impl Default for ShellState {
             hidden_by_user: AtomicBool::new(false),
             fullscreen: AtomicBool::new(false),
             reserved: Mutex::new(None),
+            geometry: Mutex::new(None),
         }
     }
 }
 
 pub fn dock_window(app: &AppHandle) -> Option<WebviewWindow> {
     app.get_webview_window(DOCK_LABEL)
+}
+
+/// The full rectangle of the dock's screen, in physical pixels.
+pub fn dock_screen(app: &AppHandle) -> Option<Rect> {
+    let window = dock_window(app)?;
+    monitor_rect(&window).ok().flatten().map(|(rect, _)| rect)
+}
+
+pub fn geometry(app: &AppHandle) -> Option<DockGeometry> {
+    *app.state::<ShellState>().geometry.lock().expect("shell lock")
 }
 
 fn monitor_rect(window: &WebviewWindow) -> AppResult<Option<(Rect, f64)>> {
@@ -95,6 +125,20 @@ pub fn place_dock(app: &AppHandle) -> AppResult<()> {
     };
     window.set_size(PhysicalSize::new(rect.width, rect.height))?;
     window.set_position(PhysicalPosition::new(rect.x, rect.y))?;
+
+    let geometry = DockGeometry {
+        screen_x: screen.x,
+        screen_y: screen.y,
+        screen_width: screen.width,
+        screen_height: screen.height,
+        x: rect.x,
+        y: rect.y,
+        scale,
+    };
+    let moved = shell.geometry.lock().expect("shell lock").replace(geometry) != Some(geometry);
+    if moved {
+        app.emit(DOCK_GEOMETRY, geometry)?;
+    }
 
     // An auto-hiding or user-hidden dock claims nothing: windows may use the whole screen.
     let claims = !settings.auto_hide && !shell.hidden_by_user.load(Ordering::SeqCst);

@@ -25,8 +25,9 @@ use windows::{
             WindowsAndMessaging::{
                 GetClassNameW, GetForegroundWindow, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId,
                 IsZoomed, RegisterWindowMessageW, EVENT_OBJECT_LOCATIONCHANGE, EVENT_SYSTEM_FOREGROUND,
-                GWL_STYLE, OBJID_WINDOW, SPI_SETWORKAREA, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
-                WM_DISPLAYCHANGE, WM_ENDSESSION, WM_EXITSIZEMOVE, WM_NCDESTROY, WM_SETTINGCHANGE, WS_CAPTION,
+                GWL_STYLE, OBJID_WINDOW, SPI_SETDESKWALLPAPER, SPI_SETWORKAREA, WINEVENT_OUTOFCONTEXT,
+                WINEVENT_SKIPOWNPROCESS, WM_DISPLAYCHANGE, WM_ENDSESSION, WM_EXITSIZEMOVE, WM_NCDESTROY,
+                WM_SETTINGCHANGE, WS_CAPTION,
             },
         },
     },
@@ -76,8 +77,19 @@ unsafe extern "system" fn subclass(
     match msg {
         appbar::CALLBACK if wparam.0 == ABN_FULLSCREENAPP as usize => fullscreen_soon(),
         appbar::CALLBACK if wparam.0 == ABN_POSCHANGED as usize => relayout_soon(),
-        WM_DISPLAYCHANGE => relayout_soon(),
+        WM_DISPLAYCHANGE => {
+            relayout_soon();
+            // A new resolution or primary screen changes the desktop picture too.
+            if let Some(app) = APP.get() {
+                crate::glass::service::refresh_soon(app);
+            }
+        }
         WM_SETTINGCHANGE if wparam.0 == SPI_SETWORKAREA.0 as usize => relayout_soon(),
+        WM_SETTINGCHANGE if wparam.0 == SPI_SETDESKWALLPAPER.0 as usize => {
+            if let Some(app) = APP.get() {
+                crate::glass::service::refresh_soon(app);
+            }
+        }
         WM_EXITSIZEMOVE => {
             if let Some(app) = APP.get().cloned() {
                 std::thread::spawn(move || super::snap_after_drag(&app));

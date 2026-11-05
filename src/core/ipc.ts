@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type { DockApp } from "./generated/DockApp";
+import type { DockGeometry } from "./generated/DockGeometry";
+import type { GlassFrame } from "./generated/GlassFrame";
 import type { Settings } from "./generated/Settings";
 
 /** Typed wrappers for every backend command, so call sites never spell command names. */
@@ -20,6 +22,8 @@ export const ipc = {
   appMenu: (key: string) => invoke<void>("app_menu", { key }),
   shellStart: () => invoke<void>("shell_start"),
   shellSearch: () => invoke<void>("shell_search"),
+  dockGeometry: () => invoke<DockGeometry | null>("dock_geometry"),
+  glassGet: () => invoke<GlassFrame | null>("glass_get"),
 };
 
 export const events = {
@@ -29,4 +33,8 @@ export const events = {
     listen<boolean>("dock-revealed", (event) => handler(event.payload)),
   onAppsChanged: (handler: (apps: DockApp[]) => void): Promise<UnlistenFn> =>
     listen<DockApp[]>("apps-changed", (event) => handler(event.payload)),
+  onDockGeometry: (handler: (geometry: DockGeometry) => void): Promise<UnlistenFn> =>
+    listen<DockGeometry>("dock-geometry", (event) => handler(event.payload)),
+  onGlassChanged: (handler: (frame: GlassFrame) => void): Promise<UnlistenFn> =>
+    listen<GlassFrame>("glass-changed", (event) => handler(event.payload)),
 };

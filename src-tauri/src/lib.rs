@@ -1,6 +1,7 @@
 mod apps;
 mod commands;
 mod error;
+mod glass;
 mod logging;
 mod settings;
 mod shell;
@@ -34,10 +35,12 @@ pub fn run() {
             app.manage(store);
             app.manage(ShellState::default());
             app.manage(apps::service::AppsState::default());
+            app.manage(glass::service::GlassState::default());
             commands::sync_autostart(handle, launch_at_startup);
 
             shell::init(handle)?;
             apps::service::init(handle);
+            glass::service::refresh_soon(handle);
             tracing::info!(version = env!("CARGO_PKG_VERSION"), "dock started");
             Ok(())
         })
@@ -66,6 +69,8 @@ pub fn run() {
             commands::app_menu,
             commands::shell_start,
             commands::shell_search,
+            commands::dock_geometry,
+            commands::glass_get,
             commands::app_quit,
         ])
         .build(tauri::generate_context!())

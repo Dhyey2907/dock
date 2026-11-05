@@ -34,29 +34,80 @@ button {
 }
 
 .dock-content {
+  position: relative;
+  isolation: isolate;
   height: 100%;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 0 10px;
-  background: var(--dock-bg);
-  border: 1px solid var(--dock-border);
-  box-shadow: var(--dock-highlight);
   border-radius: var(--radius-pill);
-  backdrop-filter: blur(24px) saturate(160%);
+}
+/* Everything in the bar sits above the glass. */
+.dock-content > :not(.glass) {
+  position: relative;
+  z-index: 1;
 }
 
 .dock[data-style="full"] .dock-content {
   width: 100%;
   border-radius: 0;
-  border-left: 0;
-  border-right: 0;
 }
-.dock[data-style="full"][data-edge="bottom"] .dock-content {
-  border-bottom: 0;
+
+/* ---------- The glass ---------- */
+.glass {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  /* Clips the oversized picture (and keeps it out of the bar's measured width). */
+  overflow: hidden;
+  background: var(--glass-fallback);
+  pointer-events: none;
 }
-.dock[data-style="full"][data-edge="top"] .dock-content {
-  border-top: 0;
+/* With the wallpaper showing, the fallback colour would only muddy it. */
+.glass[data-picture="true"] {
+  background: none;
+}
+.glass-picture {
+  position: absolute;
+  background-repeat: no-repeat;
+}
+.glass-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+.glass-tint,
+.glass-rim {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+.glass-tint {
+  background: var(--glass-tint);
+}
+.glass-rim {
+  box-shadow: var(--glass-rim);
+}
+/* A thin highlight that runs round the edge, brightest at the top-left and bottom-right, like
+   light catching a glass rim. Drawn as a 1px ring cut out with a mask. */
+.glass-rim::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    120deg,
+    var(--glass-sheen),
+    transparent 30%,
+    transparent 70%,
+    var(--glass-sheen)
+  );
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
 }
 
 /* Auto-hide: tucked away, the window is a thin strip that only has to catch the cursor. The
@@ -159,6 +210,11 @@ button {
   width: var(--icon);
   height: var(--icon);
   pointer-events: none;
+}
+/* White icons (ChatGPT, many line icons) vanish on the white bar: give them a faint outline. */
+.dock[data-theme="white"] .dock-app-icon,
+.dock[data-ink="dark"] .dock-app-icon {
+  filter: drop-shadow(0 0 0.6px rgba(0, 0, 0, 0.55)) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.12));
 }
 .dock-app-fallback {
   display: grid;

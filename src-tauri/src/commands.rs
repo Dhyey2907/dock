@@ -115,6 +115,18 @@ pub fn shell_search() {
     ]);
 }
 
+/// Where the dock sits on its screen (for drawing the glass).
+#[tauri::command]
+pub fn dock_geometry(app: AppHandle) -> Option<shell::DockGeometry> {
+    shell::geometry(&app)
+}
+
+/// The desktop picture behind the glass, if it has been read.
+#[tauri::command]
+pub fn glass_get(app: AppHandle) -> Option<crate::glass::GlassFrame> {
+    crate::glass::service::current(&app)
+}
+
 /// Quit the dock; the exit handler puts the Windows taskbar back.
 #[tauri::command]
 pub fn app_quit(app: AppHandle) {
