@@ -15,12 +15,25 @@ use tauri::Manager;
 
 use crate::{settings::SettingsStore, shell::ShellState};
 
+/// Launch flag the installer uses: quit the running dock (or, if none is running, put back a
+/// taskbar a crashed one left hidden) and exit.
+const QUIT_FLAG: &str = "--quit";
+
+fn wants_quit<S: AsRef<str>>(args: &[S]) -> bool {
+    args.iter().skip(1).any(|a| a.as_ref() == QUIT_FLAG)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
-        // A second launch just shows the running docks.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            shell::show_docks(app);
+        // A second launch shows the running docks, or quits them when the installer asks.
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            if wants_quit(&args) {
+                tracing::info!("asked to quit by a second launch");
+                app.exit(0);
+            } else {
+                shell::show_docks(app);
+            }
         }))
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
@@ -33,6 +46,12 @@ pub fn run() {
             app.manage(log_guard);
             // Before anything touches the taskbar, so a panic from here on restores it.
             shell::taskbar::init(&handle.path().app_data_dir()?);
+            if wants_quit(&std::env::args().collect::<Vec<_>>()) {
+                // No dock was running (a running one would have taken the flag instead).
+                shell::taskbar::restore_system();
+                tracing::info!("started with --quit: taskbar restored, exiting");
+                std::process::exit(0);
+            }
 
             let store = SettingsStore::open(&handle.path().app_config_dir()?);
             let launch_at_startup = store.get().launch_at_startup;
@@ -134,4 +153,16 @@ pub fn run() {
             tracing::info!("dock stopped; taskbar restored");
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::wants_quit;
+
+    #[test]
+    fn quit_flag_is_read_after_the_program_name() {
+        assert!(wants_quit(&["dock.exe", "--quit"]));
+        assert!(!wants_quit(&["dock.exe"]));
+        assert!(!wants_quit(&["--quit"]));
+    }
 }

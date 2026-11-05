@@ -47,7 +47,11 @@
     "category": "Utility",
     "shortDescription": "A smart dock for Windows",
     "windows": {
-      "nsis": { "installMode": "currentUser", "displayLanguageSelector": false }
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false,
+        "installerHooks": "./windows/hooks.nsh"
+      }
     }
   }
 }

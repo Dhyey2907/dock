@@ -43,7 +43,10 @@ pub fn apply(api: &impl TaskbarApi, file: &Path, mode: TaskbarMode) -> AppResult
         if let Some(dir) = file.parent() {
             std::fs::create_dir_all(dir)?;
         }
-        std::fs::write(file, serde_json::to_vec(&saved)?)?;
+        // Written whole or not at all: a half-written file would lose the original.
+        let tmp = file.with_extension("json.tmp");
+        std::fs::write(&tmp, serde_json::to_vec(&saved)?)?;
+        std::fs::rename(&tmp, file)?;
     }
     api.set_state(api.state() | AUTOHIDE);
     api.set_visible(mode == TaskbarMode::AutoHide);
@@ -52,8 +55,14 @@ pub fn apply(api: &impl TaskbarApi, file: &Path, mode: TaskbarMode) -> AppResult
 
 /// Put the taskbar back as it was. Safe to call any number of times.
 pub fn restore(api: &impl TaskbarApi, file: &Path) {
-    let Some(saved) = read(file) else { return };
-    api.set_state(saved.original_state);
+    if !file.exists() {
+        return;
+    }
+    // An unreadable file still means the dock changed the taskbar: at least show it again.
+    match read(file) {
+        Some(saved) => api.set_state(saved.original_state),
+        None => tracing::warn!("the taskbar restore file is unreadable; showing the taskbar"),
+    }
     api.set_visible(true);
     if let Err(error) = std::fs::remove_file(file) {
         tracing::warn!(%error, "could not delete the taskbar restore file");
@@ -73,10 +82,15 @@ static LOCK: Mutex<()> = Mutex::new(());
 
 pub fn init(data_dir: &Path) {
     let _ = FILE.set(data_dir.join(FILE_NAME));
-    // A panic aborts in release builds; restore first so the user isn't left without a taskbar.
+    install_panic_hook(restore_system);
+}
+
+/// A panic aborts in release builds; run `restore` first so the user isn't left without a
+/// taskbar. The previous hook (the panic message) still runs after it.
+fn install_panic_hook(restore: fn()) {
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
-        restore_system();
+        restore();
         previous(info);
     }));
 }
@@ -261,6 +275,40 @@ mod tests {
         apply(&second, &file, TaskbarMode::AutoHide).unwrap();
         restore(&second, &file);
         assert_eq!(second.state.get(), 0);
+    }
+
+    #[test]
+    fn an_unreadable_file_still_shows_the_taskbar() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(FILE_NAME);
+        std::fs::write(&file, b"{\"origin").unwrap();
+        let fake = Fake::new(AUTOHIDE);
+        fake.visible.set(false);
+        restore(&fake, &file);
+        assert!(fake.visible.get());
+        assert!(!file.exists());
+    }
+
+    #[test]
+    fn saving_leaves_no_temporary_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(FILE_NAME);
+        apply(&Fake::new(0), &file, TaskbarMode::Hidden).unwrap();
+        let names: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(names, [FILE_NAME]);
+    }
+
+    #[test]
+    fn a_panic_restores_before_the_process_dies() {
+        static RESTORED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+        install_panic_hook(|| RESTORED.store(true, std::sync::atomic::Ordering::SeqCst));
+        let _ = std::panic::catch_unwind(|| panic!("boom"));
+        // Put the default hook back for the other tests.
+        let _ = std::panic::take_hook();
+        assert!(RESTORED.load(std::sync::atomic::Ordering::SeqCst));
     }
 
     #[test]
