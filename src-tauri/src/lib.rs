@@ -1,3 +1,4 @@
+mod apps;
 mod commands;
 mod error;
 mod logging;
@@ -32,9 +33,11 @@ pub fn run() {
             let launch_at_startup = store.get().launch_at_startup;
             app.manage(store);
             app.manage(ShellState::default());
+            app.manage(apps::service::AppsState::default());
             commands::sync_autostart(handle, launch_at_startup);
 
             shell::init(handle)?;
+            apps::service::init(handle);
             tracing::info!(version = env!("CARGO_PKG_VERSION"), "dock started");
             Ok(())
         })
@@ -47,6 +50,8 @@ pub fn run() {
                 }
             }
         })
+        // App menus (right-click on an app); the tray handles its own items.
+        .on_menu_event(|app, event| apps::service::on_menu(app, event.id().as_ref()))
         .invoke_handler(tauri::generate_handler![
             commands::settings_get,
             commands::settings_set,
@@ -54,6 +59,13 @@ pub fn run() {
             commands::dock_reveal,
             commands::dock_is_revealed,
             commands::open_settings,
+            commands::apps_list,
+            commands::app_icon,
+            commands::app_click,
+            commands::app_launch,
+            commands::app_menu,
+            commands::shell_start,
+            commands::shell_search,
             commands::app_quit,
         ])
         .build(tauri::generate_context!())

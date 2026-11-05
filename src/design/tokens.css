@@ -10,6 +10,7 @@
   --dock-border: rgba(255, 255, 255, 0.35);
   --dock-fg: #ffffff;
   --dock-hover: rgba(255, 255, 255, 0.16);
+  --dock-accent: #7dd3fc;
   --dock-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.45);
 }
 .dock[data-theme="iosGlass"] {
@@ -17,6 +18,7 @@
   --dock-border: rgba(255, 255, 255, 0.55);
   --dock-fg: #ffffff;
   --dock-hover: rgba(255, 255, 255, 0.22);
+  --dock-accent: #ffffff;
   --dock-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -1px 0 rgba(255, 255, 255, 0.15);
 }
 .dock[data-theme="midnight"] {
@@ -24,6 +26,7 @@
   --dock-border: rgba(120, 140, 255, 0.25);
   --dock-fg: #e6e9ff;
   --dock-hover: rgba(120, 140, 255, 0.18);
+  --dock-accent: #8b9cff;
   --dock-highlight: inset 0 1px 0 rgba(160, 175, 255, 0.18);
 }
 .dock[data-theme="white"] {
@@ -31,6 +34,7 @@
   --dock-border: rgba(0, 0, 0, 0.08);
   --dock-fg: #16171d;
   --dock-hover: rgba(0, 0, 0, 0.06);
+  --dock-accent: #4f46e5;
   --dock-highlight: inset 0 1px 0 rgba(255, 255, 255, 1);
 }
 .dock[data-theme="black"] {
@@ -38,6 +42,7 @@
   --dock-border: rgba(255, 255, 255, 0.08);
   --dock-fg: #f4f4f6;
   --dock-hover: rgba(255, 255, 255, 0.1);
+  --dock-accent: #7dd3fc;
   --dock-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.06);
 }
 .dock[data-theme="clear"] {
@@ -45,5 +50,6 @@
   --dock-border: rgba(255, 255, 255, 0.18);
   --dock-fg: #ffffff;
   --dock-hover: rgba(255, 255, 255, 0.12);
+  --dock-accent: #ffffff;
   --dock-highlight: none;
 }

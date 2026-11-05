@@ -99,36 +99,112 @@ button {
   min-width: 24px;
 }
 
-.dock-logo,
-.dock-icon-button {
+/* Button size and icon size follow the dock size. */
+.dock {
+  --button: 40px;
+  --icon: 26px;
+}
+.dock[data-size="small"] {
+  --button: 34px;
+  --icon: 22px;
+}
+.dock[data-size="large"] {
+  --button: 46px;
+  --icon: 30px;
+}
+
+.dock-icon-button,
+.dock-app {
+  position: relative;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  flex: none;
+  width: var(--button);
+  height: var(--button);
+  padding: 0;
   border: 0;
   border-radius: 12px;
   background: transparent;
   cursor: default;
-  transition: background 160ms var(--ease);
+  transition:
+    background 160ms var(--ease),
+    transform 160ms var(--ease);
 }
-.dock-logo:hover,
-.dock-icon-button:hover {
+.dock-icon-button:hover,
+.dock-app:hover {
   background: var(--dock-hover);
 }
-.dock[data-size="small"] :is(.dock-logo, .dock-icon-button) {
-  width: 34px;
-  height: 34px;
-}
-.dock[data-size="large"] :is(.dock-logo, .dock-icon-button) {
-  width: 46px;
-  height: 46px;
+.dock-app:active {
+  transform: scale(0.92);
 }
 
-.dock-logo-mark {
-  width: 22px;
-  height: 22px;
-  border-radius: 7px;
-  background: linear-gradient(135deg, #7dd3fc, #6366f1);
+.dock-start svg {
+  fill: currentColor;
+}
+
+.dock-divider {
+  width: 1px;
+  height: 50%;
+  margin: 0 4px;
+  background: var(--dock-border);
+}
+
+.dock-apps {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.dock-app-icon {
+  width: var(--icon);
+  height: var(--icon);
+  pointer-events: none;
+}
+.dock-app-fallback {
+  display: grid;
+  place-items: center;
+  width: var(--icon);
+  height: var(--icon);
+  border-radius: 8px;
+  background: var(--dock-hover);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* Running: a dot under the icon. Active: a wider, brighter bar. Several windows: a wider dot.
+   With the dock on top, the marks sit above the icon instead. */
+.dock-app-indicator {
+  position: absolute;
+  left: 50%;
+  bottom: 2px;
+  width: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0;
+  transform: translateX(-50%);
+  transition:
+    width 180ms var(--ease),
+    opacity 180ms var(--ease);
+}
+.dock[data-edge="top"] .dock-app-indicator {
+  bottom: auto;
+  top: 2px;
+}
+.dock-app[data-running="true"] .dock-app-indicator {
+  width: 5px;
+  opacity: 0.55;
+}
+.dock-app[data-many="true"] .dock-app-indicator {
+  width: 9px;
+}
+.dock-app[data-active="true"] .dock-app-indicator {
+  width: 16px;
+  opacity: 1;
+  background: var(--dock-accent);
+}
+.dock-app[data-active="true"] {
+  background: var(--dock-hover);
 }
 
 /* ---------- Settings window ---------- */

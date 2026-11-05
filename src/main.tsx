@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import { Dock } from "./dock/Dock";
+import { useApps } from "./dock/apps";
 import { SettingsApp } from "./settings/SettingsApp";
 import { useSettings } from "./settings/store";
 import "./design/tokens.css";
@@ -14,6 +15,12 @@ useSettings
 
 // One bundle serves both windows: the dock (default) and settings (#settings).
 const isSettingsWindow = window.location.hash.startsWith("#settings");
+if (!isSettingsWindow) {
+  useApps
+    .getState()
+    .load()
+    .catch((error) => console.error("failed to load apps", error));
+}
 document.documentElement.classList.add(isSettingsWindow ? "settings-window" : "dock-window");
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

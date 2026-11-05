@@ -1,13 +1,28 @@
 import { useLayoutEffect, useRef } from "react";
-import { Settings2 } from "lucide-react";
+import { Search, Settings2 } from "lucide-react";
 
 import { ipc } from "../core/ipc";
 import { useSettings } from "../settings/store";
+import { AppButton } from "./AppButton";
+import { useApps } from "./apps";
 import { useAutoHide } from "./useAutoHide";
+
+/** Four squares, like the Windows key. */
+function StartMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+      <rect x="1" y="1" width="7.4" height="7.4" rx="1.4" />
+      <rect x="9.6" y="1" width="7.4" height="7.4" rx="1.4" />
+      <rect x="1" y="9.6" width="7.4" height="7.4" rx="1.4" />
+      <rect x="9.6" y="9.6" width="7.4" height="7.4" rx="1.4" />
+    </svg>
+  );
+}
 
 /** The dock bar. A pill reports its content width so the window can hug it. */
 export function Dock() {
   const settings = useSettings((s) => s.settings);
+  const apps = useApps((s) => s.apps);
   const contentRef = useRef<HTMLDivElement>(null);
   const { revealed, onEnter, onLeave } = useAutoHide(settings?.autoHide ?? false);
   const loaded = settings !== null;
@@ -44,9 +59,28 @@ export function Dock() {
       {/* Dragging the bar's background moves the dock; dropping it nearer the top or bottom
           snaps it to that edge. Buttons inside stay clickable. */}
       <div className="dock-content" ref={contentRef} data-tauri-drag-region>
-        <button className="dock-logo" aria-label="Dock" title="Dock">
-          <span className="dock-logo-mark" />
+        <button
+          className="dock-icon-button dock-start"
+          aria-label="Start"
+          title="Start"
+          onClick={() => ipc.shellStart().catch((error) => console.error(error))}
+        >
+          <StartMark />
         </button>
+        <button
+          className="dock-icon-button"
+          aria-label="Search"
+          title="Search"
+          onClick={() => ipc.shellSearch().catch((error) => console.error(error))}
+        >
+          <Search size={18} strokeWidth={2} />
+        </button>
+        <div className="dock-divider" data-tauri-drag-region />
+        <div className="dock-apps" data-tauri-drag-region>
+          {apps.map((app) => (
+            <AppButton key={app.key} app={app} />
+          ))}
+        </div>
         <div className="dock-spacer" data-tauri-drag-region />
         <button
           className="dock-icon-button"

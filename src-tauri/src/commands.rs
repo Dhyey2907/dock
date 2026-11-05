@@ -72,6 +72,49 @@ pub fn open_settings(app: AppHandle) -> AppResult<()> {
     shell::open_settings_window(&app)
 }
 
+#[tauri::command]
+pub fn apps_list(app: AppHandle) -> Vec<crate::apps::DockApp> {
+    crate::apps::service::list(&app)
+}
+
+/// An app's icon as a data URL (none if it has no icon).
+#[tauri::command(async)]
+pub fn app_icon(app: AppHandle, source: String) -> Option<String> {
+    crate::apps::service::icon(&app, &source)
+}
+
+#[tauri::command(async)]
+pub fn app_click(app: AppHandle, key: String) -> AppResult<()> {
+    crate::apps::service::click(&app, &key)
+}
+
+#[tauri::command(async)]
+pub fn app_launch(app: AppHandle, key: String) -> AppResult<()> {
+    crate::apps::service::launch(&app, &key)
+}
+
+#[tauri::command(async)]
+pub fn app_menu(app: AppHandle, key: String) -> AppResult<()> {
+    crate::apps::service::show_menu(&app, &key)
+}
+
+/// Open the Start menu (as the Windows key does).
+#[tauri::command(async)]
+pub fn shell_start() {
+    #[cfg(windows)]
+    crate::apps::win::press(&[windows::Win32::UI::Input::KeyboardAndMouse::VK_LWIN]);
+}
+
+/// Open Windows search (Win+S).
+#[tauri::command(async)]
+pub fn shell_search() {
+    #[cfg(windows)]
+    crate::apps::win::press(&[
+        windows::Win32::UI::Input::KeyboardAndMouse::VK_LWIN,
+        windows::Win32::UI::Input::KeyboardAndMouse::VIRTUAL_KEY(u16::from(b'S')),
+    ]);
+}
+
 /// Quit the dock; the exit handler puts the Windows taskbar back.
 #[tauri::command]
 pub fn app_quit(app: AppHandle) {
