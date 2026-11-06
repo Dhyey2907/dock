@@ -1,7 +1,10 @@
+mod accounts;
+mod actions;
 mod apps;
 mod automations;
 mod calendar;
 mod claude;
+mod command;
 mod commands;
 mod error;
 mod glass;
@@ -9,10 +12,12 @@ mod logging;
 mod media;
 mod productivity;
 mod quick;
+mod screenshot;
 mod settings;
 mod shell;
 mod system;
 mod widgets;
+mod workspaces;
 
 use tauri::Manager;
 
@@ -70,6 +75,10 @@ pub fn run() {
             app.manage(productivity::snip::SnipState::default());
             productivity::service::init(handle)?;
             app.manage(system::service::SystemState::default());
+            app.manage(command::CommandState::default());
+            app.manage(workspaces::WorkspaceStore::open(&handle.path().app_data_dir()?));
+            app.manage(screenshot::ScreenshotState::default());
+            app.manage(accounts::github::GithubService::default());
             commands::sync_autostart(handle, launch_at_startup);
 
             shell::init(handle)?;
@@ -85,9 +94,11 @@ pub fn run() {
                 std::thread::spawn(move || shell::floating::restore(&handle));
             }
             system::service::init(handle);
+            screenshot::init(handle);
+            accounts::github::init(handle);
             let settings = handle.state::<SettingsStore>().get();
-            if let Err(error) = shell::shortcut::apply(handle, &settings.toggle_shortcut) {
-                tracing::warn!(%error, "show/hide shortcut not set");
+            if let Err(error) = shell::shortcut::apply_all(handle, &settings) {
+                tracing::warn!(%error, "a global shortcut wasn't set");
             }
             productivity::register_capture_shortcut(handle);
             if !settings.onboarded {
@@ -118,6 +129,12 @@ pub fn run() {
             tauri::WindowEvent::Focused(false) if window.label() == productivity::snip::SNIP_LABEL => {
                 if let Err(error) = productivity::snip::cancel(window.app_handle()) {
                     tracing::warn!(%error, "failed to close the area picker");
+                }
+            }
+            // The command bar goes away too, like Start.
+            tauri::WindowEvent::Focused(false) if window.label() == command::COMMAND_LABEL => {
+                if let Err(error) = command::hide(window.app_handle()) {
+                    tracing::warn!(%error, "failed to hide the command bar");
                 }
             }
             _ => {}
@@ -249,6 +266,39 @@ pub fn run() {
             commands::show_desktop,
             commands::desktop_peek,
             commands::pick_path,
+            actions::hotkey_set,
+            actions::command_toggle,
+            actions::command_hide,
+            actions::command_apps,
+            actions::command_files,
+            actions::command_notes,
+            actions::command_launch_app,
+            actions::command_open_file,
+            actions::command_open_widget,
+            actions::command_open_settings,
+            actions::workspaces_list,
+            actions::workspace_save,
+            actions::workspace_restore,
+            actions::workspace_remove,
+            actions::screenshot_latest,
+            actions::screenshot_open,
+            actions::screenshot_drag,
+            actions::screenshot_dismiss,
+            actions::account_status,
+            actions::account_key_set,
+            actions::account_connect,
+            actions::account_disconnect,
+            actions::account_open_link,
+            actions::ask_claude,
+            actions::ask_claude_stop,
+            actions::spotify_playlists,
+            actions::spotify_play,
+            actions::notion_tasks,
+            actions::notion_complete,
+            actions::google_tasks,
+            actions::google_complete,
+            actions::github_current,
+            actions::github_refresh,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

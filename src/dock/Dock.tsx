@@ -8,6 +8,7 @@ import { ShowDesktopButton } from "./DockExtras";
 import { useDragOverRaise, useEmptyDockClicks, useReportButtonRects } from "./dockHooks";
 import { useApps } from "./apps";
 import { Glass } from "./glass/Glass";
+import { ScreenshotThumb } from "./ScreenshotThumb";
 import type { Ink } from "./glass/styles";
 import { WidgetBar } from "../widgets/WidgetBar";
 import { useAutoHide } from "./useAutoHide";
@@ -122,6 +123,7 @@ export function Dock({ main = true }: { main?: boolean }) {
         <div className="dock-spacer" data-tauri-drag-region />
         <div className="dock-group" data-tauri-drag-region>
           {split && <Glass theme={settings.theme} corners={corners} onInk={setInk} />}
+          {main && <ScreenshotThumb />}
           {main && <WidgetBar />}
           <button
             className="dock-icon-button"

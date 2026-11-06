@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { useWidgets } from "./store";
 
 import { events, ipc } from "../core/ipc";
+import { featureEvents, subscribe } from "../core/ipcFeatures";
 import type { WidgetEntry } from "../core/generated/WidgetEntry";
 import type { WidgetKind } from "../core/generated/WidgetKind";
 import { useGlass } from "../dock/glass/store";
@@ -47,6 +48,24 @@ export function WidgetBar() {
       unlisten?.();
     };
   }, []);
+
+  // The command bar asks for a widget's popup (opened unless it already is).
+  useEffect(
+    () =>
+      subscribe(() =>
+        featureEvents.onWidgetOpen((kind) => {
+          const tile = tiles.current.get(kind);
+          const where = useGlass.getState().geometry;
+          if (open === kind || !tile || !where) return;
+          const rect = tile.getBoundingClientRect();
+          setOpen(kind);
+          ipc
+            .panelToggle(kind, where.x + (rect.left + rect.width / 2) * where.scale)
+            .catch((error) => console.error("failed to open the popup", error));
+        }),
+      ),
+    [open],
+  );
 
   if (!settings) return null;
   const shown = settings.widgets.filter(visible);

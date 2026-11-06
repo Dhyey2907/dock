@@ -46,6 +46,9 @@ const defaults: Settings = {
   floating: [],
   autoShrink: true,
   apps: defaultApps,
+  hotkeys: { commandBar: "Ctrl+Space", quickCapture: "" },
+  accounts: { spotifyClientId: "", googleClientId: "", notionDatabaseId: "", githubRepos: [] },
+  latestScreenshot: true,
 };
 
 const settingsSet = vi.fn(async (settings: Settings) => settings);

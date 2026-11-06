@@ -1,11 +1,84 @@
-//! The keyboard shortcut that shows or hides the dock, from anywhere.
+//! Global keyboard shortcuts: show or hide the dock, the command bar, quick capture. All are
+//! registered together, so changing one never leaves another unregistered.
 
 use std::sync::Mutex;
+
+use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
-
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use ts_rs::TS;
 
-use crate::error::{AppError, AppResult};
+use crate::{
+    error::{AppError, AppResult},
+    settings::Settings,
+};
+
+/// Event sent to every window when the quick capture shortcut is pressed.
+/// Dock's own shortcuts registered now (the ones the hotkey editor sets).
+static PLANNED: Mutex<Vec<Shortcut>> = Mutex::new(Vec::new());
+/// Whether Alt+1 … Alt+9 are registered.
+static NUMBERS: Mutex<bool> = Mutex::new(false);
+
+
+/// Something a global shortcut does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum HotkeyAction {
+    /// Show or hide the dock.
+    Toggle,
+    CommandBar,
+    QuickCapture,
+}
+
+impl HotkeyAction {
+    pub const ALL: [HotkeyAction; 3] = [
+        HotkeyAction::Toggle,
+        HotkeyAction::CommandBar,
+        HotkeyAction::QuickCapture,
+    ];
+
+    /// This action's shortcut text in `settings`.
+    pub fn get(self, settings: &Settings) -> &str {
+        match self {
+            HotkeyAction::Toggle => &settings.toggle_shortcut,
+            HotkeyAction::CommandBar => &settings.hotkeys.command_bar,
+            HotkeyAction::QuickCapture => &settings.hotkeys.quick_capture,
+        }
+    }
+
+    pub fn set(self, settings: &mut Settings, text: String) {
+        match self {
+            HotkeyAction::Toggle => settings.toggle_shortcut = text,
+            HotkeyAction::CommandBar => settings.hotkeys.command_bar = text,
+            HotkeyAction::QuickCapture => settings.hotkeys.quick_capture = text,
+        }
+    }
+
+    fn run(self, app: &AppHandle) {
+        match self {
+            HotkeyAction::Toggle => super::toggle_dock(app),
+            HotkeyAction::CommandBar => {
+                // Off the event loop's thread: the first open creates a window.
+                let app = app.clone();
+                std::thread::spawn(move || {
+                    if let Err(error) = crate::command::toggle_window(&app) {
+                        tracing::warn!(%error, "could not open the command bar");
+                    }
+                });
+            }
+            HotkeyAction::QuickCapture => {
+                let app = app.clone();
+                // Off the main thread: the popup window may need creating.
+                std::thread::spawn(move || {
+                    if let Err(error) = super::panel::show_capture(&app) {
+                        tracing::warn!(%error, "could not open quick capture");
+                    }
+                });
+            }
+        }
+    }
+}
 
 /// Parse shortcut text as typed in Settings ("Ctrl+Alt+D"); empty means none.
 pub fn parse(text: &str) -> AppResult<Option<Shortcut>> {
@@ -25,32 +98,53 @@ pub fn parse(text: &str) -> AppResult<Option<Shortcut>> {
     Ok(Some(shortcut))
 }
 
-/// The show/hide shortcut registered now.
-static CURRENT: Mutex<Option<Shortcut>> = Mutex::new(None);
-/// Whether Alt+1 … Alt+9 are registered.
-static NUMBERS: Mutex<bool> = Mutex::new(false);
-
-/// Make `text` the show/hide shortcut, replacing the old one (and only that one: the
-/// Alt+number shortcuts stay).
-pub fn apply(app: &AppHandle, text: &str) -> AppResult<()> {
-    let shortcut = parse(text)?;
-    let manager = app.global_shortcut();
-    let mut current = CURRENT.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(old) = current.take() {
-        manager
-            .unregister(old)
-            .map_err(|e| AppError::Platform(e.to_string()))?;
+/// Every action's shortcut, parsed and checked: none used twice.
+pub fn plan(settings: &Settings) -> AppResult<Vec<(HotkeyAction, Shortcut)>> {
+    let mut planned: Vec<(HotkeyAction, Shortcut)> = Vec::new();
+    for action in HotkeyAction::ALL {
+        let Some(shortcut) = parse(action.get(settings))? else {
+            continue;
+        };
+        if planned.iter().any(|(_, s)| s.id() == shortcut.id()) {
+            return Err(AppError::InvalidInput(
+                "That shortcut is already used for something else in Dock.".into(),
+            ));
+        }
+        planned.push((action, shortcut));
     }
-    let Some(shortcut) = shortcut else { return Ok(()) };
+    Ok(planned)
+}
+
+/// Register every shortcut in `settings`, replacing the ones registered before.
+pub fn apply_all(app: &AppHandle, settings: &Settings) -> AppResult<()> {
+    let planned = plan(settings)?;
+    let manager = app.global_shortcut();
     manager
-        .on_shortcut(shortcut, |app, _shortcut, event| {
+        .unregister_all()
+        .map_err(|e| AppError::Platform(e.to_string()))?;
+    // Clearing everything cleared Alt+1 … Alt+9 too.
+    *NUMBERS.lock().unwrap_or_else(|e| e.into_inner()) = false;
+    *PLANNED.lock().unwrap_or_else(|e| e.into_inner()) = planned.iter().map(|(_, s)| *s).collect();
+    let mut taken = None;
+    for (action, shortcut) in planned {
+        let result = manager.on_shortcut(shortcut, move |app, _shortcut, event| {
             if event.state == ShortcutState::Pressed {
-                super::toggle_dock(app);
+                action.run(app);
             }
-        })
-        .map_err(|_| AppError::InvalidInput("Another app already uses that shortcut.".into()))?;
-    *current = Some(shortcut);
-    Ok(())
+        });
+        if result.is_err() {
+            taken = Some(action);
+        }
+    }
+    if let Err(error) = set_numbers(app, settings.apps.number_shortcuts) {
+        tracing::warn!(%error, "Alt+number shortcuts not set");
+    }
+    match taken {
+        Some(_) => Err(AppError::InvalidInput(
+            "Another app already uses that shortcut.".into(),
+        )),
+        None => Ok(()),
+    }
 }
 
 /// Alt+`n` for `n` in 1..=9.
@@ -82,8 +176,8 @@ pub fn set_numbers(app: &AppHandle, on: bool) -> AppResult<()> {
     }
     let manager = app.global_shortcut();
     for (n, shortcut) in number_shortcuts() {
-        // Never take the show/hide shortcut's keys.
-        if CURRENT.lock().unwrap_or_else(|e| e.into_inner()).as_ref() == Some(&shortcut) {
+        // Never take the keys of one of Dock's own shortcuts.
+        if PLANNED.lock().unwrap_or_else(|e| e.into_inner()).contains(&shortcut) {
             continue;
         }
         let result = if on {
@@ -105,11 +199,14 @@ pub fn set_numbers(app: &AppHandle, on: bool) -> AppResult<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse;
+    use super::*;
 
     #[test]
     fn shortcuts_need_a_modifier_and_a_real_key() {
         assert!(parse("Ctrl+Alt+D").unwrap().is_some());
+        let numbers = number_shortcuts();
+        assert_eq!(numbers.len(), 9);
+        assert_eq!(numbers[8], (9, parse("Alt+9").unwrap().unwrap()));
         assert!(parse("Shift+Super+Space").unwrap().is_some());
         assert!(parse("  ").unwrap().is_none());
         assert!(parse("D").is_err());
@@ -117,10 +214,12 @@ mod tests {
     }
 
     #[test]
-    fn alt_numbers_cover_one_to_nine() {
-        let numbers = super::number_shortcuts();
-        assert_eq!(numbers.len(), 9);
-        assert_eq!(numbers[0].1, parse("Alt+1").unwrap().unwrap());
-        assert_eq!(numbers[8], (9, parse("Alt+9").unwrap().unwrap()));
+    fn every_action_gets_its_own_shortcut() {
+        let mut settings = Settings::default();
+        assert_eq!(plan(&settings).unwrap().len(), 2);
+        settings.hotkeys.quick_capture = "Ctrl+Shift+N".into();
+        assert_eq!(plan(&settings).unwrap().len(), 3);
+        settings.hotkeys.quick_capture = "ctrl+alt+d".into();
+        assert!(plan(&settings).is_err());
     }
 }

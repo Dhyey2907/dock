@@ -254,6 +254,15 @@ pub enum WidgetKind {
     UsbDrives,
     /// Today's trending GitHub repositories.
     GithubTrending,
+    /// Ask Claude a question with your own Anthropic API key.
+    AskClaude,
+    /// Your Spotify playlists, played on the active device.
+    Spotify,
+    /// Undone tasks from a Notion database.
+    Notion,
+    GoogleTasks,
+    /// The latest GitHub Actions run of each repo you list.
+    GithubActions,
     /// A widget from a newer version of the dock; dropped on load.
     #[serde(other)]
     #[ts(skip)]
@@ -262,7 +271,7 @@ pub enum WidgetKind {
 
 impl WidgetKind {
     /// Every widget, in the default order (left to right).
-    pub const ALL: [WidgetKind; 33] = [
+    pub const ALL: [WidgetKind; 38] = [
         WidgetKind::Music,
         WidgetKind::Focus,
         WidgetKind::Claude,
@@ -296,6 +305,11 @@ impl WidgetKind {
         WidgetKind::DisplayMode,
         WidgetKind::UsbDrives,
         WidgetKind::GithubTrending,
+        WidgetKind::AskClaude,
+        WidgetKind::Spotify,
+        WidgetKind::Notion,
+        WidgetKind::GoogleTasks,
+        WidgetKind::GithubActions,
     ];
 }
 
@@ -389,6 +403,60 @@ impl Default for QuietHours {
     }
 }
 
+/// Global keyboard shortcuts besides show/hide (which is `Settings::toggle_shortcut`). Each is
+/// shortcut text ("Ctrl+Space"); empty for none.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct Hotkeys {
+    /// Opens the command bar.
+    pub command_bar: String,
+    /// Opens quick capture (a note from anywhere).
+    pub quick_capture: String,
+}
+
+impl Default for Hotkeys {
+    fn default() -> Self {
+        Self {
+            command_bar: "Ctrl+Space".into(),
+            quick_capture: String::new(),
+        }
+    }
+}
+
+/// The non-secret half of the account widgets' setup. Keys and tokens are in Windows Credential
+/// Manager; these are ids the user types in, which are not secrets.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct AccountSettings {
+    /// The client id of the user's own Spotify app.
+    pub spotify_client_id: String,
+    /// The client id of the user's own Google OAuth "Desktop app" client.
+    pub google_client_id: String,
+    /// The Notion database the tasks come from.
+    pub notion_database_id: String,
+    /// GitHub repos to watch, as "owner/name".
+    pub github_repos: Vec<String>,
+}
+
+/// A GitHub "owner/name", or `None` when `text` isn't one.
+pub fn github_repo(text: &str) -> Option<String> {
+    let text = text
+        .trim()
+        .trim_start_matches("https://github.com/")
+        .trim_end_matches('/');
+    let (owner, name) = text.split_once('/')?;
+    let ok = |part: &str| {
+        !part.is_empty()
+            && part.len() <= 100
+            && part
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+    };
+    (ok(owner) && ok(name)).then(|| format!("{owner}/{name}"))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
@@ -444,6 +512,12 @@ pub struct Settings {
     pub auto_shrink: bool,
     /// Apps and windows on the dock: custom pins, names, icons, shortcuts and behaviour.
     pub apps: AppsSettings,
+    /// The command bar and quick capture shortcuts.
+    pub hotkeys: Hotkeys,
+    /// Setup for the account widgets (no secrets).
+    pub accounts: AccountSettings,
+    /// A new screenshot shows on the dock for two minutes, ready to drag.
+    pub latest_screenshot: bool,
 }
 
 impl Default for Settings {
@@ -473,6 +547,9 @@ impl Default for Settings {
             floating: Vec::new(),
             auto_shrink: true,
             apps: AppsSettings::default(),
+            hotkeys: Hotkeys::default(),
+            accounts: AccountSettings::default(),
+            latest_screenshot: true,
         }
     }
 }
@@ -519,6 +596,17 @@ impl Settings {
             keep
         });
         self.apps = self.apps.normalized();
+        let mut repos: Vec<String> = Vec::new();
+        for repo in self.accounts.github_repos.iter().filter_map(|r| github_repo(r)) {
+            if repos.len() < 20 && !repos.iter().any(|r| r.eq_ignore_ascii_case(&repo)) {
+                repos.push(repo);
+            }
+        }
+        self.accounts.github_repos = repos;
+        let clean = |t: &str| t.trim().chars().take(200).collect::<String>();
+        self.accounts.spotify_client_id = clean(&self.accounts.spotify_client_id);
+        self.accounts.google_client_id = clean(&self.accounts.google_client_id);
+        self.accounts.notion_database_id = clean(&self.accounts.notion_database_id);
         self
     }
 }
@@ -1066,6 +1154,32 @@ mod tests {
         assert_eq!(apps.hidden, vec!["notepad.exe".to_string()]);
         assert!(apps.overrides.is_empty());
         assert_eq!(website_address("ftp://x.com"), None);
+    }
+
+    #[test]
+    fn github_repos_are_cleaned() {
+        let mut settings = Settings::default();
+        settings.accounts.github_repos = vec![
+            " tauri-apps/tauri ".into(),
+            "https://github.com/rust-lang/rust/".into(),
+            "Tauri-Apps/Tauri".into(),
+            "not a repo".into(),
+            "a/b/c".into(),
+        ];
+        assert_eq!(
+            settings.normalized().accounts.github_repos,
+            vec!["tauri-apps/tauri".to_string(), "rust-lang/rust".to_string()]
+        );
+    }
+
+    #[test]
+    fn older_files_get_default_hotkeys() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join(FILE_NAME), r#"{"toggleShortcut":"Ctrl+Alt+K"}"#).unwrap();
+        let settings = SettingsStore::open(dir.path()).get();
+        assert_eq!(settings.toggle_shortcut, "Ctrl+Alt+K");
+        assert_eq!(settings.hotkeys.command_bar, "Ctrl+Space");
+        assert!(settings.latest_screenshot);
     }
 
     #[test]

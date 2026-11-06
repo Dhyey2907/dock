@@ -26,8 +26,10 @@ export function AppearanceSection({ settings, save }: { settings: Settings; save
   return (
     <section>
       <h2>Appearance</h2>
-      <StyleCards value={settings.theme} onChange={(theme) => save({ theme })} />
-      <Row label="Position">
+      <div data-setting="theme">
+        <StyleCards value={settings.theme} onChange={(theme) => save({ theme })} />
+      </div>
+      <Row label="Position" id="edge">
         <Choice<Edge>
           label="Position"
           value={settings.edge}
@@ -40,6 +42,7 @@ export function AppearanceSection({ settings, save }: { settings: Settings; save
       </Row>
       <Row
         label="Shape"
+        id="style"
         hint="A floating pill, edge to edge like the taskbar, or split: apps left, widgets right."
       >
         <Choice<DockStyle>
@@ -62,7 +65,7 @@ export function AppearanceSection({ settings, save }: { settings: Settings; save
           />
         </Row>
       )}
-      <Row label="Size">
+      <Row label="Size" id="size">
         <Choice<DockSize>
           label="Size"
           value={settings.size}
@@ -76,7 +79,11 @@ export function AppearanceSection({ settings, save }: { settings: Settings; save
       </Row>
       <LookRows settings={settings} save={save} />
       {screens.length > 1 && (
-        <Row label="Docks on" hint="One dock, or one on every screen showing that screen's windows.">
+        <Row
+          label="Docks on"
+          id="docksOn"
+          hint="One dock, or one on every screen showing that screen's windows."
+        >
           <Choice<DocksOn>
             label="Docks on"
             value={settings.docksOn}
@@ -90,6 +97,7 @@ export function AppearanceSection({ settings, save }: { settings: Settings; save
       )}
       {screens.length > 1 && (
         <Row
+          id="screen"
           label={settings.docksOn === "every" ? "Main dock" : "Screen"}
           hint={
             settings.docksOn === "every"
@@ -214,6 +222,7 @@ export function TaskbarSection({ settings, save }: { settings: Settings; save: S
     <section>
       <h2>Taskbar & startup</h2>
       <Row
+        id="taskbarMode"
         label="Windows taskbar"
         hint={
           settings.taskbarMode === "hidden"
@@ -231,7 +240,11 @@ export function TaskbarSection({ settings, save }: { settings: Settings; save: S
           onChange={(taskbarMode) => save({ taskbarMode })}
         />
       </Row>
-      <Row label="Auto-hide the dock" hint="Slides away; touch the screen edge to bring it back.">
+      <Row
+        label="Auto-hide the dock"
+        id="autoHide"
+        hint="Slides away; touch the screen edge to bring it back."
+      >
         <Toggle
           label="Auto-hide the dock"
           checked={settings.autoHide}
@@ -241,14 +254,14 @@ export function TaskbarSection({ settings, save }: { settings: Settings; save: S
       <Row label="Show or hide the dock" hint="A keyboard shortcut that works anywhere.">
         <ShortcutField value={settings.toggleShortcut} />
       </Row>
-      <Row label="Launch at sign-in">
+      <Row label="Launch at sign-in" id="launchAtStartup">
         <Toggle
           label="Launch at sign-in"
           checked={settings.launchAtStartup}
           onChange={(launchAtStartup) => save({ launchAtStartup })}
         />
       </Row>
-      <Row label="Quit Dock" hint="Closes the dock and brings back the Windows taskbar.">
+      <Row label="Quit Dock" id="quit" hint="Closes the dock and brings back the Windows taskbar.">
         <button
           className="settings-quit"
           onClick={() => ipc.appQuit().catch((error) => console.error("failed to quit", error))}
