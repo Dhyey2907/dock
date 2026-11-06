@@ -41,6 +41,8 @@ export function lookStyle(settings: Pick<Settings, "size" | "look">, shrink = 1)
     "--blur-scale": (look.blur / 100).toFixed(2),
     "--widget-bg": (look.widgetBackground / 100).toFixed(2),
     "--spring": springEasing(look.bounce),
+    // Widest the bar may get before its widget row scrolls: the screen, less the pill margins.
+    "--dock-max": `${Math.max(320, window.screen.width - 24)}px`,
   };
 }
 

@@ -827,7 +827,8 @@ button {
 }
 /* More widgets than fit: the dock stays on screen and the widget row scrolls sideways. */
 .dock-content {
-  max-width: 100%;
+  /* Capped at the screen, not the window: the window sizes itself to this bar. */
+  max-width: var(--dock-max, none);
 }
 .dock-widgets {
   min-width: 0;
