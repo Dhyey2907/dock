@@ -451,6 +451,8 @@ fn relayout_all(app: &AppHandle) {
 /// re-place them all. Creates windows, so never call it on the main thread.
 pub fn relayout(app: &AppHandle) {
     sync_docks(app);
+    // Screens may have come or gone: windows on them get rearranged.
+    crate::apps::service::docks_changed(app);
 }
 
 /// A dock's page says the cursor arrived on (or left) it while it auto-hides.

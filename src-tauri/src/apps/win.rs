@@ -10,13 +10,13 @@ use std::{
 use windows::{
     core::{w, Interface, BOOL, HSTRING, PCWSTR, PWSTR},
     Win32::{
-        Foundation::{CloseHandle, HWND, LPARAM, PROPERTYKEY, SIZE, WPARAM},
+        Foundation::{CloseHandle, HWND, LPARAM, PROPERTYKEY, RECT, SIZE, WPARAM},
         Graphics::{
             Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED},
             Gdi::{
-                DeleteObject, GetDC, GetDIBits, GetMonitorInfoW, GetObjectW, MonitorFromWindow, ReleaseDC,
-                BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP, HGDIOBJ, MONITORINFO,
-                MONITOR_DEFAULTTONEAREST,
+                DeleteObject, EnumDisplayMonitors, GetDC, GetDIBits, GetMonitorInfoW, GetObjectW,
+                MonitorFromWindow, ReleaseDC, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
+                HBITMAP, HDC, HGDIOBJ, HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST,
             },
         },
         Storage::{
@@ -55,8 +55,9 @@ use windows::{
                 SetForegroundWindow, ShowWindowAsync, CHILDID_SELF, EVENT_OBJECT_CLOAKED,
                 EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_NAMECHANGE,
                 EVENT_OBJECT_UNCLOAKED, EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND,
-                EVENT_SYSTEM_MINIMIZESTART, GWL_EXSTYLE, GW_OWNER, OBJID_WINDOW, SW_MINIMIZE, SW_RESTORE,
-                SW_SHOWNORMAL, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WM_CLOSE,
+                EVENT_SYSTEM_MINIMIZESTART, GWL_EXSTYLE, GW_OWNER, OBJID_WINDOW, SHOW_WINDOW_CMD,
+                SW_MINIMIZE, SW_RESTORE, SW_SHOWNORMAL, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
+                WM_CLOSE,
             },
         },
     },
@@ -381,6 +382,7 @@ pub fn windows() -> Vec<WinInfo> {
                 (None, Some(exe)) => cached_name(exe, || program_name(exe)),
                 (None, None) => String::from_utf16_lossy(&title[..len]),
             };
+            let (screen, monitor) = window_screen(hwnd);
             Some(WinInfo {
                 hwnd: hwnd.0 as isize,
                 title: String::from_utf16_lossy(&title[..len]),
@@ -388,28 +390,61 @@ pub fn windows() -> Vec<WinInfo> {
                 app_id,
                 minimized,
                 app_name,
-                screen: window_screen(hwnd),
+                screen,
+                monitor,
+                hung: is_hung(hwnd.0 as isize),
+                flashing: super::hooks::is_flashing(hwnd.0 as isize),
             })
         })
         .collect()
 }
 
-/// The full rectangle of the screen a window is on. For a minimized window Windows answers
-/// with the screen it will come back to.
-fn window_screen(hwnd: HWND) -> Option<crate::shell::placement::Rect> {
-    let mut info = MONITORINFO {
-        cbSize: std::mem::size_of::<MONITORINFO>() as u32,
-        ..Default::default()
-    };
-    // SAFETY: read-only queries; `info` is a correctly sized local.
-    let ok = unsafe { GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mut info) };
-    let r = info.rcMonitor;
-    ok.as_bool().then(|| crate::shell::placement::Rect {
+/// The full rectangle and device name of the screen a window is on. For a minimized window
+/// Windows answers with the screen it will come back to.
+fn window_screen(hwnd: HWND) -> (Option<crate::shell::placement::Rect>, Option<String>) {
+    // SAFETY: a plain query on a window handle.
+    let monitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) };
+    match monitor_info(monitor) {
+        Some(screen) => (Some(screen.rect), Some(screen.name)),
+        None => (None, None),
+    }
+}
+
+fn to_rect(r: RECT) -> crate::shell::placement::Rect {
+    crate::shell::placement::Rect {
         x: r.left,
         y: r.top,
         width: (r.right - r.left).max(0) as u32,
         height: (r.bottom - r.top).max(0) as u32,
+    }
+}
+
+/// A screen's name, rectangle and work area.
+fn monitor_info(monitor: HMONITOR) -> Option<super::layout::Screen> {
+    let mut info = MONITORINFOEXW::default();
+    info.monitorInfo.cbSize = std::mem::size_of::<MONITORINFOEXW>() as u32;
+    // SAFETY: `info` is a correctly sized MONITORINFOEXW, which GetMonitorInfoW accepts in
+    // place of a MONITORINFO when cbSize says so.
+    let ok = unsafe { GetMonitorInfoW(monitor, (&mut info as *mut MONITORINFOEXW).cast::<MONITORINFO>()) };
+    ok.as_bool().then(|| super::layout::Screen {
+        name: wide_to_string(&info.szDevice),
+        rect: to_rect(info.monitorInfo.rcMonitor),
+        work: to_rect(info.monitorInfo.rcWork),
+        primary: info.monitorInfo.dwFlags & 1 != 0, // MONITORINFOF_PRIMARY,
     })
+}
+
+/// The screens connected now.
+pub fn screens() -> Vec<super::layout::Screen> {
+    unsafe extern "system" fn each(monitor: HMONITOR, _dc: HDC, _rect: *mut RECT, list: LPARAM) -> BOOL {
+        // SAFETY: `list` is the Vec passed to EnumDisplayMonitors below, alive for the call.
+        unsafe { (*(list.0 as *mut Vec<HMONITOR>)).push(monitor) };
+        true.into()
+    }
+    let mut monitors: Vec<HMONITOR> = Vec::new();
+    // SAFETY: the callback only pushes into `monitors`, which outlives the call.
+    let _ = unsafe { EnumDisplayMonitors(None, None, Some(each), LPARAM(&mut monitors as *mut _ as isize)) };
+    monitors.into_iter().filter_map(monitor_info).collect()
 }
 
 pub fn foreground() -> isize {
@@ -575,22 +610,29 @@ pub fn close(hwnd: isize) {
     let _ = unsafe { PostMessageW(Some(HWND(hwnd as *mut c_void)), WM_CLOSE, WPARAM(0), LPARAM(0)) };
 }
 
-/// Start an app the way Explorer would. Runs on its own short-lived thread with the
-/// single-threaded COM that ShellExecute wants; `SEE_MASK_NOASYNC` makes it finish before the
-/// thread exits.
+/// Start an app the way Explorer would.
 pub fn launch(launch: &Launch) {
     let target = match launch {
         Launch::Shortcut(path) | Launch::Program(path) => path.clone(),
         Launch::AppId(id) => format!("shell:AppsFolder\\{id}"),
     };
+    shell_execute(target, None, SW_SHOWNORMAL);
+}
+
+/// Open `file` (a program, document, folder or address) with `params`. Runs on its own
+/// short-lived thread with the single-threaded COM that ShellExecute wants; `SEE_MASK_NOASYNC`
+/// makes it finish before the thread exits.
+pub fn shell_execute(target: String, params: Option<String>, show: SHOW_WINDOW_CMD) {
     let _ = std::thread::Builder::new().name("launch".into()).spawn(move || {
         let file = HSTRING::from(target);
+        let params = params.map(HSTRING::from);
         let mut info = SHELLEXECUTEINFOW {
             cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
             fMask: SEE_MASK_NOASYNC | SEE_MASK_FLAG_NO_UI,
             lpVerb: w!("open"),
             lpFile: PCWSTR(file.as_ptr()),
-            nShow: SW_SHOWNORMAL.0,
+            lpParameters: params.as_ref().map_or(PCWSTR::null(), |p| PCWSTR(p.as_ptr())),
+            nShow: show.0,
             ..Default::default()
         };
         // SAFETY: COM is set up and torn down on this thread; `info` and `file` outlive the call.
@@ -604,6 +646,390 @@ pub fn launch(launch: &Launch) {
             }
         }
     });
+}
+
+// ---------- Window features: moving, snapping, ending, peeking ----------
+
+/// Windows thinks the window stopped responding (it hasn't read its messages for a while).
+pub fn is_hung(hwnd: isize) -> bool {
+    // SAFETY: a plain query on a window handle.
+    unsafe { windows::Win32::UI::WindowsAndMessaging::IsHungAppWindow(HWND(hwnd as *mut c_void)) }.as_bool()
+}
+
+pub fn is_window(hwnd: isize) -> bool {
+    // SAFETY: a plain query on a window handle.
+    unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindow(Some(HWND(hwnd as *mut c_void))) }.as_bool()
+}
+
+/// The window's rectangle on screen.
+pub fn window_rect(hwnd: isize) -> Option<crate::shell::placement::Rect> {
+    let mut r = RECT::default();
+    // SAFETY: fills a local RECT.
+    unsafe { windows::Win32::UI::WindowsAndMessaging::GetWindowRect(HWND(hwnd as *mut c_void), &mut r) }
+        .ok()?;
+    Some(to_rect(r))
+}
+
+/// The window's visible frame (without the invisible resize borders Windows 10 and 11 add).
+pub fn frame_rect(hwnd: isize) -> Option<crate::shell::placement::Rect> {
+    let mut r = RECT::default();
+    // SAFETY: reads a documented attribute into a correctly sized local.
+    unsafe {
+        DwmGetWindowAttribute(
+            HWND(hwnd as *mut c_void),
+            windows::Win32::Graphics::Dwm::DWMWA_EXTENDED_FRAME_BOUNDS,
+            (&mut r as *mut RECT).cast(),
+            std::mem::size_of::<RECT>() as u32,
+        )
+    }
+    .ok()?;
+    Some(to_rect(r))
+}
+
+pub fn is_maximized(hwnd: isize) -> bool {
+    // SAFETY: a plain query on a window handle.
+    unsafe { windows::Win32::UI::WindowsAndMessaging::IsZoomed(HWND(hwnd as *mut c_void)) }.as_bool()
+}
+
+/// Where a window is now, for putting it back after a screen comes and goes. A maximized or
+/// minimized window is described by the rectangle it restores to.
+pub fn placement(hwnd: isize, primary_work_offset: (i32, i32)) -> Option<super::layout::Placement> {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowPlacement, WINDOWPLACEMENT, WPF_RESTORETOMAXIMIZED,
+    };
+    let handle = HWND(hwnd as *mut c_void);
+    let mut wp = WINDOWPLACEMENT {
+        length: std::mem::size_of::<WINDOWPLACEMENT>() as u32,
+        ..Default::default()
+    };
+    // SAFETY: read-only queries; `wp` is a correctly sized local.
+    let (iconic, zoomed) = unsafe {
+        GetWindowPlacement(handle, &mut wp).ok()?;
+        (IsIconic(handle).as_bool(), is_maximized(hwnd))
+    };
+    let rect = if iconic || zoomed {
+        // Restore rectangles are in workspace coordinates: offset by the main work area.
+        let mut r = to_rect(wp.rcNormalPosition);
+        r.x += primary_work_offset.0;
+        r.y += primary_work_offset.1;
+        r
+    } else {
+        window_rect(hwnd)?
+    };
+    let (_, monitor) = window_screen(handle);
+    Some(super::layout::Placement {
+        hwnd,
+        monitor: monitor?,
+        rect,
+        maximized: zoomed || (iconic && wp.flags.0 & WPF_RESTORETOMAXIMIZED.0 != 0),
+    })
+}
+
+/// Move a window to `target` (its whole rectangle, or with `frame` its visible frame), then
+/// maximize it if asked. A maximized or minimized window is restored first. Async calls only,
+/// on a worker thread, so a hung window can't hang the dock.
+pub fn move_window(hwnd: isize, target: crate::shell::placement::Rect, frame: bool, maximize: bool) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SetWindowPos, SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE, SWP_NOZORDER, SW_MAXIMIZE,
+    };
+    let _ = std::thread::Builder::new()
+        .name("move-window".into())
+        .spawn(move || {
+            let handle = HWND(hwnd as *mut c_void);
+            // SAFETY: async window calls on a handle that may close meanwhile (they then fail).
+            unsafe {
+                if is_maximized(hwnd) || IsIconic(handle).as_bool() {
+                    let _ = ShowWindowAsync(handle, SW_RESTORE);
+                    std::thread::sleep(std::time::Duration::from_millis(150));
+                }
+                let (mut l, mut t, mut r, mut b) = (0, 0, 0, 0);
+                if frame {
+                    if let (Some(outer), Some(visible)) = (window_rect(hwnd), frame_rect(hwnd)) {
+                        l = visible.x - outer.x;
+                        t = visible.y - outer.y;
+                        r = (outer.x + outer.width as i32) - (visible.x + visible.width as i32);
+                        b = (outer.y + outer.height as i32) - (visible.y + visible.height as i32);
+                    }
+                }
+                let _ = SetWindowPos(
+                    handle,
+                    None,
+                    target.x - l,
+                    target.y - t,
+                    target.width as i32 + l + r,
+                    target.height as i32 + t + b,
+                    SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS,
+                );
+                if maximize {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    let _ = ShowWindowAsync(handle, SW_MAXIMIZE);
+                }
+            }
+        });
+}
+
+/// The process that owns a window.
+pub fn window_pid(hwnd: isize) -> u32 {
+    let mut pid = 0;
+    // SAFETY: a plain query into a local.
+    unsafe { GetWindowThreadProcessId(HWND(hwnd as *mut c_void), Some(&mut pid)) };
+    pid
+}
+
+/// End a process at once, as Task Manager's "End task" does for a program that isn't
+/// responding. Never our own.
+pub fn end_process(pid: u32) -> bool {
+    use windows::Win32::System::Threading::{TerminateProcess, PROCESS_TERMINATE};
+    if pid == 0 || pid == std::process::id() {
+        return false;
+    }
+    // SAFETY: a terminate-only handle, closed before returning.
+    unsafe {
+        let Ok(process) = OpenProcess(PROCESS_TERMINATE, false, pid) else {
+            return false;
+        };
+        let ended = TerminateProcess(process, 1).is_ok();
+        let _ = CloseHandle(process);
+        ended
+    }
+}
+
+/// Close `windows` (as their close buttons would), wait for them to go, then start `launch`
+/// again. If they are still open after a while (an unsaved document asking, say), the app is
+/// left as it is.
+pub fn restart(windows: Vec<isize>, launch: Launch) {
+    let _ = std::thread::Builder::new().name("restart".into()).spawn(move || {
+        for &hwnd in &windows {
+            close(hwnd);
+        }
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+        while windows.iter().any(|&h| is_window(h)) {
+            if std::time::Instant::now() > deadline {
+                tracing::info!("an app didn't close for a restart; leaving it");
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+        // Give the process a moment to finish exiting (single-instance apps would otherwise
+        // hand the new launch to the old process).
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        self::launch(&launch);
+    });
+}
+
+/// Start an app with extra command-line arguments. Packaged apps get them through their
+/// activation; desktop apps through their program (or shortcut) file.
+pub fn launch_with_args(launch: &Launch, exe: Option<&str>, args: &str) {
+    match (launch, exe) {
+        (Launch::AppId(id), _) => activate_with_args(id.clone(), args.to_string()),
+        (_, Some(exe)) => shell_execute(exe.to_string(), Some(args.to_string()), SW_SHOWNORMAL),
+        (Launch::Shortcut(path) | Launch::Program(path), None) => {
+            shell_execute(path.clone(), Some(args.to_string()), SW_SHOWNORMAL)
+        }
+    }
+}
+
+fn activate_with_args(id: String, args: String) {
+    use windows::Win32::UI::Shell::{ApplicationActivationManager, IApplicationActivationManager, AO_NONE};
+    let _ = std::thread::Builder::new()
+        .name("activate".into())
+        .spawn(move || {
+            // SAFETY: COM set up and torn down on this thread; the manager is released when dropped.
+            unsafe {
+                let initialised = CoInitializeEx(None, COINIT_APARTMENTTHREADED).is_ok();
+                let result = CoCreateInstance::<_, IApplicationActivationManager>(
+                    &ApplicationActivationManager,
+                    None,
+                    windows::Win32::System::Com::CLSCTX_LOCAL_SERVER,
+                )
+                .and_then(|manager| {
+                    manager.ActivateApplication(&HSTRING::from(id), &HSTRING::from(args), AO_NONE)
+                });
+                if let Err(error) = result {
+                    tracing::warn!(%error, "could not start an app with arguments");
+                }
+                if initialised {
+                    CoUninitialize();
+                }
+            }
+        });
+}
+
+/// Run a command line without a console window.
+pub fn run_command(command: &str) {
+    shell_execute(
+        "cmd.exe".into(),
+        Some(format!("/c {command}")),
+        windows::Win32::UI::WindowsAndMessaging::SW_HIDE,
+    );
+}
+
+/// Open a file, folder or address.
+pub fn open(target: &str) {
+    shell_execute(target.to_string(), None, SW_SHOWNORMAL);
+}
+
+/// Show the desktop, or bring the windows back (as Win+D does).
+pub fn show_desktop() {
+    press(&[
+        windows::Win32::UI::Input::KeyboardAndMouse::VK_LWIN,
+        VIRTUAL_KEY(u16::from(b'D')),
+    ]);
+}
+
+/// Peek at the desktop (every window turns to glass) while `on`, keeping `keep` (the dock)
+/// visible. Uses the same DWM call the taskbar's corner does; it has no public name, so it is
+/// looked up by number and skipped if missing.
+pub fn peek(on: bool, keep: isize) {
+    use windows::Win32::System::LibraryLoader::{GetProcAddress, LoadLibraryW};
+    type Peek = unsafe extern "system" fn(u32, HWND, HWND, u32, usize) -> i32;
+    static PEEK: std::sync::OnceLock<Option<Peek>> = std::sync::OnceLock::new();
+    let peek = PEEK.get_or_init(|| {
+        // SAFETY: dwmapi stays loaded for the process's life; ordinal 113 is
+        // DwmpActivateLivePreview on Windows 8 and later, with this signature.
+        unsafe {
+            let module = LoadLibraryW(w!("dwmapi.dll")).ok()?;
+            let address = GetProcAddress(module, windows::core::PCSTR(113 as *const u8))?;
+            Some(std::mem::transmute::<unsafe extern "system" fn() -> isize, Peek>(
+                address,
+            ))
+        }
+    });
+    if let Some(peek) = peek {
+        // SAFETY: the desktop (shell) window and our own dock; 1 = peek at the desktop.
+        unsafe {
+            let desktop = windows::Win32::UI::WindowsAndMessaging::GetShellWindow();
+            peek(u32::from(on), desktop, HWND(keep as *mut c_void), 1, 0);
+        }
+    }
+}
+
+/// The cursor's position on screen.
+pub fn cursor() -> (i32, i32) {
+    let mut point = windows::Win32::Foundation::POINT::default();
+    // SAFETY: fills a local POINT.
+    let _ = unsafe { windows::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut point) };
+    (point.x, point.y)
+}
+
+/// Whether the (primary) mouse button is held down now.
+pub fn primary_button_down() -> bool {
+    use windows::Win32::UI::{
+        Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_RBUTTON},
+        WindowsAndMessaging::{GetSystemMetrics, SM_SWAPBUTTON},
+    };
+    // SAFETY: plain state queries. GetAsyncKeyState reads physical buttons, so swapped buttons
+    // are accounted for here.
+    unsafe {
+        let key = if GetSystemMetrics(SM_SWAPBUTTON) != 0 {
+            VK_RBUTTON
+        } else {
+            VK_LBUTTON
+        };
+        GetAsyncKeyState(key.0 as i32) < 0
+    }
+}
+
+/// End a window's own move loop (a drag of the dock that turned into a press-and-hold).
+pub fn cancel_mode(hwnd: isize) {
+    // SAFETY: posting a standard message to our own window.
+    let _ = unsafe {
+        PostMessageW(
+            Some(HWND(hwnd as *mut c_void)),
+            windows::Win32::UI::WindowsAndMessaging::WM_CANCELMODE,
+            WPARAM(0),
+            LPARAM(0),
+        )
+    };
+}
+
+/// Ask the user for a file (an image or icon) or a folder. Blocks until they choose or cancel.
+pub fn pick(folder: bool) -> Option<String> {
+    use windows::Win32::UI::Shell::{
+        Common::COMDLG_FILTERSPEC, FileOpenDialog, IFileOpenDialog, FOS_FILEMUSTEXIST, FOS_FORCEFILESYSTEM,
+        FOS_PICKFOLDERS, SIGDN_FILESYSPATH,
+    };
+    std::thread::spawn(move || {
+        // SAFETY: COM set up and torn down on this thread; the dialog and item are released
+        // when dropped, and the path string is freed after copying.
+        unsafe {
+            let initialised = CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE).is_ok();
+            let picked = (|| -> Option<String> {
+                let dialog: IFileOpenDialog =
+                    CoCreateInstance(&FileOpenDialog, None, CLSCTX_INPROC_SERVER).ok()?;
+                let options = dialog.GetOptions().ok()?;
+                let extra = if folder {
+                    FOS_PICKFOLDERS
+                } else {
+                    FOS_FILEMUSTEXIST
+                };
+                dialog.SetOptions(options | extra | FOS_FORCEFILESYSTEM).ok()?;
+                if !folder {
+                    let types = [
+                        COMDLG_FILTERSPEC {
+                            pszName: w!("Pictures and icons"),
+                            pszSpec: w!("*.png;*.jpg;*.jpeg;*.bmp;*.webp;*.ico;*.exe;*.lnk"),
+                        },
+                        COMDLG_FILTERSPEC {
+                            pszName: w!("All files"),
+                            pszSpec: w!("*.*"),
+                        },
+                    ];
+                    dialog.SetFileTypes(&types).ok()?;
+                }
+                dialog.Show(None).ok()?;
+                let item = dialog.GetResult().ok()?;
+                let name = item.GetDisplayName(SIGDN_FILESYSPATH).ok()?;
+                let path = name.to_string().ok();
+                windows::Win32::System::Com::CoTaskMemFree(Some(name.0 as *const c_void));
+                path
+            })();
+            if initialised {
+                CoUninitialize();
+            }
+            picked
+        }
+    })
+    .join()
+    .ok()
+    .flatten()
+}
+
+/// Our own window shown on top without taking the focus from the app in front, with no
+/// taskbar or Alt+Tab entry (window previews and the switcher).
+pub fn show_on_top_quietly(hwnd: isize) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE,
+        SWP_NOSIZE, SWP_SHOWWINDOW, WS_EX_APPWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    };
+    let handle = HWND(hwnd as *mut c_void);
+    // SAFETY: style bits and z-order on our own live window.
+    unsafe {
+        let style = GetWindowLongPtrW(handle, GWL_EXSTYLE);
+        let quiet =
+            (style | (WS_EX_TOOLWINDOW.0 | WS_EX_NOACTIVATE.0) as isize) & !(WS_EX_APPWINDOW.0 as isize);
+        if quiet != style {
+            SetWindowLongPtrW(handle, GWL_EXSTYLE, quiet);
+        }
+        let _ = SetWindowPos(
+            handle,
+            Some(HWND_TOPMOST),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW,
+        );
+    }
+}
+
+/// Send keys as if typed (for the switcher: a harmless key before Alt is let go, so the app
+/// in front doesn't open its menu bar).
+pub fn release_alt_quietly(alt: VIRTUAL_KEY) {
+    const UNASSIGNED: VIRTUAL_KEY = VIRTUAL_KEY(0xE8);
+    let inputs = [key(UNASSIGNED, false), key(UNASSIGNED, true), key(alt, true)];
+    // SAFETY: sends a fully initialised sequence of key events.
+    unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
 }
 
 // ---------- Watching ----------

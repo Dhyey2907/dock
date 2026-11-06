@@ -8,6 +8,7 @@ import { WIDGETS } from "../widgets/registry";
 import { AppMenuPanel } from "./AppMenuPanel";
 import { GalleryPanel } from "./GalleryPanel";
 import { PictureInPicture2 } from "lucide-react";
+import { DockMenuPanel, StackPanel } from "./DockPanels";
 
 /** The popup window: a widget's popup or an app's menu, whichever the dock asked for. */
 export function PanelApp() {
@@ -62,9 +63,11 @@ export function PanelApp() {
           <PictureInPicture2 size={14} />
         </button>
       )}
-      {content?.type === "app" && <AppMenuPanel menu={content.menu} />}
       {content?.type === "gallery" && <GalleryPanel />}
       {content?.type === "capture" && <CapturePanel />}
+      {content?.type === "app" && <AppMenuPanel key={content.menu.key} menu={content.menu} />}
+      {content?.type === "stack" && <StackPanel stack={content.stack} />}
+      {content?.type === "dock" && <DockMenuPanel menu={content.menu} />}
     </div>
   );
 }

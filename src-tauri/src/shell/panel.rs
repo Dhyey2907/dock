@@ -11,7 +11,7 @@ use ts_rs::TS;
 
 use super::placement::Rect;
 use crate::{
-    apps::jump::AppMenu,
+    apps::jump::{AppMenu, DockMenu, StackView},
     error::AppResult,
     settings::{Edge, SettingsStore, Theme, WidgetKind},
 };
@@ -39,6 +39,10 @@ pub enum PanelContent {
     Gallery,
     /// Quick capture: a note or a to-do, from the shortcut.
     Capture,
+    /// A pinned folder's files.
+    Stack { stack: StackView },
+    /// The dock's own menu (a right-click on an empty part of it).
+    Dock { menu: DockMenu },
 }
 
 /// The widget gallery's size in logical pixels.
@@ -160,6 +164,60 @@ pub fn show_app_menu(app: &AppHandle, menu: AppMenu, anchor_x: i32) -> AppResult
     show(app, &dock, PanelContent::App { menu }, size, anchor_x)
 }
 
+/// Open a pinned folder's files above it (or close them, if already open).
+pub fn show_stack(app: &AppHandle, dock: &str, stack: StackView, anchor_x: i32) -> AppResult<()> {
+    let same = |open: &PanelContent| matches!(open, PanelContent::Stack { stack: s } if s.key == stack.key);
+    if is_showing(app, same)? {
+        return close(app);
+    }
+    let size = stack.size();
+    show(app, dock, PanelContent::Stack { stack }, size, anchor_x)
+}
+
+/// Open the dock's own menu at `anchor_x` (or close it, if already open).
+pub fn show_dock_menu(app: &AppHandle, menu: DockMenu, anchor_x: i32) -> AppResult<()> {
+    if is_showing(app, |open| matches!(open, PanelContent::Dock { .. }))? {
+        return close(app);
+    }
+    let dock = menu.dock.clone();
+    let size = menu.size();
+    show(app, &dock, PanelContent::Dock { menu }, size, anchor_x)
+}
+
+/// Whether a popup (menu, stack or widget) is on screen.
+pub fn is_open(app: &AppHandle) -> bool {
+    is_showing(app, |_| true).unwrap_or(false)
+}
+
+/// Where a popup `outer` physical pixels big goes for dock `dock_label`, centred on
+/// `anchor_x`: just past the dock, on screen. Also used by the window previews.
+pub fn popup_rect(app: &AppHandle, dock_label: &str, anchor_x: i32, outer: (u32, u32)) -> Option<Rect> {
+    let dock = app.get_webview_window(dock_label)?;
+    let geometry = super::geometry_of(app, dock_label)?;
+    let screen = Rect {
+        x: geometry.screen_x,
+        y: geometry.screen_y,
+        width: geometry.screen_width,
+        height: geometry.screen_height,
+    };
+    let dock_size = dock.outer_size().ok()?;
+    let dock_rect = Rect {
+        x: geometry.x,
+        y: geometry.y,
+        width: dock_size.width,
+        height: dock_size.height,
+    };
+    let edge = app.state::<SettingsStore>().get().edge;
+    Some(panel_rect(
+        screen,
+        dock_rect,
+        edge,
+        anchor_x,
+        outer,
+        geometry.scale,
+    ))
+}
+
 /// Whether the popup is on screen showing something `matches` accepts.
 fn is_showing(app: &AppHandle, matches: impl Fn(&PanelContent) -> bool) -> AppResult<bool> {
     let open = app.state::<PanelState>().open.lock().expect("panel lock").clone();
@@ -183,25 +241,9 @@ fn show(
         Some(window) => window,
         None => create(app)?,
     };
-    let Some(dock) = app.get_webview_window(dock_label) else {
+    if super::geometry_of(app, dock_label).is_none() || app.get_webview_window(dock_label).is_none() {
         return Ok(());
-    };
-    let Some(geometry) = super::geometry_of(app, dock_label) else {
-        return Ok(());
-    };
-    let screen = Rect {
-        x: geometry.screen_x,
-        y: geometry.screen_y,
-        width: geometry.screen_width,
-        height: geometry.screen_height,
-    };
-    let dock_size = dock.outer_size()?;
-    let dock_rect = Rect {
-        x: geometry.x,
-        y: geometry.y,
-        width: dock_size.width,
-        height: dock_size.height,
-    };
+    }
     let settings = app.state::<SettingsStore>().get();
 
     *state.open.lock().expect("panel lock") = Some(content.clone());
@@ -218,14 +260,9 @@ fn show(
     // Windows makes an undecorated window with a shadow taller than asked; place it by the size
     // it really has, so it never covers the dock.
     let outer = window.outer_size()?;
-    let rect = panel_rect(
-        screen,
-        dock_rect,
-        settings.edge,
-        anchor_x,
-        (outer.width, outer.height),
-        geometry.scale,
-    );
+    let Some(rect) = popup_rect(app, dock_label, anchor_x, (outer.width, outer.height)) else {
+        return Ok(());
+    };
     window.set_position(PhysicalPosition::new(rect.x, rect.y))?;
     window.show()?;
     #[cfg(windows)]
@@ -272,7 +309,7 @@ fn create(app: &AppHandle) -> AppResult<tauri::WebviewWindow> {
 
 /// Windows 11 rounds undecorated windows only when asked.
 #[cfg(windows)]
-fn round_corners(window: &tauri::WebviewWindow) {
+pub fn round_corners(window: &tauri::WebviewWindow) {
     use windows::Win32::Graphics::Dwm::{
         DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DWM_WINDOW_CORNER_PREFERENCE,
     };

@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Settings } from "../core/generated/Settings";
+import { defaultApps } from "../test/fixtures";
 
 const defaults: Settings = {
   edge: "bottom",
@@ -44,6 +45,7 @@ const defaults: Settings = {
   onboarded: true,
   floating: [],
   autoShrink: true,
+  apps: defaultApps,
 };
 
 const settingsSet = vi.fn(async (settings: Settings) => settings);

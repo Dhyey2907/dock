@@ -5,14 +5,24 @@
 //! This file is the pure part (parsing, filtering, grouping); `win.rs` talks to Windows and
 //! `service.rs` keeps the list current.
 
+pub mod custom;
+pub mod favicon;
+pub mod history;
+#[cfg(windows)]
+pub mod hooks;
 pub mod jump;
+pub mod layout;
+#[cfg(windows)]
+pub mod preview;
 pub mod service;
+#[cfg(windows)]
+pub mod switcher;
 #[cfg(windows)]
 pub mod win;
 
 use std::collections::HashMap;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::shell::{placement::Rect, screens::dock_for_window, DOCK_LABEL};
@@ -21,7 +31,8 @@ use crate::shell::{placement::Rect, screens::dock_for_window, DOCK_LABEL};
 pub const APPS_CHANGED: &str = "apps-changed";
 
 /// How to start an app.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "target", rename_all = "camelCase")]
 pub enum Launch {
     /// A shortcut file (keeps its arguments and start folder).
     Shortcut(String),
@@ -58,6 +69,12 @@ pub struct WinInfo {
     /// The full rectangle of the screen it is on (for a minimized window, the screen it comes
     /// back to), if Windows could say.
     pub screen: Option<Rect>,
+    /// That screen's device name ("\\.\DISPLAY2").
+    pub monitor: Option<String>,
+    /// Windows thinks it stopped responding.
+    pub hung: bool,
+    /// It is flashing for attention.
+    pub flashing: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -69,6 +86,24 @@ pub struct DockWindow {
     pub title: String,
     pub active: bool,
     pub minimized: bool,
+    /// Not responding.
+    pub hung: bool,
+    /// Asking for attention.
+    pub flashing: bool,
+}
+
+/// What a dock item is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ItemKind {
+    /// An app (pinned on the taskbar, or running).
+    #[default]
+    App,
+    /// A website pinned to the dock.
+    Website,
+    /// A folder pinned to the dock, opening as a fan of files.
+    Stack,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -87,6 +122,41 @@ pub struct DockApp {
     #[ts(optional)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub app_id: Option<String>,
+    pub kind: ItemKind,
+    /// One of its windows (not the front one) is flashing for attention.
+    pub attention: bool,
+    /// One of its windows is not responding.
+    pub hung: bool,
+    /// The user put a divider after it.
+    pub divider_after: bool,
+    /// Its program, lowercased (for matching; not sent to the page).
+    #[serde(skip)]
+    #[ts(skip)]
+    pub exe: Option<String>,
+}
+
+impl DockApp {
+    fn new(key: String, name: String, pinned: bool, icon: String) -> Self {
+        Self {
+            key,
+            name,
+            pinned,
+            icon,
+            windows: Vec::new(),
+            app_id: None,
+            kind: ItemKind::App,
+            attention: false,
+            hung: false,
+            divider_after: false,
+            exe: None,
+        }
+    }
+
+    /// Refresh the flags that summarise its windows.
+    fn summarise(&mut self) {
+        self.attention = self.windows.iter().any(|w| w.flashing && !w.active);
+        self.hung = self.windows.iter().any(|w| w.hung);
+    }
 }
 
 /// What the dock knows about a pin it can launch, by app key.
@@ -238,6 +308,8 @@ pub fn build(pins: &[Pin], windows: &[WinInfo], foreground: isize) -> (Vec<DockA
         title: w.title.clone(),
         active: w.hwnd == foreground,
         minimized: w.minimized,
+        hung: w.hung,
+        flashing: w.flashing,
     };
     let mut claimed = vec![false; windows.len()];
     let mut apps = Vec::new();
@@ -246,25 +318,25 @@ pub fn build(pins: &[Pin], windows: &[WinInfo], foreground: isize) -> (Vec<DockA
         let key = pin_key(pin);
         let mut mine = Vec::new();
         let mut app_id = pin.app_id.clone();
+        let mut exe = pin.exe.clone();
         for (i, window) in windows.iter().enumerate() {
             if !claimed[i] && belongs(pin, window) {
                 claimed[i] = true;
                 mine.push(dock_window(window));
                 app_id = app_id.or_else(|| window.app_id.clone());
+                exe = exe.or_else(|| window.exe.clone());
             }
         }
         launchables.push(Launchable {
             key: key.clone(),
             launch: pin.launch.clone(),
         });
-        apps.push(DockApp {
-            key,
-            name: pin.name.clone(),
-            pinned: true,
-            icon: pin.icon.clone(),
-            windows: mine,
-            app_id,
-        });
+        let mut app = DockApp::new(key, pin.name.clone(), true, pin.icon.clone());
+        app.windows = mine;
+        app.app_id = app_id;
+        app.exe = exe;
+        app.summarise();
+        apps.push(app);
     }
     for (i, window) in windows.iter().enumerate() {
         if claimed[i] {
@@ -285,6 +357,7 @@ pub fn build(pins: &[Pin], windows: &[WinInfo], foreground: isize) -> (Vec<DockA
         };
         if let Some(app) = apps.iter_mut().find(|a| a.key == key) {
             app.windows.push(dock_window(window));
+            app.summarise();
             continue;
         }
         if let Some(launch) = launch {
@@ -293,14 +366,12 @@ pub fn build(pins: &[Pin], windows: &[WinInfo], foreground: isize) -> (Vec<DockA
                 launch,
             });
         }
-        apps.push(DockApp {
-            key,
-            name: window.app_name.clone(),
-            pinned: false,
-            icon,
-            windows: vec![dock_window(window)],
-            app_id: window.app_id.clone(),
-        });
+        let mut app = DockApp::new(key, window.app_name.clone(), false, icon);
+        app.windows = vec![dock_window(window)];
+        app.app_id = window.app_id.clone();
+        app.exe = window.exe.clone();
+        app.summarise();
+        apps.push(app);
     }
     (apps, launchables)
 }
@@ -502,7 +573,35 @@ mod tests {
             minimized: false,
             app_name: format!("app of {hwnd}"),
             screen: None,
+            monitor: None,
+            hung: false,
+            flashing: false,
         }
+    }
+
+    #[test]
+    fn apps_summarise_hung_and_flashing_windows() {
+        let windows = [
+            WinInfo {
+                flashing: true,
+                ..window(1, None, Some("a.exe"))
+            },
+            WinInfo {
+                hung: true,
+                ..window(2, None, Some("b.exe"))
+            },
+            WinInfo {
+                flashing: true,
+                ..window(3, None, Some("c.exe"))
+            },
+        ];
+        // c.exe's window is the front one: it already has your attention.
+        let (apps, _) = build(&[], &windows, 3);
+        assert!(apps[0].attention && !apps[0].hung);
+        assert!(!apps[1].attention && apps[1].hung);
+        assert!(!apps[2].attention);
+        assert!(apps[1].windows[0].hung);
+        assert_eq!(apps[0].exe.as_deref(), Some("a.exe"));
     }
 
     const LEFT: Rect = Rect {
@@ -639,11 +738,6 @@ mod tests {
 
     fn app_with(active: &[bool]) -> DockApp {
         DockApp {
-            key: "k".into(),
-            name: "n".into(),
-            pinned: true,
-            icon: String::new(),
-            app_id: None,
             windows: active
                 .iter()
                 .enumerate()
@@ -652,8 +746,11 @@ mod tests {
                     title: String::new(),
                     active,
                     minimized: false,
+                    hung: false,
+                    flashing: false,
                 })
                 .collect(),
+            ..DockApp::new("k".into(), "n".into(), true, String::new())
         }
     }
 

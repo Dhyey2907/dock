@@ -4,6 +4,8 @@ import { PanelBottom, Search, Settings2 } from "lucide-react";
 import { ipc } from "../core/ipc";
 import { useSettings } from "../settings/store";
 import { AppButton } from "./AppButton";
+import { ShowDesktopButton } from "./DockExtras";
+import { useDragOverRaise, useEmptyDockClicks, useReportButtonRects } from "./dockHooks";
 import { useApps } from "./apps";
 import { Glass } from "./glass/Glass";
 import type { Ink } from "./glass/styles";
@@ -43,6 +45,9 @@ export function Dock({ main = true }: { main?: boolean }) {
     const timer = window.setTimeout(() => setStarting(false), 900);
     return () => window.clearTimeout(timer);
   }, []);
+  const emptyClicks = useEmptyDockClicks();
+  useDragOverRaise();
+  useReportButtonRects(apps, contentRef);
 
   useLayoutEffect(() => {
     const content = contentRef.current;
@@ -85,7 +90,7 @@ export function Dock({ main = true }: { main?: boolean }) {
       {!revealed && <div className="dock-sliver" data-testid="dock-sliver" />}
       {/* Dragging the bar's background moves the dock; dropping it nearer the top or bottom
           snaps it to that edge. Buttons inside stay clickable. */}
-      <div className="dock-content" ref={contentRef} data-tauri-drag-region>
+      <div className="dock-content" ref={contentRef} data-tauri-drag-region {...emptyClicks}>
         {!split && (
           <Glass theme={settings.theme} corners={settings.style === "pill" ? corners : 0} onInk={setInk} />
         )}
@@ -135,6 +140,7 @@ Bring Dock back with the tray icon${settings?.toggleShortcut ? ` or ${settings.t
           >
             <Settings2 size={18} strokeWidth={1.8} />
           </button>
+          <ShowDesktopButton />
         </div>
       </div>
     </div>

@@ -2,7 +2,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
+import type { ButtonRect } from "./generated/ButtonRect";
+import type { DockMenuAction } from "./generated/DockMenuAction";
 import type { MenuAction } from "./generated/MenuAction";
+import type { PreviewContent } from "./generated/PreviewContent";
+import type { SwitcherState } from "./generated/SwitcherState";
 import type { PanelContent } from "./generated/PanelContent";
 import type { QuickState } from "./generated/QuickState";
 import type { RadioKind } from "./generated/RadioKind";
@@ -89,7 +93,32 @@ export const ipc = {
   quickSetBrightness: (level: number) => invoke<void>("quick_set_brightness", { level }),
   /** Windows' own Quick Settings, for Night light, Airplane mode and the rest. */
   quickOpenWindows: () => invoke<void>("quick_open_windows"),
-  appClick: (key: string) => invoke<void>("app_click", { key }),
+  /** A left click; `anchorX` (screen pixels) is where a pinned folder's popup opens. */
+  appClick: (key: string, anchorX = 0) => invoke<void>("app_click", { key, anchorX: Math.round(anchorX) }),
+  /** A file dragged over the app's icon for a moment: bring its window forward. */
+  appRaise: (key: string) => invoke<void>("app_raise", { key }),
+  /** The icon is being dragged off the dock; its window snaps where the button is let go. */
+  appDragOut: (key: string) => invoke<void>("app_drag_out", { key }),
+  appRects: (rects: ButtonRect[]) => invoke<void>("app_rects", { rects }),
+  appsAll: () => invoke<DockApp[]>("apps_all"),
+  appPreviews: (key: string, anchorX: number) =>
+    invoke<void>("app_previews", { key, anchorX: Math.round(anchorX) }),
+  previewHide: (delayMs: number) => invoke<void>("preview_hide", { delayMs: Math.round(delayMs) }),
+  previewHover: (hovered: boolean) => invoke<void>("preview_hover", { hovered }),
+  previewCurrent: () => invoke<PreviewContent | null>("preview_current"),
+  previewActivate: (hwnd: number) => invoke<void>("preview_activate", { hwnd }),
+  previewCloseWindow: (hwnd: number) => invoke<void>("preview_close_window", { hwnd }),
+  switcherCurrent: () => invoke<SwitcherState | null>("switcher_current"),
+  switcherPick: (hwnd: number) => invoke<void>("switcher_pick", { hwnd }),
+  stackOpen: (path: string) => invoke<void>("stack_open", { path }),
+  dockMenu: (anchorX: number) => invoke<void>("dock_menu", { anchorX: Math.round(anchorX) }),
+  dockMenuAction: (action: DockMenuAction) => invoke<void>("dock_menu_action", { action }),
+  dockPress: () => invoke<void>("dock_press"),
+  dockHold: () => invoke<void>("dock_hold"),
+  showDesktop: () => invoke<void>("show_desktop"),
+  desktopPeek: (on: boolean) => invoke<void>("desktop_peek", { on }),
+  /** Ask for an image (or with `folder`, a folder); null when cancelled. */
+  pickPath: (folder: boolean) => invoke<string | null>("pick_path", { folder }),
   appLaunch: (key: string) => invoke<void>("app_launch", { key }),
   /** An app's right-click menu, centred on `anchorX` (screen pixels). */
   appMenu: (key: string, anchorX: number) => invoke<void>("app_menu", { key, anchorX: Math.round(anchorX) }),
@@ -237,4 +266,8 @@ export const events = {
   onPins: on<number>("pins-changed"),
   onScreenText: on<ScreenText>("screen-text"),
   onSnipOpen: on<SnipMode>("snip-open"),
+  onAppLaunching: on<string>("app-launching"),
+  onPreviewOpen: on<PreviewContent>("preview-open"),
+  onPreviewClosed: on<null>("preview-closed"),
+  onSwitcherState: on<SwitcherState>("switcher-state"),
 };

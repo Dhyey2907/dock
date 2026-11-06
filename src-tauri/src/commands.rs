@@ -100,6 +100,7 @@ fn applied(app: &AppHandle, before: Settings, settings: Settings) -> AppResult<S
     }
     crate::widgets::service::settings_changed(&app, &before, &settings);
     crate::system::service::settings_changed(&app);
+    crate::apps::service::settings_changed(&app);
     app.emit(SETTINGS_CHANGED, &settings)?;
     Ok(settings)
 }
@@ -181,9 +182,153 @@ pub fn app_icon(app: AppHandle, source: String) -> Option<String> {
     crate::apps::service::icon(&app, &source)
 }
 
+/// A left click on an app; `anchor_x` (screen pixels) is where a pinned folder's popup goes.
 #[tauri::command(async)]
-pub fn app_click(app: AppHandle, window: WebviewWindow, key: String) -> AppResult<()> {
-    crate::apps::service::click(&app, window.label(), &key)
+pub fn app_click(app: AppHandle, window: WebviewWindow, key: String, anchor_x: i32) -> AppResult<()> {
+    crate::apps::service::click(&app, window.label(), &key, anchor_x)
+}
+
+/// A file dragged over an app's icon for a moment: bring its window forward.
+#[tauri::command(async)]
+pub fn app_raise(app: AppHandle, window: WebviewWindow, key: String) -> AppResult<()> {
+    crate::apps::service::raise(&app, window.label(), &key)
+}
+
+/// An app's icon is being dragged off the dock (its window snaps where it is let go).
+#[tauri::command(async)]
+pub fn app_drag_out(app: AppHandle, window: WebviewWindow, key: String) -> AppResult<()> {
+    crate::apps::service::drag_out(&app, window.label(), &key)
+}
+
+/// Where the calling dock's app buttons are (for windows shrinking into them).
+#[tauri::command]
+pub fn app_rects(
+    app: AppHandle,
+    window: WebviewWindow,
+    rects: Vec<crate::apps::service::ButtonRect>,
+) -> AppResult<()> {
+    crate::apps::service::set_button_rects(&app, window.label(), rects)
+}
+
+/// Every dock's apps, for Settings.
+#[tauri::command]
+pub fn apps_all(app: AppHandle) -> Vec<crate::apps::DockApp> {
+    crate::apps::service::all(&app)
+}
+
+/// Hovering an app: show its windows above it. Async: the first time creates a window.
+#[tauri::command(async)]
+pub fn app_previews(app: AppHandle, window: WebviewWindow, key: String, anchor_x: i32) -> AppResult<()> {
+    if !app.state::<crate::settings::SettingsStore>().get().apps.previews {
+        return Ok(());
+    }
+    let dock_app = crate::apps::service::list(&app, window.label())
+        .into_iter()
+        .find(|a| a.key == key)
+        .ok_or_else(|| AppError::InvalidInput("unknown app".into()))?;
+    #[cfg(windows)]
+    crate::apps::preview::show(&app, window.label(), &dock_app, anchor_x)?;
+    #[cfg(not(windows))]
+    let _ = (dock_app, anchor_x);
+    Ok(())
+}
+
+/// Hide the window previews after `delay_ms`, unless the cursor reaches them.
+#[tauri::command]
+pub fn preview_hide(app: AppHandle, delay_ms: u64) {
+    #[cfg(windows)]
+    crate::apps::preview::hide_later(&app, std::time::Duration::from_millis(delay_ms.min(5_000)));
+    #[cfg(not(windows))]
+    let _ = (app, delay_ms);
+}
+
+#[tauri::command]
+pub fn preview_hover(app: AppHandle, hovered: bool) {
+    #[cfg(windows)]
+    crate::apps::preview::set_hovered(&app, hovered);
+    #[cfg(not(windows))]
+    let _ = (app, hovered);
+}
+
+#[cfg(windows)]
+#[tauri::command]
+pub fn preview_current() -> Option<crate::apps::preview::PreviewContent> {
+    crate::apps::preview::current()
+}
+
+#[cfg(windows)]
+#[tauri::command(async)]
+pub fn preview_activate(app: AppHandle, hwnd: isize) -> AppResult<()> {
+    crate::apps::preview::activate(&app, hwnd)
+}
+
+#[cfg(windows)]
+#[tauri::command(async)]
+pub fn preview_close_window(app: AppHandle, hwnd: isize) -> AppResult<()> {
+    crate::apps::preview::close_window(&app, hwnd)
+}
+
+#[cfg(windows)]
+#[tauri::command]
+pub fn switcher_current() -> Option<crate::apps::switcher::SwitcherState> {
+    crate::apps::switcher::current()
+}
+
+#[cfg(windows)]
+#[tauri::command(async)]
+pub fn switcher_pick(app: AppHandle, hwnd: isize) {
+    crate::apps::switcher::pick(&app, hwnd);
+}
+
+/// Open a file (or the folder) from the open stack.
+#[tauri::command(async)]
+pub fn stack_open(app: AppHandle, path: String) -> AppResult<()> {
+    crate::apps::service::stack_open(&app, &path)
+}
+
+/// The dock's own menu, from a right-click on an empty part of it.
+#[tauri::command(async)]
+pub fn dock_menu(app: AppHandle, window: WebviewWindow, anchor_x: i32) -> AppResult<()> {
+    crate::apps::service::dock_menu(&app, window.label(), anchor_x)
+}
+
+#[tauri::command(async)]
+pub fn dock_menu_action(app: AppHandle, action: crate::apps::jump::DockMenuAction) -> AppResult<()> {
+    crate::apps::service::dock_menu_action(&app, action)
+}
+
+/// The mouse went down on an empty part of the calling dock.
+#[tauri::command(async)]
+pub fn dock_press(app: AppHandle, window: WebviewWindow) -> AppResult<()> {
+    crate::apps::service::press(&app, window.label())
+}
+
+/// A moment after that press: still held there?
+#[tauri::command(async)]
+pub fn dock_hold(app: AppHandle, window: WebviewWindow) -> AppResult<()> {
+    crate::apps::service::hold(&app, window.label())
+}
+
+#[tauri::command(async)]
+pub fn show_desktop(app: AppHandle) {
+    crate::apps::service::show_desktop(&app);
+}
+
+#[tauri::command(async)]
+pub fn desktop_peek(app: AppHandle, window: WebviewWindow, on: bool) {
+    crate::apps::service::peek(&app, window.label(), on);
+}
+
+/// Ask for an image file (`folder` false) or a folder. Async: waits for the dialog.
+#[tauri::command(async)]
+pub fn pick_path(folder: bool) -> Option<String> {
+    #[cfg(windows)]
+    return crate::apps::win::pick(folder);
+    #[cfg(not(windows))]
+    {
+        let _ = folder;
+        None
+    }
 }
 
 #[tauri::command(async)]

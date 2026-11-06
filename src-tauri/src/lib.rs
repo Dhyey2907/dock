@@ -89,6 +89,7 @@ pub fn run() {
             if let Err(error) = shell::shortcut::apply(handle, &settings.toggle_shortcut) {
                 tracing::warn!(%error, "show/hide shortcut not set");
             }
+            productivity::register_capture_shortcut(handle);
             if !settings.onboarded {
                 let handle = handle.clone();
                 // Off the main thread: creating a window there can deadlock WebView2.
@@ -228,6 +229,26 @@ pub fn run() {
             commands::usb_eject,
             commands::github_trending,
             commands::bubble_open,
+            commands::app_raise,
+            commands::app_drag_out,
+            commands::app_rects,
+            commands::apps_all,
+            commands::app_previews,
+            commands::preview_hide,
+            commands::preview_hover,
+            commands::preview_current,
+            commands::preview_activate,
+            commands::preview_close_window,
+            commands::switcher_current,
+            commands::switcher_pick,
+            commands::stack_open,
+            commands::dock_menu,
+            commands::dock_menu_action,
+            commands::dock_press,
+            commands::dock_hold,
+            commands::show_desktop,
+            commands::desktop_peek,
+            commands::pick_path,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");
