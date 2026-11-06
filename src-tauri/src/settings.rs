@@ -419,7 +419,7 @@ impl Default for Hotkeys {
     fn default() -> Self {
         Self {
             command_bar: "Ctrl+Space".into(),
-            quick_capture: String::new(),
+            quick_capture: "Ctrl+Alt+Q".into(),
         }
     }
 }

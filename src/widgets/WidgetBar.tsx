@@ -142,7 +142,17 @@ export function WidgetBar() {
   };
 
   return (
-    <div className="dock-widgets" data-dragging={Boolean(drag?.moved)}>
+    <div
+      className="dock-widgets"
+      data-dragging={Boolean(drag?.moved)}
+      onWheel={(e) => {
+        // The mouse wheel scrolls a crowded widget row sideways (the Status widget uses it
+        // for volume instead).
+        const row = e.currentTarget;
+        const onStatus = (e.target as HTMLElement).closest('[data-kind="status"]');
+        if (!onStatus && row.scrollWidth > row.clientWidth) row.scrollLeft += e.deltaY;
+      }}
+    >
       {order.map((entry) => {
         const def = WIDGETS[entry.kind];
         if (!def) return null;

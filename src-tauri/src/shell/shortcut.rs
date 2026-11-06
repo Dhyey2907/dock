@@ -132,7 +132,8 @@ pub fn apply_all(app: &AppHandle, settings: &Settings) -> AppResult<()> {
                 action.run(app);
             }
         });
-        if result.is_err() {
+        if let Err(error) = result {
+            tracing::warn!(?action, %shortcut, %error, "a shortcut is taken by another app");
             taken = Some(action);
         }
     }
@@ -216,9 +217,9 @@ mod tests {
     #[test]
     fn every_action_gets_its_own_shortcut() {
         let mut settings = Settings::default();
-        assert_eq!(plan(&settings).unwrap().len(), 2);
-        settings.hotkeys.quick_capture = "Ctrl+Shift+N".into();
         assert_eq!(plan(&settings).unwrap().len(), 3);
+        settings.hotkeys.quick_capture = String::new();
+        assert_eq!(plan(&settings).unwrap().len(), 2);
         settings.hotkeys.quick_capture = "ctrl+alt+d".into();
         assert!(plan(&settings).is_err());
     }

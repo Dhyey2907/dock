@@ -817,3 +817,24 @@ button {
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
+
+/* Icons follow the size slider and shrink-to-fit too. */
+.dock-icon-button svg,
+.dock-widget svg,
+.dock-gallery-button svg {
+  width: calc(18px * var(--scale, 1));
+  height: calc(18px * var(--scale, 1));
+}
+/* More widgets than fit: the dock stays on screen and the widget row scrolls sideways. */
+.dock-content {
+  max-width: 100%;
+}
+.dock-widgets {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.dock-widgets::-webkit-scrollbar {
+  display: none;
+}

@@ -154,7 +154,7 @@ export const WIDGETS: Partial<Record<WidgetKind, WidgetDefinition>> = {
   },
   todos: {
     label: "To-do",
-    description: "A checklist; the dock shows how many are left. Ctrl+Alt+N adds one from anywhere.",
+    description: "A checklist; the dock shows how many are left. Ctrl+Alt+Q adds one from anywhere.",
     Tile: TodosTile,
     Panel: TodosPanel,
     category: "productivity",

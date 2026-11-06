@@ -129,7 +129,11 @@ function LookRows({ settings, save }: { settings: Settings; save: Save }) {
   const set = (patch: Partial<DockLook>) => save({ look: { ...look, ...patch } });
   return (
     <>
-      <Row label="Dock size" hint="Make the dock any size. Bigger docks show more on each widget.">
+      <Row
+        label="Dock size"
+        id="dockSize"
+        hint="Make the dock any size. Bigger docks show more on each widget."
+      >
         <Slider
           label="Dock size"
           value={look.scale}
@@ -140,7 +144,7 @@ function LookRows({ settings, save }: { settings: Settings; save: Save }) {
         />
       </Row>
       {settings.style === "pill" && (
-        <Row label="Corners" hint="100% is a full pill.">
+        <Row label="Corners" id="corners" hint="100% is a full pill.">
           <Slider
             label="Corners"
             value={look.corners}
@@ -151,7 +155,7 @@ function LookRows({ settings, save }: { settings: Settings; save: Save }) {
           />
         </Row>
       )}
-      <Row label="Transparency" hint="Let the desktop show through the dock.">
+      <Row label="Transparency" id="transparency" hint="Let the desktop show through the dock.">
         <Slider
           label="Transparency"
           value={look.transparency}
@@ -161,7 +165,7 @@ function LookRows({ settings, save }: { settings: Settings; save: Save }) {
           onCommit={(transparency) => set({ transparency })}
         />
       </Row>
-      <Row label="Blur" hint="How frosted the glass is.">
+      <Row label="Blur" id="blur" hint="How frosted the glass is.">
         <Slider
           label="Blur"
           value={look.blur}
@@ -191,7 +195,7 @@ function LookRows({ settings, save }: { settings: Settings; save: Save }) {
           onCommit={(bounce) => set({ bounce })}
         />
       </Row>
-      <Row label="Magnify on hover" hint="App icons grow as the mouse passes over them.">
+      <Row label="Magnify on hover" id="magnify" hint="App icons grow as the mouse passes over them.">
         <Toggle label="Magnify on hover" checked={look.magnify} onChange={(magnify) => set({ magnify })} />
       </Row>
       <Row label="Startup animation" hint="The dock rises into place when it starts.">

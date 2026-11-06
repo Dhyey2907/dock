@@ -100,7 +100,6 @@ pub fn run() {
             if let Err(error) = shell::shortcut::apply_all(handle, &settings) {
                 tracing::warn!(%error, "a global shortcut wasn't set");
             }
-            productivity::register_capture_shortcut(handle);
             if !settings.onboarded {
                 let handle = handle.clone();
                 // Off the main thread: creating a window there can deadlock WebView2.

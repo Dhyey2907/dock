@@ -18,6 +18,7 @@ export interface SettingsEntry {
 export const SECTION_LABELS: SettingsSection[] = [
   { id: "appearance", label: "Appearance" },
   { id: "widgets", label: "Widgets" },
+  { id: "apps", label: "Apps" },
   { id: "calendars", label: "Calendars" },
   { id: "automations", label: "Automations" },
   { id: "shortcuts", label: "Shortcuts" },
@@ -28,6 +29,26 @@ export const SECTION_LABELS: SettingsSection[] = [
 ];
 
 const CONTROLS: SettingsEntry[] = [
+  {
+    section: "appearance",
+    id: "dockSize",
+    name: "Dock size",
+    keywords: ["bigger", "smaller", "scale", "height"],
+  },
+  {
+    section: "appearance",
+    id: "transparency",
+    name: "Transparency",
+    keywords: ["see-through", "opacity", "glass"],
+  },
+  { section: "appearance", id: "blur", name: "Blur", keywords: ["frosted", "glass"] },
+  { section: "appearance", id: "magnify", name: "Magnify on hover", keywords: ["zoom", "grow", "icons"] },
+  { section: "appearance", id: "corners", name: "Corners", keywords: ["round", "radius", "pill"] },
+  {
+    section: "apps",
+    name: "Apps",
+    keywords: ["pin", "website", "stack", "icon", "rename", "hide", "alt tab", "preview"],
+  },
   {
     section: "appearance",
     id: "theme",
