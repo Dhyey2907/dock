@@ -11,7 +11,7 @@
 }
 
 .dock[data-theme="glass"] {
-  --glass-filter: blur(3px) saturate(1.5) brightness(1.04);
+  --glass-filter: blur(calc(3px * var(--blur-scale, 1))) saturate(1.5) brightness(1.04);
   --glass-tint: rgba(255, 255, 255, 0.1);
   --glass-fallback: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08));
   --glass-rim:
@@ -24,7 +24,7 @@
   --dock-border: rgba(255, 255, 255, 0.35);
 }
 .dock[data-theme="iosGlass"] {
-  --glass-filter: blur(1.5px) saturate(1.7) brightness(1.08);
+  --glass-filter: blur(calc(1.5px * var(--blur-scale, 1))) saturate(1.7) brightness(1.08);
   --glass-tint: rgba(255, 255, 255, 0.16);
   --glass-fallback: linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.16));
   --glass-rim:
@@ -37,7 +37,7 @@
   --dock-border: rgba(255, 255, 255, 0.55);
 }
 .dock[data-theme="midnight"] {
-  --glass-filter: blur(14px) saturate(1.2);
+  --glass-filter: blur(calc(14px * var(--blur-scale, 1))) saturate(1.2);
   --glass-tint: rgba(10, 14, 32, 0.62);
   --glass-fallback: linear-gradient(180deg, rgba(22, 27, 48, 0.86), rgba(10, 12, 24, 0.9));
   --glass-rim: inset 0 1px 0 rgba(160, 175, 255, 0.22), inset 0 0 0 1px rgba(120, 140, 255, 0.18);

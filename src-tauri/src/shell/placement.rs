@@ -19,9 +19,14 @@ pub struct Rect {
 /// `content_width` is the pill's content width in logical pixels, as the page measured it.
 pub fn dock_rect(monitor: Rect, scale: f64, settings: &Settings, content_width: f64) -> Rect {
     let px = |logical: f64| (logical * scale).round() as i64;
-    let height = px(settings.size.height()).min(monitor.height as i64);
+    let height = px(settings.dock_height()).min(monitor.height as i64);
     let (width, margin) = match settings.style {
         DockStyle::Full => (monitor.width as i64, 0),
+        // Two pills across the screen: the window spans it, inset like a pill.
+        DockStyle::Split => {
+            let margin = px(PILL_MARGIN);
+            ((monitor.width as i64 - 2 * margin).max(1), margin)
+        }
         DockStyle::Pill => {
             let margin = px(PILL_MARGIN);
             let max = (monitor.width as i64 - 2 * margin).max(1);

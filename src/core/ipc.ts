@@ -32,6 +32,18 @@ export type WindowsSettingsPage =
 export const ipc = {
   settingsGet: () => invoke<Settings>("settings_get"),
   settingsSet: (settings: Settings) => invoke<Settings>("settings_set", { settings }),
+  /** Put back the widget layout and look from before the last change. */
+  settingsUndoLayout: () => invoke<Settings>("settings_undo_layout"),
+  settingsCanUndo: () => invoke<boolean>("settings_can_undo"),
+  /** Turn the open widget popup into its own window that stays on top. */
+  panelDetach: () => invoke<void>("panel_detach"),
+  /** Show a widget in its own window: on top of other windows, or on the desktop. */
+  floatingShow: (kind: WidgetKind, onTop: boolean) => invoke<void>("floating_show", { kind, onTop }),
+  floatingMoved: (kind: WidgetKind, x: number, y: number) => invoke<void>("floating_moved", { kind, x, y }),
+  floatingClose: (kind: WidgetKind) => invoke<void>("floating_close", { kind }),
+  dashboardOpen: () => invoke<void>("dashboard_open"),
+  /** Open or close the widget gallery, centred on `anchorX` (screen pixels). */
+  galleryToggle: (anchorX: number) => invoke<void>("gallery_toggle", { anchorX: Math.round(anchorX) }),
   dockSetContentWidth: (width: number) => invoke<void>("dock_set_content_width", { width }),
   dockReveal: (revealed: boolean) => invoke<void>("dock_reveal", { revealed }),
   dockIsRevealed: () => invoke<boolean>("dock_is_revealed"),

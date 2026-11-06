@@ -74,6 +74,11 @@ pub fn run() {
             calendar::service::init(handle);
             claude::service::init(handle);
             automations::service::init(handle);
+            {
+                let handle = handle.clone();
+                // Off the main thread: creating windows there can deadlock WebView2.
+                std::thread::spawn(move || shell::floating::restore(&handle));
+            }
             let settings = handle.state::<SettingsStore>().get();
             if let Err(error) = shell::shortcut::apply(handle, &settings.toggle_shortcut) {
                 tracing::warn!(%error, "show/hide shortcut not set");
@@ -107,6 +112,14 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::settings_get,
             commands::settings_set,
+            commands::settings_undo_layout,
+            commands::settings_can_undo,
+            commands::gallery_toggle,
+            commands::panel_detach,
+            commands::floating_show,
+            commands::floating_moved,
+            commands::floating_close,
+            commands::dashboard_open,
             commands::dock_set_content_width,
             commands::dock_reveal,
             commands::dock_is_revealed,

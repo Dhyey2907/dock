@@ -8,10 +8,21 @@ const defaults: Settings = {
   style: "pill",
   theme: "glass",
   size: "medium",
+  look: {
+    scale: 100,
+    corners: 100,
+    transparency: 0,
+    blur: 100,
+    widgetBackground: 0,
+    magnify: false,
+    bounce: 40,
+    startupAnimation: true,
+    popupStyle: "glass",
+  },
   autoHide: false,
   taskbarMode: "autoHide",
   launchAtStartup: true,
-  widgets: [{ kind: "clock", enabled: true }],
+  widgets: [{ kind: "clock", enabled: true, size: "normal" }],
   temperatureUnit: "celsius",
   weatherPlace: "",
   calendars: [],
@@ -21,6 +32,8 @@ const defaults: Settings = {
   screen: "",
   docksOn: "one",
   onboarded: true,
+  floating: [],
+  autoShrink: true,
 };
 
 const settingsSet = vi.fn(async (settings: Settings) => settings);

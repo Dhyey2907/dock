@@ -52,7 +52,10 @@ export function WeatherTile() {
   return (
     <span className="tile-row">
       <WeatherIcon name={weather.icon} size={18} />
-      <span className="tile-strong">{formatTemperature(weather.temperature, weather.unit)}</span>
+      <span className="tile-stack music-text">
+        <span className="tile-strong">{formatTemperature(weather.temperature, weather.unit)}</span>
+        {weather.condition && <span className="tile-faint tile-more">{weather.condition}</span>}
+      </span>
     </span>
   );
 }

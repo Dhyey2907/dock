@@ -30,10 +30,12 @@ export function SystemTile() {
     <span className="tile-stack tile-system">
       <span className="tile-row">
         <Cpu size={12} aria-hidden="true" />
+        <span className="tile-mini tile-more">CPU</span>
         <span className="tile-mini">{stats?.cpu ?? "—"}%</span>
       </span>
       <span className="tile-row">
         <MemoryStick size={12} aria-hidden="true" />
+        <span className="tile-mini tile-more">RAM</span>
         <span className="tile-mini">{stats?.ram ?? "—"}%</span>
       </span>
     </span>

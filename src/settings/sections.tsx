@@ -9,7 +9,9 @@ import type { ScreenInfo } from "../core/generated/ScreenInfo";
 import type { Settings } from "../core/generated/Settings";
 import type { TaskbarMode } from "../core/generated/TaskbarMode";
 import { ipc } from "../core/ipc";
-import { Choice, Row, ShortcutField, StyleCards, Toggle } from "./controls";
+import type { DockLook } from "../core/generated/DockLook";
+import type { PopupStyle } from "../core/generated/PopupStyle";
+import { Choice, Row, ShortcutField, Slider, StyleCards, Toggle } from "./controls";
 
 type Save = (patch: Partial<Settings>) => void;
 
@@ -36,17 +38,30 @@ export function AppearanceSection({ settings, save }: { settings: Settings; save
           onChange={(edge) => save({ edge })}
         />
       </Row>
-      <Row label="Shape" hint="A floating pill, or edge to edge like the taskbar.">
+      <Row
+        label="Shape"
+        hint="A floating pill, edge to edge like the taskbar, or split: apps left, widgets right."
+      >
         <Choice<DockStyle>
           label="Shape"
           value={settings.style}
           options={[
             ["pill", "Pill"],
             ["full", "Full width"],
+            ["split", "Split"],
           ]}
           onChange={(style) => save({ style })}
         />
       </Row>
+      {settings.style !== "full" && (
+        <Row label="Shrink to fit" hint="Make the dock smaller when it has more than fits across the screen.">
+          <Toggle
+            label="Shrink to fit"
+            checked={settings.autoShrink}
+            onChange={(autoShrink) => save({ autoShrink })}
+          />
+        </Row>
+      )}
       <Row label="Size">
         <Choice<DockSize>
           label="Size"
@@ -59,6 +74,7 @@ export function AppearanceSection({ settings, save }: { settings: Settings; save
           onChange={(size) => save({ size })}
         />
       </Row>
+      <LookRows settings={settings} save={save} />
       {screens.length > 1 && (
         <Row label="Docks on" hint="One dock, or one on every screen showing that screen's windows.">
           <Choice<DocksOn>
@@ -96,6 +112,100 @@ export function AppearanceSection({ settings, save }: { settings: Settings; save
         </Row>
       )}
     </section>
+  );
+}
+
+/** Fine control over the dock's size and look. */
+function LookRows({ settings, save }: { settings: Settings; save: Save }) {
+  const look = settings.look;
+  const set = (patch: Partial<DockLook>) => save({ look: { ...look, ...patch } });
+  return (
+    <>
+      <Row label="Dock size" hint="Make the dock any size. Bigger docks show more on each widget.">
+        <Slider
+          label="Dock size"
+          value={look.scale}
+          min={70}
+          max={200}
+          step={5}
+          onCommit={(scale) => set({ scale })}
+        />
+      </Row>
+      {settings.style === "pill" && (
+        <Row label="Corners" hint="100% is a full pill.">
+          <Slider
+            label="Corners"
+            value={look.corners}
+            min={0}
+            max={100}
+            step={5}
+            onCommit={(corners) => set({ corners })}
+          />
+        </Row>
+      )}
+      <Row label="Transparency" hint="Let the desktop show through the dock.">
+        <Slider
+          label="Transparency"
+          value={look.transparency}
+          min={0}
+          max={70}
+          step={5}
+          onCommit={(transparency) => set({ transparency })}
+        />
+      </Row>
+      <Row label="Blur" hint="How frosted the glass is.">
+        <Slider
+          label="Blur"
+          value={look.blur}
+          min={0}
+          max={300}
+          step={10}
+          onCommit={(blur) => set({ blur })}
+        />
+      </Row>
+      <Row label="Widget background" hint="A soft chip behind each widget.">
+        <Slider
+          label="Widget background"
+          value={look.widgetBackground}
+          min={0}
+          max={100}
+          step={5}
+          onCommit={(widgetBackground) => set({ widgetBackground })}
+        />
+      </Row>
+      <Row label="Bounciness" hint="How springy clicks and animations feel.">
+        <Slider
+          label="Bounciness"
+          value={look.bounce}
+          min={0}
+          max={100}
+          step={5}
+          onCommit={(bounce) => set({ bounce })}
+        />
+      </Row>
+      <Row label="Magnify on hover" hint="App icons grow as the mouse passes over them.">
+        <Toggle label="Magnify on hover" checked={look.magnify} onChange={(magnify) => set({ magnify })} />
+      </Row>
+      <Row label="Startup animation" hint="The dock rises into place when it starts.">
+        <Toggle
+          label="Startup animation"
+          checked={look.startupAnimation}
+          onChange={(startupAnimation) => set({ startupAnimation })}
+        />
+      </Row>
+      <Row label="Popup style">
+        <Choice<PopupStyle>
+          label="Popup style"
+          value={look.popupStyle}
+          options={[
+            ["glass", "Glass"],
+            ["solid", "Solid"],
+            ["compact", "Compact"],
+          ]}
+          onChange={(popupStyle) => set({ popupStyle })}
+        />
+      </Row>
+    </>
   );
 }
 

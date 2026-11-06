@@ -22,10 +22,10 @@ import {
 } from "./logic";
 
 const list: WidgetEntry[] = [
-  { kind: "music", enabled: true },
-  { kind: "focus", enabled: false },
-  { kind: "weather", enabled: true },
-  { kind: "clock", enabled: true },
+  { kind: "music", enabled: true, size: "normal" },
+  { kind: "focus", enabled: false, size: "normal" },
+  { kind: "weather", enabled: true, size: "normal" },
+  { kind: "clock", enabled: true, size: "normal" },
 ];
 const shown = (w: WidgetEntry) => w.enabled;
 
@@ -33,7 +33,7 @@ describe("reorderVisible", () => {
   it("moves a visible widget and leaves hidden ones in their slots", () => {
     const next = reorderVisible(list, shown, 2, 0);
     expect(next.map((w) => w.kind)).toEqual(["clock", "focus", "music", "weather"]);
-    expect(next[1]).toEqual({ kind: "focus", enabled: false });
+    expect(next[1]).toEqual({ kind: "focus", enabled: false, size: "normal" });
   });
 
   it("ignores out-of-range or no-op moves", () => {

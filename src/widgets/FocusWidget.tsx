@@ -39,7 +39,10 @@ export function FocusTile() {
   return (
     <span className="tile-row" data-phase={focus.phase}>
       <Ring fraction={fraction} size={18} stroke={2.5} />
-      <span className="tile-strong tile-tabular">{formatCountdown(left)}</span>
+      <span className="tile-stack music-text">
+        <span className="tile-strong tile-tabular">{formatCountdown(left)}</span>
+        <span className="tile-faint tile-more">{focus.phase === "focus" ? "Focus" : "Break"}</span>
+      </span>
     </span>
   );
 }

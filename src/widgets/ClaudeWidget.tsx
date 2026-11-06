@@ -54,8 +54,11 @@ export function ClaudeTile() {
   return (
     <span className="tile-row">
       {window.percent != null ? <Ring percent={window.percent} /> : <Sparkles size={16} aria-hidden="true" />}
-      <span className="tile-strong tile-tabular">
-        {window.percent != null ? `≈${window.percent}%` : formatTokens(window.tokens)}
+      <span className="tile-stack music-text">
+        <span className="tile-strong tile-tabular">
+          {window.percent != null ? `≈${window.percent}%` : formatTokens(window.tokens)}
+        </span>
+        <span className="tile-faint tile-more">today {formatTokens(claude.todayTokens)}</span>
       </span>
     </span>
   );

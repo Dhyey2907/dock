@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { PanelBottom, Search, Settings2 } from "lucide-react";
 
 import { ipc } from "../core/ipc";
@@ -9,6 +9,7 @@ import { Glass } from "./glass/Glass";
 import type { Ink } from "./glass/styles";
 import { WidgetBar } from "../widgets/WidgetBar";
 import { useAutoHide } from "./useAutoHide";
+import { fitShrink, lookStyle, roomFor } from "./look";
 
 /** Four squares, like the Windows key. */
 function StartMark() {
@@ -34,6 +35,14 @@ export function Dock({ main = true }: { main?: boolean }) {
   const loaded = settings !== null;
   // Light or dark text, following the wallpaper behind the glass.
   const [ink, setInk] = useState<Ink>("light");
+  // Auto-shrink: how much smaller than the size slider the dock draws to fit the screen.
+  const [shrink, setShrink] = useState(1);
+  // The rise-in plays once, when the dock first appears.
+  const [starting, setStarting] = useState(true);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setStarting(false), 900);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useLayoutEffect(() => {
     const content = contentRef.current;
@@ -42,6 +51,7 @@ export function Dock({ main = true }: { main?: boolean }) {
       ipc
         .dockSetContentWidth(Math.ceil(content.scrollWidth))
         .catch((error) => console.error("failed to report dock width", error));
+      setShrink((current) => fitShrink(current, content.scrollWidth, window.screen.width));
     };
     report();
     const observer = new ResizeObserver(report);
@@ -50,6 +60,8 @@ export function Dock({ main = true }: { main?: boolean }) {
   }, [loaded]);
 
   if (!settings) return null;
+  const split = settings.style === "split";
+  const corners = settings.look.corners / 100;
   return (
     <div
       className="dock"
@@ -60,6 +72,12 @@ export function Dock({ main = true }: { main?: boolean }) {
       data-revealed={revealed}
       data-auto-hide={settings.autoHide}
       data-ink={ink}
+      data-room={roomFor(settings)}
+      data-magnify={settings.look.magnify}
+      data-startup={starting && settings.look.startupAnimation}
+      style={
+        lookStyle(settings, settings.autoShrink && settings.style !== "full" ? shrink : 1) as CSSProperties
+      }
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
@@ -68,48 +86,56 @@ export function Dock({ main = true }: { main?: boolean }) {
       {/* Dragging the bar's background moves the dock; dropping it nearer the top or bottom
           snaps it to that edge. Buttons inside stay clickable. */}
       <div className="dock-content" ref={contentRef} data-tauri-drag-region>
-        <Glass theme={settings.theme} rounded={settings.style === "pill"} onInk={setInk} />
-        <button
-          className="dock-icon-button dock-start"
-          aria-label="Start"
-          title="Start"
-          onClick={() => ipc.shellStart().catch((error) => console.error(error))}
-        >
-          <StartMark />
-        </button>
-        <button
-          className="dock-icon-button"
-          aria-label="Search"
-          title="Search"
-          onClick={() => ipc.shellSearch().catch((error) => console.error(error))}
-        >
-          <Search size={18} strokeWidth={2} />
-        </button>
-        <div className="dock-divider" data-tauri-drag-region />
-        <div className="dock-apps" data-tauri-drag-region>
-          {apps.map((app) => (
-            <AppButton key={app.key} app={app} />
-          ))}
+        {!split && (
+          <Glass theme={settings.theme} corners={settings.style === "pill" ? corners : 0} onInk={setInk} />
+        )}
+        <div className="dock-group" data-tauri-drag-region>
+          {split && <Glass theme={settings.theme} corners={corners} onInk={setInk} />}
+          <button
+            className="dock-icon-button dock-start"
+            aria-label="Start"
+            title="Start"
+            onClick={() => ipc.shellStart().catch((error) => console.error(error))}
+          >
+            <StartMark />
+          </button>
+          <button
+            className="dock-icon-button"
+            aria-label="Search"
+            title="Search"
+            onClick={() => ipc.shellSearch().catch((error) => console.error(error))}
+          >
+            <Search size={18} strokeWidth={2} />
+          </button>
+          <div className="dock-divider" data-tauri-drag-region />
+          <div className="dock-apps" data-tauri-drag-region>
+            {apps.map((app) => (
+              <AppButton key={app.key} app={app} />
+            ))}
+          </div>
         </div>
         <div className="dock-spacer" data-tauri-drag-region />
-        {main && <WidgetBar />}
-        <button
-          className="dock-icon-button"
-          aria-label="Switch to the Windows taskbar"
-          title={`Switch to the Windows taskbar
+        <div className="dock-group" data-tauri-drag-region>
+          {split && <Glass theme={settings.theme} corners={corners} onInk={setInk} />}
+          {main && <WidgetBar />}
+          <button
+            className="dock-icon-button"
+            aria-label="Switch to the Windows taskbar"
+            title={`Switch to the Windows taskbar
 Bring Dock back with the tray icon${settings?.toggleShortcut ? ` or ${settings.toggleShortcut}` : ""}`}
-          onClick={() => ipc.switchToWindowsTaskbar().catch((error) => console.error(error))}
-        >
-          <PanelBottom size={18} strokeWidth={1.8} />
-        </button>
-        <button
-          className="dock-icon-button"
-          aria-label="Settings"
-          title="Settings"
-          onClick={() => ipc.openSettings().catch((error) => console.error(error))}
-        >
-          <Settings2 size={18} strokeWidth={1.8} />
-        </button>
+            onClick={() => ipc.switchToWindowsTaskbar().catch((error) => console.error(error))}
+          >
+            <PanelBottom size={18} strokeWidth={1.8} />
+          </button>
+          <button
+            className="dock-icon-button"
+            aria-label="Settings"
+            title="Settings"
+            onClick={() => ipc.openSettings().catch((error) => console.error(error))}
+          >
+            <Settings2 size={18} strokeWidth={1.8} />
+          </button>
+        </div>
       </div>
     </div>
   );

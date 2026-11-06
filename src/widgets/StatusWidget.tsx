@@ -82,7 +82,13 @@ export function StatusTile() {
     <span className="tile-row">
       <NetIcon size={16} strokeWidth={1.9} aria-hidden="true" />
       <VolIcon size={16} strokeWidth={1.9} aria-hidden="true" />
+      {sound && (
+        <span className="tile-mini tile-more">
+          {sound.muted ? "Muted" : `${Math.round(sound.level * 100)}%`}
+        </span>
+      )}
       {BatIcon && <BatIcon size={18} strokeWidth={1.9} aria-hidden="true" />}
+      {battery != null && <span className="tile-mini tile-more">{battery}%</span>}
     </span>
   );
 }

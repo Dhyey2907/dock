@@ -40,13 +40,33 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 2px;
-  padding: 0 8px;
-  border-radius: var(--radius-pill);
+  padding: 0 calc(8px * var(--scale, 1));
+  /* The corners slider: 1 is a full pill, 0 square. */
+  border-radius: calc(var(--dock-h, 56px) / 2 * var(--corners, 1));
 }
 /* Everything in the bar sits above the glass. */
-.dock-content > :not(.glass) {
+.dock-content > :not(.glass),
+.dock-group > :not(.glass) {
   position: relative;
   z-index: 1;
+}
+/* Groups only matter for the split style; otherwise their items sit straight in the bar. */
+.dock-group {
+  display: contents;
+}
+.dock[data-style="split"] .dock-content {
+  width: 100%;
+  padding: 0;
+}
+.dock[data-style="split"] .dock-group {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+  padding: 0 calc(8px * var(--scale, 1));
+  border-radius: calc(var(--dock-h, 56px) / 2 * var(--corners, 1));
 }
 
 .dock[data-style="full"] .dock-content {
@@ -64,6 +84,8 @@ button {
   overflow: hidden;
   background: var(--glass-fallback);
   pointer-events: none;
+  /* The transparency slider: lets the desktop show through the bar. */
+  opacity: var(--glass-opacity, 1);
 }
 /* With the wallpaper showing, the fallback colour would only muddy it. */
 .glass[data-picture="true"] {
@@ -153,19 +175,23 @@ button {
 /* Button size and icon size follow the dock size. App buttons are a little narrower than
    they are tall, so a row of apps stays compact. */
 .dock {
-  --button: 40px;
-  --app-width: 36px;
-  --icon: 26px;
+  --base-button: 40px;
+  --base-app-width: 36px;
+  --base-icon: 26px;
+  /* The size slider scales everything from the size choice. */
+  --button: calc(var(--base-button) * var(--scale, 1));
+  --app-width: calc(var(--base-app-width) * var(--scale, 1));
+  --icon: calc(var(--base-icon) * var(--scale, 1));
 }
 .dock[data-size="small"] {
-  --button: 34px;
-  --app-width: 31px;
-  --icon: 22px;
+  --base-button: 34px;
+  --base-app-width: 31px;
+  --base-icon: 22px;
 }
 .dock[data-size="large"] {
-  --button: 46px;
-  --app-width: 42px;
-  --icon: 30px;
+  --base-button: 46px;
+  --base-app-width: 42px;
+  --base-icon: 30px;
 }
 
 .dock-icon-button,
@@ -718,4 +744,76 @@ button {
 :is(.settings-window, .welcome-window) ::-webkit-scrollbar-button {
   display: none;
   background: transparent;
+}
+
+/* ---------- Look settings ---------- */
+/* Springy motion: the bounciness slider sets --spring. */
+.dock-app,
+.dock-icon-button,
+.dock-widget,
+.dock-gallery-button {
+  transition-timing-function: var(--spring, var(--ease));
+}
+
+/* Magnify on hover: the icon under the cursor grows, its neighbours a little. */
+.dock[data-magnify="true"] .dock-app {
+  transition:
+    width 220ms var(--spring, var(--ease)),
+    background 160ms var(--ease);
+}
+.dock[data-magnify="true"] .dock-app-icon {
+  transition: transform 220ms var(--spring, var(--ease));
+}
+.dock[data-magnify="true"] .dock-app:hover {
+  width: calc(var(--app-width) * 1.22);
+}
+.dock[data-magnify="true"] .dock-app:hover .dock-app-icon {
+  transform: scale(1.32);
+}
+.dock[data-magnify="true"] .dock-app:hover + .dock-app .dock-app-icon,
+.dock[data-magnify="true"] .dock-app:has(+ .dock-app:hover) .dock-app-icon {
+  transform: scale(1.14);
+}
+
+/* Startup: the bar rises into place once. */
+.dock[data-startup="true"][data-edge="bottom"] .dock-content {
+  animation: dock-rise-bottom 620ms var(--spring, var(--ease)) both;
+}
+.dock[data-startup="true"][data-edge="top"] .dock-content {
+  animation: dock-rise-top 620ms var(--spring, var(--ease)) both;
+}
+@keyframes dock-rise-bottom {
+  from {
+    transform: translateY(70%) scale(0.92);
+    opacity: 0;
+  }
+}
+@keyframes dock-rise-top {
+  from {
+    transform: translateY(-70%) scale(0.92);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dock[data-magnify="true"] .dock-app-icon {
+    transition: none;
+  }
+}
+
+/* Settings sliders */
+.slider {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.slider input[type="range"] {
+  width: 170px;
+  accent-color: var(--s-accent);
+}
+.slider-value {
+  min-width: 42px;
+  color: var(--s-faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }

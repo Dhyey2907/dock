@@ -16,11 +16,12 @@ const MARGIN = 16;
  */
 export function Glass({
   theme,
-  rounded,
+  corners,
   onInk,
 }: {
   theme: Theme;
-  rounded: boolean;
+  /** Corner roundness, 0 (square) to 1 (a full pill). */
+  corners: number;
   onInk: (ink: Ink) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -59,11 +60,11 @@ export function Glass({
       width,
       height,
       inset: MARGIN,
-      radius: rounded ? box.height / 2 : 0,
+      radius: (box.height / 2) * corners,
       bezel: Math.min(18, box.height * 0.32),
     });
     return url ? { url, width, height } : null;
-  }, [box, rounded, style.refract]);
+  }, [box, corners, style.refract]);
 
   const ink: Ink = useMemo(() => {
     if (!style.adaptiveInk || !frame || !geometry || !box) return "light";

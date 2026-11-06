@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent, type WheelEvent } from "react";
+import { ChevronRight } from "lucide-react";
+import { useWidgets } from "./store";
 
 import { events, ipc } from "../core/ipc";
 import type { WidgetEntry } from "../core/generated/WidgetEntry";
@@ -27,7 +29,8 @@ export function WidgetBar() {
   const settings = useSettings((s) => s.settings);
   const update = useSettings((s) => s.update);
   const geometry = useGlass((s) => s.geometry);
-  const [open, setOpen] = useState<WidgetKind | null>(null);
+  const [open, setOpen] = useState<WidgetKind | "gallery" | null>(null);
+  const galleryButton = useRef<HTMLButtonElement>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
   const tiles = useRef(new Map<WidgetKind, HTMLButtonElement>());
   const suppressClick = useRef(false);
@@ -47,7 +50,6 @@ export function WidgetBar() {
 
   if (!settings) return null;
   const shown = settings.widgets.filter(visible);
-  if (shown.length === 0) return null;
   // While dragging, show the order the drop would give.
   const order = drag?.moved ? reorderVisible(shown, () => true, drag.from, drag.to) : shown;
 
@@ -58,6 +60,34 @@ export function WidgetBar() {
     const anchor = geometry.x + (rect.left + rect.width / 2) * geometry.scale;
     setOpen((current) => (current === kind ? null : kind));
     ipc.panelToggle(kind, anchor).catch((error) => console.error("failed to open the popup", error));
+  };
+
+  const onWheel = (kind: WidgetKind) => (e: WheelEvent<HTMLButtonElement>) => {
+    if (kind !== "status") return;
+    const up = e.deltaY < 0;
+    if (e.shiftKey) {
+      ipc
+        .quickGet()
+        .then((q) => {
+          if (q.brightness == null) return;
+          const next = Math.max(0, Math.min(100, q.brightness + (up ? 5 : -5)));
+          return ipc.quickSetBrightness(next);
+        })
+        .catch((error) => console.error("failed to change brightness", error));
+      return;
+    }
+    const level = useWidgets.getState().sound?.level ?? 0.5;
+    const next = Math.max(0, Math.min(1, Math.round((level + (up ? 0.04 : -0.04)) * 100) / 100));
+    ipc.volumeSet(next).catch((error) => console.error("failed to change the volume", error));
+  };
+
+  const toggleGallery = () => {
+    const button = galleryButton.current;
+    if (!button || !geometry) return;
+    const rect = button.getBoundingClientRect();
+    const anchor = geometry.x + (rect.left + rect.width / 2) * geometry.scale;
+    setOpen((current) => (current === "gallery" ? null : "gallery"));
+    ipc.galleryToggle(anchor).catch((error) => console.error("failed to open the widget gallery", error));
   };
 
   const onPointerDown = (kind: WidgetKind, index: number) => (e: PointerEvent<HTMLButtonElement>) => {
@@ -107,6 +137,7 @@ export function WidgetBar() {
             }}
             className="dock-widget"
             data-kind={entry.kind}
+            data-size={entry.size}
             data-open={open === entry.kind}
             data-lifted={drag?.moved && drag.kind === entry.kind}
             aria-label={def.label}
@@ -115,6 +146,7 @@ export function WidgetBar() {
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={() => setDrag(null)}
+            onWheel={onWheel(entry.kind)}
             onClick={() => {
               if (suppressClick.current) {
                 suppressClick.current = false;
@@ -127,6 +159,16 @@ export function WidgetBar() {
           </button>
         );
       })}
+      <button
+        ref={galleryButton}
+        className="dock-gallery-button"
+        data-open={open === "gallery"}
+        aria-label="Add widgets"
+        title="Add widgets"
+        onClick={toggleGallery}
+      >
+        <ChevronRight size={16} strokeWidth={2.2} />
+      </button>
     </div>
   );
 }

@@ -312,6 +312,7 @@ mod tests {
         settings.widgets[0] = WidgetEntry {
             kind: WidgetKind::System,
             enabled: true,
+            size: Default::default(),
         };
         assert!(wants_stats(&settings));
     }

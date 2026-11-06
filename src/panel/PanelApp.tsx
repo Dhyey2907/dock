@@ -5,11 +5,14 @@ import type { PanelContent } from "../core/generated/PanelContent";
 import { useSettings } from "../settings/store";
 import { WIDGETS } from "../widgets/registry";
 import { AppMenuPanel } from "./AppMenuPanel";
+import { GalleryPanel } from "./GalleryPanel";
+import { PictureInPicture2 } from "lucide-react";
 
 /** The popup window: a widget's popup or an app's menu, whichever the dock asked for. */
 export function PanelApp() {
   const [content, setContent] = useState<PanelContent | null>(null);
   const theme = useSettings((s) => s.settings?.theme);
+  const popupStyle = useSettings((s) => s.settings?.look.popupStyle);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -41,9 +44,25 @@ export function PanelApp() {
   const kind = content?.type === "widget" ? content.kind : undefined;
   const def = kind ? WIDGETS[kind] : undefined;
   return (
-    <div className="panel" data-light={theme === "white"} data-kind={kind ?? content?.type}>
+    <div
+      className="panel"
+      data-light={theme === "white"}
+      data-kind={kind ?? content?.type}
+      data-popup={popupStyle ?? "glass"}
+    >
       {def && <def.Panel />}
+      {def && (
+        <button
+          className="panel-detach"
+          title="Pop out: keep this widget in its own window"
+          aria-label="Pop out"
+          onClick={() => ipc.panelDetach().catch((error) => console.error("failed to pop out", error))}
+        >
+          <PictureInPicture2 size={14} />
+        </button>
+      )}
       {content?.type === "app" && <AppMenuPanel menu={content.menu} />}
+      {content?.type === "gallery" && <GalleryPanel />}
     </div>
   );
 }

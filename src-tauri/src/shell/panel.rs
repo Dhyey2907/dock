@@ -35,7 +35,12 @@ pub enum PanelContent {
     Widget { kind: WidgetKind },
     /// An app's right-click menu.
     App { menu: AppMenu },
+    /// The widget gallery: add, remove and size widgets.
+    Gallery,
 }
+
+/// The widget gallery's size in logical pixels.
+pub const GALLERY_SIZE: (f64, f64) = (420.0, 540.0);
 
 /// What the popup is showing, while it is open.
 #[derive(Default)]
@@ -86,6 +91,14 @@ pub fn toggle(app: &AppHandle, kind: WidgetKind, anchor_x: i32) -> AppResult<()>
         return close(app);
     }
     show(app, super::DOCK_LABEL, content, panel_size(kind), anchor_x)
+}
+
+/// Open the widget gallery above the dock's › button (or close it, if it's open).
+pub fn toggle_gallery(app: &AppHandle, anchor_x: i32) -> AppResult<()> {
+    if is_showing(app, |open| *open == PanelContent::Gallery)? {
+        return close(app);
+    }
+    show(app, super::DOCK_LABEL, PanelContent::Gallery, GALLERY_SIZE, anchor_x)
 }
 
 /// Open an app's right-click menu above it (or close it, if that menu is already open).

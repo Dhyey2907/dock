@@ -21,7 +21,64 @@ pub fn settings_get(store: State<'_, SettingsStore>) -> Settings {
 pub fn settings_set(app: AppHandle, settings: Settings) -> AppResult<Settings> {
     let store = app.state::<SettingsStore>();
     let before = store.get();
-    store.set(settings.clone())?;
+    store.set(settings)?;
+    applied(&app, before, store.get())
+}
+
+/// Put back the widget layout and look from before the last change.
+#[tauri::command]
+pub fn settings_undo_layout(app: AppHandle) -> AppResult<Settings> {
+    let store = app.state::<SettingsStore>();
+    let before = store.get();
+    match store.undo_layout()? {
+        Some(settings) => applied(&app, before, settings),
+        None => Ok(before),
+    }
+}
+
+/// Open or close the widget gallery, centred on `anchor_x` (screen pixels).
+#[tauri::command]
+pub async fn gallery_toggle(app: AppHandle, anchor_x: i32) -> AppResult<()> {
+    shell::panel::toggle_gallery(&app, anchor_x)
+}
+
+/// Turn the open widget popup into a window that stays on top.
+#[tauri::command]
+pub async fn panel_detach(app: AppHandle) -> AppResult<()> {
+    shell::floating::detach_popup(&app)
+}
+
+/// Show a widget in its own window, on top of other windows or on the desktop.
+#[tauri::command]
+pub async fn floating_show(app: AppHandle, kind: crate::settings::WidgetKind, on_top: bool) -> AppResult<()> {
+    shell::floating::show(&app, kind, on_top)
+}
+
+/// A floating widget was dragged somewhere new (physical pixels).
+#[tauri::command]
+pub fn floating_moved(app: AppHandle, kind: crate::settings::WidgetKind, x: i32, y: i32) -> AppResult<()> {
+    shell::floating::moved(&app, kind, x, y)
+}
+
+#[tauri::command]
+pub fn floating_close(app: AppHandle, kind: crate::settings::WidgetKind) -> AppResult<()> {
+    shell::floating::close(&app, kind)
+}
+
+#[tauri::command]
+pub async fn dashboard_open(app: AppHandle) -> AppResult<()> {
+    shell::floating::open_dashboard(&app)
+}
+
+/// Whether "Undo layout" has anything to undo.
+#[tauri::command]
+pub fn settings_can_undo(store: State<'_, SettingsStore>) -> bool {
+    store.can_undo()
+}
+
+/// Act on a settings change that has been saved.
+fn applied(app: &AppHandle, before: Settings, settings: Settings) -> AppResult<Settings> {
+    let app = app.clone();
     if before.launch_at_startup != settings.launch_at_startup {
         sync_autostart(&app, settings.launch_at_startup);
     }

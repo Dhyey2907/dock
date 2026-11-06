@@ -6,6 +6,8 @@ import { Dock } from "./dock/Dock";
 import { useApps } from "./dock/apps";
 import { useGlass } from "./dock/glass/store";
 import { isMainDock } from "./core/ipc";
+import { DashboardApp } from "./panel/DashboardApp";
+import { FloatApp } from "./panel/FloatApp";
 import { PanelApp } from "./panel/PanelApp";
 import { SettingsApp } from "./settings/SettingsApp";
 import { WelcomeApp } from "./settings/WelcomeApp";
@@ -30,12 +32,17 @@ const page = hash.startsWith("#settings")
       ? "bubble"
       : hash.startsWith("#welcome")
         ? "welcome"
-        : "dock";
+        : hash.startsWith("#float")
+          ? "float"
+          : hash.startsWith("#dashboard")
+            ? "dashboard"
+            : "dock";
 document.documentElement.classList.add(`${page}-window`);
 
 useSettings.getState().load().catch(report("settings"));
 // Widgets live on the main dock only; docks on other screens show just their screen's windows.
-const widgets = page === "panel" || (page === "dock" && isMainDock());
+const widgets =
+  page === "panel" || page === "float" || page === "dashboard" || (page === "dock" && isMainDock());
 if (widgets) useWidgets.getState().load().catch(report("widgets"));
 if (page === "dock") {
   useApps.getState().load().catch(report("apps"));
@@ -52,6 +59,10 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <BubbleApp />
     ) : page === "welcome" ? (
       <WelcomeApp />
+    ) : page === "float" ? (
+      <FloatApp />
+    ) : page === "dashboard" ? (
+      <DashboardApp />
     ) : (
       <Dock main={isMainDock()} />
     )}

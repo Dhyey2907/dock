@@ -44,6 +44,21 @@ pub enum DockStyle {
     Pill,
     /// Edge to edge, like the Windows taskbar.
     Full,
+    /// Two floating pills: apps on the left, widgets on the right.
+    Split,
+}
+
+/// A widget shown outside the dock, in its own window.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FloatingWidget {
+    pub kind: WidgetKind,
+    /// Window position in physical screen pixels.
+    pub x: i32,
+    pub y: i32,
+    /// Stays above other windows; otherwise it sits on the desktop, behind them.
+    pub on_top: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
@@ -76,6 +91,87 @@ impl DockSize {
             DockSize::Small => 48.0,
             DockSize::Medium => 56.0,
             DockSize::Large => 64.0,
+        }
+    }
+}
+
+/// How a widget's tile is drawn on the dock.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum WidgetSize {
+    /// Just the essentials.
+    Small,
+    #[default]
+    Normal,
+    /// Extra detail (a second line, more numbers).
+    Large,
+}
+
+/// How widget popups look.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum PopupStyle {
+    /// Acrylic glass, like the dock.
+    #[default]
+    Glass,
+    /// An opaque card.
+    Solid,
+    /// Glass with tighter spacing.
+    Compact,
+}
+
+/// Fine control over the dock's size and look, on top of the size and theme choices.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct DockLook {
+    /// Dock size as a percentage of the chosen size (70 to 200). Bigger docks show more.
+    pub scale: u16,
+    /// Corner roundness in percent: 100 is a full pill, 0 square.
+    pub corners: u8,
+    /// How see-through the glass is, in percent (0 to 70).
+    pub transparency: u8,
+    /// Blur strength in percent of the theme's own blur (0 to 300).
+    pub blur: u16,
+    /// Background behind each widget tile, in percent (0 is none).
+    pub widget_background: u8,
+    /// App icons grow as the mouse passes over them.
+    pub magnify: bool,
+    /// How springy animations are, in percent (0 is none).
+    pub bounce: u8,
+    /// The dock rises into place when it starts.
+    pub startup_animation: bool,
+    pub popup_style: PopupStyle,
+}
+
+impl Default for DockLook {
+    fn default() -> Self {
+        Self {
+            scale: 100,
+            corners: 100,
+            transparency: 0,
+            blur: 100,
+            widget_background: 0,
+            magnify: false,
+            bounce: 40,
+            startup_animation: true,
+            popup_style: PopupStyle::default(),
+        }
+    }
+}
+
+impl DockLook {
+    fn clamped(self) -> Self {
+        Self {
+            scale: self.scale.clamp(70, 200),
+            corners: self.corners.min(100),
+            transparency: self.transparency.min(70),
+            blur: self.blur.min(300),
+            widget_background: self.widget_background.min(100),
+            bounce: self.bounce.min(100),
+            ..self
         }
     }
 }
@@ -132,12 +228,15 @@ impl WidgetKind {
 pub struct WidgetEntry {
     pub kind: WidgetKind,
     pub enabled: bool,
+    #[serde(default)]
+    pub size: WidgetSize,
 }
 
 fn default_widgets() -> Vec<WidgetEntry> {
     WidgetKind::ALL
         .iter()
         .map(|&kind| WidgetEntry {
+            size: WidgetSize::Normal,
             kind,
             // On by default: the ones that work with no setup.
             enabled: matches!(
@@ -221,6 +320,8 @@ pub struct Settings {
     pub style: DockStyle,
     pub theme: Theme,
     pub size: DockSize,
+    /// Size slider, corners, transparency, blur and other fine touches.
+    pub look: DockLook,
     /// The dock slides away and comes back when the cursor touches the edge.
     pub auto_hide: bool,
     pub taskbar_mode: TaskbarMode,
@@ -247,6 +348,10 @@ pub struct Settings {
     pub docks_on: DocksOn,
     /// The welcome has been seen.
     pub onboarded: bool,
+    /// Widgets popped out of the dock (on top) or put on the desktop.
+    pub floating: Vec<FloatingWidget>,
+    /// Shrink the dock to fit when it has more than the screen is wide.
+    pub auto_shrink: bool,
 }
 
 impl Default for Settings {
@@ -256,6 +361,7 @@ impl Default for Settings {
             style: DockStyle::default(),
             theme: Theme::default(),
             size: DockSize::default(),
+            look: DockLook::default(),
             auto_hide: false,
             taskbar_mode: TaskbarMode::default(),
             launch_at_startup: true,
@@ -270,11 +376,18 @@ impl Default for Settings {
             screen: String::new(),
             docks_on: DocksOn::default(),
             onboarded: false,
+            floating: Vec::new(),
+            auto_shrink: true,
         }
     }
 }
 
 impl Settings {
+    /// Dock bar height in logical pixels: the size choice scaled by the size slider.
+    pub fn dock_height(&self) -> f64 {
+        (self.size.height() * f64::from(self.look.scale) / 100.0).round()
+    }
+
     /// Make the widget list sane: unknown kinds and repeats dropped, missing kinds added (off)
     /// at the end, so older and newer files both load.
     pub fn normalized(mut self) -> Self {
@@ -286,9 +399,14 @@ impl Settings {
         });
         for kind in WidgetKind::ALL {
             if !self.widgets.iter().any(|w| w.kind == kind) {
-                self.widgets.push(WidgetEntry { kind, enabled: false });
+                self.widgets.push(WidgetEntry {
+                    kind,
+                    enabled: false,
+                    size: WidgetSize::Normal,
+                });
             }
         }
+        self.look = self.look.clamped();
         self.weather_place = self.weather_place.trim().chars().take(80).collect();
         let valid = |t: &str| chrono::NaiveTime::parse_from_str(t.trim(), "%H:%M").is_ok();
         if !valid(&self.quiet_hours.start) || !valid(&self.quiet_hours.end) {
@@ -307,10 +425,35 @@ impl Settings {
     }
 }
 
+/// How many layout changes "Undo layout" can step back through.
+const UNDO_DEPTH: usize = 30;
+
+/// The parts of the settings that "Undo layout" restores: widgets and the look.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Layout {
+    widgets: Vec<WidgetEntry>,
+    look: DockLook,
+    size: DockSize,
+    style: DockStyle,
+}
+
+impl Layout {
+    fn of(settings: &Settings) -> Self {
+        Self {
+            widgets: settings.widgets.clone(),
+            look: settings.look,
+            size: settings.size,
+            style: settings.style,
+        }
+    }
+}
+
 /// The settings file plus an in-memory copy.
 pub struct SettingsStore {
     path: PathBuf,
     current: Mutex<Settings>,
+    /// Earlier layouts, newest last.
+    undo: Mutex<Vec<Layout>>,
 }
 
 impl SettingsStore {
@@ -331,6 +474,7 @@ impl SettingsStore {
         Self {
             path,
             current: Mutex::new(current),
+            undo: Mutex::new(Vec::new()),
         }
     }
 
@@ -340,6 +484,40 @@ impl SettingsStore {
 
     /// Save to disk (write a temp file, then rename, so a crash never leaves half a file).
     pub fn set(&self, settings: Settings) -> AppResult<()> {
+        let settings = settings.normalized();
+        let before = Layout::of(&self.get());
+        if before != Layout::of(&settings) {
+            let mut undo = self.undo.lock().expect("undo lock");
+            undo.push(before);
+            if undo.len() > UNDO_DEPTH {
+                undo.remove(0);
+            }
+        }
+        self.write(settings)
+    }
+
+    /// Whether there is a layout change to undo.
+    pub fn can_undo(&self) -> bool {
+        !self.undo.lock().expect("undo lock").is_empty()
+    }
+
+    /// Put back the layout before the last change; `None` when there's nothing to undo.
+    pub fn undo_layout(&self) -> AppResult<Option<Settings>> {
+        let Some(layout) = self.undo.lock().expect("undo lock").pop() else {
+            return Ok(None);
+        };
+        let settings = Settings {
+            widgets: layout.widgets,
+            look: layout.look,
+            size: layout.size,
+            style: layout.style,
+            ..self.get()
+        };
+        self.write(settings.clone())?;
+        Ok(Some(self.get()))
+    }
+
+    fn write(&self, settings: Settings) -> AppResult<()> {
         let settings = settings.normalized();
         if let Some(dir) = self.path.parent() {
             std::fs::create_dir_all(dir)?;
@@ -355,6 +533,39 @@ impl SettingsStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn layout_changes_can_be_undone() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = SettingsStore::open(dir.path());
+        assert!(!store.can_undo());
+        let mut s = store.get();
+        s.look.scale = 150;
+        store.set(s.clone()).unwrap();
+        s.widgets.reverse();
+        store.set(s.clone()).unwrap();
+        // Not a layout change: nothing new to undo.
+        s.weather_place = "Pune".into();
+        store.set(s).unwrap();
+        let back = store.undo_layout().unwrap().unwrap();
+        assert_eq!(back.widgets, Settings::default().widgets);
+        assert_eq!(back.look.scale, 150);
+        assert_eq!(back.weather_place, "Pune");
+        let back = store.undo_layout().unwrap().unwrap();
+        assert_eq!(back.look.scale, 100);
+        assert!(store.undo_layout().unwrap().is_none());
+    }
+
+    #[test]
+    fn look_is_clamped_and_scales_height() {
+        let mut s = Settings::default();
+        s.look.scale = 999;
+        s.look.transparency = 200;
+        let s = s.normalized();
+        assert_eq!(s.look.scale, 200);
+        assert_eq!(s.look.transparency, 70);
+        assert_eq!(s.dock_height(), 112.0);
+    }
 
     #[test]
     fn missing_file_gives_defaults() {
@@ -408,14 +619,16 @@ mod tests {
             widgets[0],
             WidgetEntry {
                 kind: WidgetKind::Clock,
-                enabled: true
+                enabled: true,
+                size: WidgetSize::Normal,
             }
         );
         assert_eq!(
             widgets[1],
             WidgetEntry {
                 kind: WidgetKind::Music,
-                enabled: false
+                enabled: false,
+                size: WidgetSize::Normal,
             }
         );
         // Missing kinds were added, switched off.

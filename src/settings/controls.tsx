@@ -33,6 +33,52 @@ export function Choice<T extends string>({
   );
 }
 
+/**
+ * A slider that shows its value while dragging and saves once you let go, so dragging doesn't
+ * rewrite the settings file on every step.
+ */
+export function Slider({
+  value,
+  min,
+  max,
+  step = 1,
+  label,
+  format = (v) => `${v}%`,
+  onCommit,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  label: string;
+  format?: (value: number) => string;
+  onCommit: (value: number) => void;
+}) {
+  const [draft, setDraft] = useState<number | null>(null);
+  const shown = draft ?? value;
+  const commit = () => {
+    if (draft !== null && draft !== value) onCommit(draft);
+    setDraft(null);
+  };
+  return (
+    <span className="slider">
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={shown}
+        aria-label={label}
+        onChange={(e) => setDraft(Number(e.target.value))}
+        onPointerUp={commit}
+        onKeyUp={commit}
+        onBlur={commit}
+      />
+      <span className="slider-value">{format(shown)}</span>
+    </span>
+  );
+}
+
 export function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <div className="settings-row">
