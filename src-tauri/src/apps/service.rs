@@ -457,6 +457,78 @@ pub fn all(app: &AppHandle) -> Vec<DockApp> {
     out
 }
 
+/// An app in a dock folder's popup.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FolderEntry {
+    pub key: String,
+    pub name: String,
+    pub icon: String,
+    pub running: bool,
+}
+
+/// A dock folder's popup: its name and the apps in it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FolderView {
+    /// The dock it was opened from.
+    pub dock: String,
+    pub id: String,
+    pub name: String,
+    pub apps: Vec<FolderEntry>,
+}
+
+impl FolderView {
+    /// The popup's size in logical pixels: up to four apps a row.
+    pub fn size(&self) -> (f64, f64) {
+        const CELL_W: f64 = 84.0;
+        const CELL_H: f64 = 88.0;
+        let count = self.apps.len().max(1);
+        let cols = count.clamp(3, 4);
+        let rows = count.div_ceil(cols);
+        (cols as f64 * CELL_W + 32.0, rows as f64 * CELL_H + 70.0)
+    }
+}
+
+/// Open (or close) the popup of the folder `id` on the dock `label`.
+pub fn show_folder(app: &AppHandle, label: &str, id: &str, anchor_x: i32) -> AppResult<()> {
+    let settings = app.state::<SettingsStore>().get();
+    let folder = settings
+        .apps
+        .folders
+        .iter()
+        .find(|f| f.id == id)
+        .ok_or_else(|| AppError::InvalidInput("unknown folder".into()))?;
+    let apps = list(app, label);
+    let view = FolderView {
+        dock: label.to_string(),
+        id: folder.id.clone(),
+        name: folder.name.clone(),
+        apps: folder
+            .keys
+            .iter()
+            .filter_map(|key| apps.iter().find(|a| &a.key == key))
+            .map(|a| FolderEntry {
+                key: a.key.clone(),
+                name: a.name.clone(),
+                icon: a.icon.clone(),
+                running: !a.windows.is_empty(),
+            })
+            .collect(),
+    };
+    #[cfg(windows)]
+    let _ = super::preview::hide(app);
+    crate::shell::panel::toggle_folder(app, view, anchor_x)
+}
+
+/// An app in a folder's popup was clicked: close the popup and do what clicking its icon does.
+pub fn folder_click(app: &AppHandle, label: &str, key: &str) -> AppResult<()> {
+    crate::shell::panel::close(app)?;
+    click(app, label, key, 0)
+}
+
 fn find(app: &AppHandle, label: &str, key: &str) -> AppResult<DockApp> {
     list(app, label)
         .into_iter()

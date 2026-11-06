@@ -4,6 +4,7 @@ import type { DockWindow } from "../core/generated/DockWindow";
 
 /** The backend's defaults for the apps settings. */
 export const defaultApps: AppsSettings = {
+  folders: [],
   customPins: [],
   overrides: [],
   hidden: [],

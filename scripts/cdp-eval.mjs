@@ -17,18 +17,14 @@ const targets = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
 // CDP_WINDOW=settings, panel, welcome or bubble targets that window; otherwise the dock.
 // CDP_ALL=1 evaluates in every matching page and prefixes each result.
 const want = process.env.CDP_WINDOW ?? "dock";
-const windowOf = (url) =>
-  url.includes("#settings")
-    ? "settings"
-    : url.includes("#panel")
-      ? "panel"
-      : url.includes("#welcome")
-        ? "welcome"
-        : url.includes("#bubble")
-          ? "bubble"
-          : "dock";
+// The window a page belongs to, from its address: "#settings" is "settings", "#float/clock" is
+// "float", and the page with no "#" is the dock.
+const windowOf = (url) => {
+  const hash = url.split("#")[1];
+  return hash ? hash.split(/[/-]/)[0] : "dock";
+};
 const pages = targets.filter(
-  (t) => t.type === "page" && t.url.includes("localhost:1420") && windowOf(t.url) === want,
+  (t) => t.type === "page" && (t.url.includes("localhost:1420") || t.url.includes("tauri.localhost")) && windowOf(t.url) === want,
 );
 if (pages.length === 0) {
   console.error(

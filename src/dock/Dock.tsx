@@ -4,6 +4,8 @@ import { PanelBottom, Search, Settings2 } from "lucide-react";
 import { ipc } from "../core/ipc";
 import { useSettings } from "../settings/store";
 import { AppButton } from "./AppButton";
+import { FolderButton } from "./FolderButton";
+import { rowItems } from "./folders";
 import { ShowDesktopButton } from "./DockExtras";
 import { useDragOverRaise, useEmptyDockClicks, useReportButtonRects } from "./dockHooks";
 import { useApps } from "./apps";
@@ -115,9 +117,13 @@ export function Dock({ main = true }: { main?: boolean }) {
           </button>
           <div className="dock-divider" data-tauri-drag-region />
           <div className="dock-apps" data-tauri-drag-region>
-            {apps.map((app) => (
-              <AppButton key={app.key} app={app} />
-            ))}
+            {rowItems(apps, settings.apps.folders).map((item) =>
+              item.type === "app" ? (
+                <AppButton key={item.app.key} app={item.app} />
+              ) : (
+                <FolderButton key={item.folder.id} folder={item.folder} apps={item.apps} />
+              ),
+            )}
           </div>
         </div>
         <div className="dock-spacer" data-tauri-drag-region />

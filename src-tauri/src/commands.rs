@@ -336,6 +336,29 @@ pub fn app_menu(app: AppHandle, window: WebviewWindow, key: String, anchor_x: i3
     crate::apps::service::show_menu(&app, window.label(), &key, anchor_x)
 }
 
+/// Open or close a dock folder's popup, centred on `anchor_x` (screen pixels).
+#[tauri::command(async)]
+pub fn folder_open(app: AppHandle, window: WebviewWindow, id: String, anchor_x: i32) -> AppResult<()> {
+    crate::apps::service::show_folder(&app, window.label(), &id, anchor_x)
+}
+
+/// Save the dock's folders, leaving every other setting as it is now.
+#[tauri::command]
+pub fn dock_folders_set(app: AppHandle, folders: Vec<crate::settings::DockFolder>) -> AppResult<Settings> {
+    let store = app.state::<SettingsStore>();
+    let before = store.get();
+    let mut settings = before.clone();
+    settings.apps.folders = folders;
+    store.set(settings)?;
+    applied(&app, before, store.get())
+}
+
+/// An app in a folder's popup was clicked.
+#[tauri::command(async)]
+pub fn folder_app_click(app: AppHandle, dock: String, key: String) -> AppResult<()> {
+    crate::apps::service::folder_click(&app, &dock, &key)
+}
+
 /// A choice in the open app menu.
 #[tauri::command(async)]
 pub fn app_menu_action(app: AppHandle, action: crate::apps::jump::MenuAction) -> AppResult<()> {

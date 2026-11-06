@@ -14,6 +14,8 @@ import {
   useLaunching,
   usePreviewOpen,
 } from "./appFeatures";
+import { dropTargetAt, useFolderDrag } from "./folderDrag";
+import { dropIntoFolder } from "./folders";
 
 /** Waits before asking again for an icon that didn't load. */
 const RETRY_DELAYS = [5_000, 15_000, 45_000];
@@ -31,7 +33,7 @@ function anchorOf(element: HTMLElement, fallback: number) {
 /** One app on the dock: click to open, bring forward or minimize; middle-click for a new
  *  window; right-click for its windows and actions; hover for its window previews; drag it to
  *  a screen edge to snap its window there. */
-export function AppButton({ app }: { app: DockApp }) {
+export function AppButton({ app, inFolder = false }: { app: DockApp; inFolder?: boolean }) {
   const [icon, setIcon] = useState<string | null>(null);
   const apps = useSettings((s) => s.settings?.apps);
   const launch = useLaunching((s) => s.launches[app.key]);
@@ -96,23 +98,49 @@ export function AppButton({ app }: { app: DockApp }) {
     window.clearTimeout(hoverTimer.current);
     if (running) ipc.previewHide(300).catch(report);
   };
-  const onPointerDown = (event: PointerEvent) => {
-    if (event.button === 0) press.current = { x: event.clientX, y: event.clientY, dragging: false };
+  const folderDrag = useFolderDrag();
+  const onPointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) return;
+    press.current = { x: event.clientX, y: event.clientY, dragging: false };
+    // Keep getting moves while the pointer is held, even off the dock.
+    event.currentTarget.setPointerCapture?.(event.pointerId);
   };
-  const onPointerMove = (event: PointerEvent) => {
+  const onPointerMove = (event: PointerEvent<HTMLButtonElement>) => {
     const start = press.current;
-    if (!start || start.dragging || (event.buttons & 1) === 0) return;
-    if (!running || apps?.edgeSnap === false) return;
-    if (movedPast(start, { x: event.clientX, y: event.clientY }, DRAG_THRESHOLD)) {
+    if (!start || (event.buttons & 1) === 0) return;
+    if (!start.dragging) {
+      if (!movedPast(start, { x: event.clientX, y: event.clientY }, DRAG_THRESHOLD)) return;
       start.dragging = true;
       dragged.current = true;
       window.clearTimeout(hoverTimer.current);
-      ipc.appDragOut(app.key).catch(report);
     }
+    // Dragged up off the dock: snap the app's window to a screen edge instead.
+    const offDock = event.clientY < -12 || event.clientY > window.innerHeight + 12;
+    if (offDock) {
+      useFolderDrag.getState().set(null, null);
+      press.current = null;
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+      if (running && apps?.edgeSnap !== false) ipc.appDragOut(app.key).catch(report);
+      return;
+    }
+    // Along the dock: over another app or a folder, it would go into a folder with it.
+    const over = dropTargetAt(event.clientX, event.clientY);
+    const self = over && "app" in over && over.app === app.key;
+    useFolderDrag.getState().set(app.key, self ? null : over);
   };
   const onPointerUp = () => {
+    const { dragging, over } = useFolderDrag.getState();
     press.current = null;
+    useFolderDrag.getState().set(null, null);
+    const settings = useSettings.getState().settings;
+    if (!dragging || !over || !settings) return;
+    const folders = dropIntoFolder(settings.apps.folders, dragging, over, `folder-${Date.now()}`);
+    if (folders !== settings.apps.folders) {
+      ipc.dockFoldersSet(folders).catch(report);
+    }
   };
+  const isDragging = folderDrag.dragging === app.key;
+  const isDropTarget = !!folderDrag.over && "app" in folderDrag.over && folderDrag.over.app === app.key;
 
   return (
     <>
@@ -126,6 +154,9 @@ export function AppButton({ app }: { app: DockApp }) {
         data-launching={launching}
         data-attention={attention}
         data-hung={app.hung}
+        data-dragging={isDragging}
+        data-drop-target={isDropTarget}
+        data-in-folder={inFolder}
         aria-label={app.name}
         title={title}
         onClick={onClick}

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
+import type { DockFolder } from "./generated/DockFolder";
 import type { ButtonRect } from "./generated/ButtonRect";
 import type { DockMenuAction } from "./generated/DockMenuAction";
 import type { MenuAction } from "./generated/MenuAction";
@@ -74,6 +75,12 @@ export const ipc = {
   floatingMoved: (kind: WidgetKind, x: number, y: number) => invoke<void>("floating_moved", { kind, x, y }),
   floatingClose: (kind: WidgetKind) => invoke<void>("floating_close", { kind }),
   dashboardOpen: () => invoke<void>("dashboard_open"),
+  /** Open or close a dock folder's popup, centred on `anchorX` (screen pixels). */
+  folderOpen: (id: string, anchorX: number) =>
+    invoke<void>("folder_open", { id, anchorX: Math.round(anchorX) }),
+  /** Save the dock's folders without touching any other setting. */
+  dockFoldersSet: (folders: DockFolder[]) => invoke<Settings>("dock_folders_set", { folders }),
+  folderAppClick: (dock: string, key: string) => invoke<void>("folder_app_click", { dock, key }),
   /** Open or close the widget gallery, centred on `anchorX` (screen pixels). */
   galleryToggle: (anchorX: number) => invoke<void>("gallery_toggle", { anchorX: Math.round(anchorX) }),
   dockSetContentWidth: (width: number) => invoke<void>("dock_set_content_width", { width }),

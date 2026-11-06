@@ -27,7 +27,6 @@ import {
   SongsTodayPanel,
   SongsTodayTile,
 } from "./productivity/ActivityWidgets";
-import { AppFoldersPanel, AppFoldersTile } from "./productivity/AppFoldersWidget";
 import { BookmarksPanel, BookmarksTile } from "./productivity/BookmarksWidget";
 import { PinImagePanel, PinImageTile, ScreenTextPanel, ScreenTextTile } from "./productivity/CaptureWidgets";
 import { FileSearchPanel, FileSearchTile } from "./productivity/FileSearchWidget";
@@ -185,13 +184,6 @@ export const WIDGETS: Partial<Record<WidgetKind, WidgetDefinition>> = {
     description: "Favourite websites and folders, one click each.",
     Tile: LinksTile,
     Panel: LinksPanel,
-    category: "productivity",
-  },
-  appFolders: {
-    label: "App folders",
-    description: "Group apps into one button that opens a small grid.",
-    Tile: AppFoldersTile,
-    Panel: AppFoldersPanel,
     category: "productivity",
   },
   bookmarks: {

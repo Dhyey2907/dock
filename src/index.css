@@ -839,3 +839,37 @@ button {
 .dock-widgets::-webkit-scrollbar {
   display: none;
 }
+
+/* ---------- Folders of apps on the dock ---------- */
+.dock-app[data-dragging="true"] {
+  opacity: 0.45;
+}
+.dock-app[data-drop-target="true"] {
+  background: var(--dock-hover);
+  box-shadow: 0 0 0 2px var(--dock-accent) inset;
+}
+.dock-folder {
+  width: var(--button);
+}
+.dock-folder-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: calc(2px * var(--scale, 1));
+  width: calc(var(--icon) * 1.08);
+  height: calc(var(--icon) * 1.08);
+  padding: calc(2px * var(--scale, 1));
+  border-radius: calc(8px * var(--scale, 1));
+  background: var(--dock-hover);
+  pointer-events: none;
+}
+.dock-folder-mini {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.dock-folder-letter {
+  display: grid;
+  place-items: center;
+  font-size: calc(8px * var(--scale, 1));
+  font-weight: 700;
+}

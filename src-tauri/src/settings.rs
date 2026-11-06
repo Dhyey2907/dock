@@ -731,6 +731,8 @@ pub enum EmptyAction {
 #[serde(rename_all = "camelCase", default)]
 #[ts(export)]
 pub struct AppsSettings {
+    /// Apps grouped into folders on the dock, like a phone's home screen.
+    pub folders: Vec<DockFolder>,
     /// Websites and folders pinned after the taskbar's pins, in dock order.
     pub custom_pins: Vec<CustomPin>,
     pub overrides: Vec<AppOverride>,
@@ -794,6 +796,7 @@ impl Default for AppsSettings {
             quick_actions: Vec::new(),
             reopen_on_last_screen: true,
             rearrange_on_unplug: true,
+            folders: Vec::new(),
         }
     }
 }
@@ -831,8 +834,45 @@ pub fn website_address(text: &str) -> Option<String> {
     .then(|| url.to_string())
 }
 
+/// Most apps in one dock folder, and most folders.
+const FOLDER_LIMIT: usize = 24;
+
+/// Apps grouped under one button on the dock.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct DockFolder {
+    pub id: String,
+    pub name: String,
+    /// The apps in it, by dock key, in order.
+    pub keys: Vec<String>,
+}
+
 impl AppsSettings {
+    /// Keep each app in one folder at most, drop empty folders and give each a name.
+    fn tidy_folders(&mut self) {
+        let mut seen: Vec<String> = Vec::new();
+        let mut ids: Vec<String> = Vec::new();
+        for folder in &mut self.folders {
+            folder.id = clean(&folder.id, 64);
+            folder.name = clean(&folder.name, 30);
+            if folder.name.is_empty() {
+                folder.name = "Folder".into();
+            }
+            folder.keys.retain(|k| !k.is_empty() && !seen.contains(k));
+            folder.keys.truncate(FOLDER_LIMIT);
+            seen.extend(folder.keys.iter().cloned());
+        }
+        self.folders.retain(|f| {
+            let keep = !f.id.is_empty() && !f.keys.is_empty() && !ids.contains(&f.id);
+            ids.push(f.id.clone());
+            keep
+        });
+        self.folders.truncate(FOLDER_LIMIT);
+    }
+
     pub fn normalized(mut self) -> Self {
+        self.tidy_folders();
         for pin in &mut self.custom_pins {
             pin.id = clean(&pin.id, 64);
             pin.name = clean(&pin.name, 60);
@@ -1121,6 +1161,29 @@ mod tests {
         assert_eq!(apps, AppsSettings::default());
         assert!(!apps.alt_tab);
         assert!(apps.previews && apps.number_shortcuts);
+    }
+
+    #[test]
+    fn folders_keep_each_app_once_and_drop_empty_ones() {
+        let folder = |id: &str, name: &str, keys: &[&str]| DockFolder {
+            id: id.into(),
+            name: name.into(),
+            keys: keys.iter().map(|k| k.to_string()).collect(),
+        };
+        let apps = AppsSettings {
+            folders: vec![
+                folder("a", "  Coding  ", &["pin:code", "pin:term"]),
+                folder("b", "", &["pin:code", "pin:chrome"]),
+                folder("c", "Empty", &["pin:term"]),
+                folder("a", "Again", &["pin:x"]),
+            ],
+            ..AppsSettings::default()
+        }
+        .normalized();
+        assert_eq!(apps.folders.len(), 2);
+        assert_eq!(apps.folders[0].name, "Coding");
+        assert_eq!(apps.folders[1].name, "Folder");
+        assert_eq!(apps.folders[1].keys, vec!["pin:chrome".to_string()]);
     }
 
     #[test]

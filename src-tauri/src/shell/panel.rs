@@ -37,6 +37,8 @@ pub enum PanelContent {
     App { menu: AppMenu },
     /// The widget gallery: add, remove and size widgets.
     Gallery,
+    /// A folder of apps on the dock.
+    Folder { folder: crate::apps::service::FolderView },
     /// Quick capture: a note or a to-do, from the shortcut.
     Capture,
     /// A pinned folder's files.
@@ -126,6 +128,17 @@ pub fn toggle(app: &AppHandle, kind: WidgetKind, anchor_x: i32) -> AppResult<()>
         return close(app);
     }
     show(app, super::DOCK_LABEL, content, panel_size(kind), anchor_x)
+}
+
+/// Open a dock folder's popup above it (or close it, if that folder is open).
+pub fn toggle_folder(app: &AppHandle, view: crate::apps::service::FolderView, anchor_x: i32) -> AppResult<()> {
+    let same = |open: &PanelContent| matches!(open, PanelContent::Folder { folder } if folder.id == view.id && folder.dock == view.dock);
+    if is_showing(app, same)? {
+        return close(app);
+    }
+    let dock = view.dock.clone();
+    let size = view.size();
+    show(app, &dock, PanelContent::Folder { folder: view }, size, anchor_x)
 }
 
 /// Open the widget gallery above the dock's › button (or close it, if it's open).

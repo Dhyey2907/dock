@@ -7,6 +7,7 @@ import { CapturePanel } from "../widgets/productivity/CapturePanel";
 import { WIDGETS } from "../widgets/registry";
 import { AppMenuPanel } from "./AppMenuPanel";
 import { GalleryPanel } from "./GalleryPanel";
+import { FolderPanel } from "./FolderPanel";
 import { PictureInPicture2 } from "lucide-react";
 import { DockMenuPanel, StackPanel } from "./DockPanels";
 
@@ -64,6 +65,7 @@ export function PanelApp() {
         </button>
       )}
       {content?.type === "gallery" && <GalleryPanel />}
+      {content?.type === "folder" && <FolderPanel key={content.folder.id} folder={content.folder} />}
       {content?.type === "capture" && <CapturePanel />}
       {content?.type === "app" && <AppMenuPanel key={content.menu.key} menu={content.menu} />}
       {content?.type === "stack" && <StackPanel stack={content.stack} />}
