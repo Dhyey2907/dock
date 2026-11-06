@@ -136,6 +136,10 @@ fn show(app: &AppHandle, state: &SwitcherState) -> AppResult<()> {
 fn hide(app: &AppHandle) {
     if let Some(window) = app.get_webview_window(SWITCHER_LABEL) {
         let _ = window.hide();
+        // It was shown straight through Windows, so hide it the same way.
+        if let Ok(hwnd) = window.hwnd() {
+            super::win::hide_quietly(hwnd.0 as isize);
+        }
     }
 }
 

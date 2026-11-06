@@ -1023,6 +1023,16 @@ pub fn show_on_top_quietly(hwnd: isize) {
     }
 }
 
+/// Hide a window shown with `show_on_top_quietly`. Tauri's own hide skips a window it never
+/// showed itself (it still thinks it's hidden), so this goes straight to Windows.
+pub fn hide_quietly(hwnd: isize) {
+    use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE};
+    // SAFETY: hiding our own live window.
+    unsafe {
+        let _ = ShowWindow(HWND(hwnd as *mut c_void), SW_HIDE);
+    }
+}
+
 /// Send keys as if typed (for the switcher: a harmless key before Alt is let go, so the app
 /// in front doesn't open its menu bar).
 pub fn release_alt_quietly(alt: VIRTUAL_KEY) {

@@ -203,6 +203,10 @@ pub fn hide(app: &AppHandle) -> AppResult<()> {
     let was_open = STATE.open.lock().unwrap_or_else(|e| e.into_inner()).take();
     if let Some(window) = app.get_webview_window(PREVIEW_LABEL) {
         window.hide()?;
+        // It was shown straight through Windows, so hide it the same way.
+        if let Ok(hwnd) = window.hwnd() {
+            super::win::hide_quietly(hwnd.0 as isize);
+        }
     }
     if was_open.is_some() {
         app.emit(PREVIEW_CLOSED, ())?;
