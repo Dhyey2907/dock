@@ -6,6 +6,7 @@ import { useSettings } from "../settings/store";
 import { AppButton } from "./AppButton";
 import { useApps } from "./apps";
 import { Glass } from "./glass/Glass";
+import { ScreenshotThumb } from "./ScreenshotThumb";
 import type { Ink } from "./glass/styles";
 import { WidgetBar } from "../widgets/WidgetBar";
 import { useAutoHide } from "./useAutoHide";
@@ -92,6 +93,7 @@ export function Dock({ main = true }: { main?: boolean }) {
           ))}
         </div>
         <div className="dock-spacer" data-tauri-drag-region />
+        {main && <ScreenshotThumb />}
         {main && <WidgetBar />}
         <button
           className="dock-icon-button"

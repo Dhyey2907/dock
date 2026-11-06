@@ -53,6 +53,10 @@ pub fn panel_size(kind: WidgetKind) -> (f64, f64) {
         WidgetKind::Focus => (280.0, 250.0),
         WidgetKind::Music => (340.0, 190.0),
         WidgetKind::Claude => (320.0, 250.0),
+        WidgetKind::AskClaude => (380.0, 420.0),
+        WidgetKind::Spotify => (320.0, 400.0),
+        WidgetKind::Notion | WidgetKind::GoogleTasks => (320.0, 380.0),
+        WidgetKind::GithubActions => (360.0, 340.0),
         WidgetKind::Calendar | WidgetKind::Unknown => (340.0, 380.0),
     }
 }
@@ -110,7 +114,13 @@ fn is_showing(app: &AppHandle, matches: impl Fn(&PanelContent) -> bool) -> AppRe
 }
 
 /// Show `content` in the popup, `size` logical pixels, centred on `anchor_x` past `dock_label`.
-fn show(app: &AppHandle, dock_label: &str, content: PanelContent, size: (f64, f64), anchor_x: i32) -> AppResult<()> {
+fn show(
+    app: &AppHandle,
+    dock_label: &str,
+    content: PanelContent,
+    size: (f64, f64),
+    anchor_x: i32,
+) -> AppResult<()> {
     let state = app.state::<PanelState>();
     let window = match app.get_webview_window(PANEL_LABEL) {
         Some(window) => window,
@@ -205,7 +215,7 @@ fn create(app: &AppHandle) -> AppResult<tauri::WebviewWindow> {
 
 /// Windows 11 rounds undecorated windows only when asked.
 #[cfg(windows)]
-fn round_corners(window: &tauri::WebviewWindow) {
+pub(crate) fn round_corners(window: &tauri::WebviewWindow) {
     use windows::Win32::Graphics::Dwm::{
         DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_ROUND, DWM_WINDOW_CORNER_PREFERENCE,
     };

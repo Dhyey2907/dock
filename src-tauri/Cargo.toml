@@ -21,7 +21,7 @@ tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
-reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "query"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "query", "form"] }
 tokio = { version = "1", features = ["sync", "time", "macros"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "bmp", "webp"] }
 png = "0.17"
@@ -34,6 +34,8 @@ chrono-tz = "0.10.4"
 keyring = { version = "3", features = ["windows-native"] }
 url = "2.5.8"
 notify = "8"
+sha2 = "0.10"
+getrandom = "0.3"
 
 [target.'cfg(windows)'.dependencies]
 # Same major as Tauri's own `windows` dependency so HWND types line up.

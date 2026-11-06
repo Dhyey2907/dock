@@ -597,7 +597,7 @@ pub fn show_dock(window: &WebviewWindow) -> AppResult<()> {
 /// window forward still works, because the dock received the click. Popups take focus instead,
 /// which is how they know to close when you click elsewhere.
 #[cfg(windows)]
-fn make_tool_window(window: &WebviewWindow, no_activate: bool) -> AppResult<()> {
+pub(crate) fn make_tool_window(window: &WebviewWindow, no_activate: bool) -> AppResult<()> {
     use windows::Win32::UI::WindowsAndMessaging::{
         GetWindowLongPtrW, SetWindowLongPtrW, ShowWindow, GWL_EXSTYLE, SW_HIDE, SW_SHOW, SW_SHOWNOACTIVATE,
         WS_EX_APPWINDOW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,

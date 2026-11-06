@@ -42,6 +42,9 @@ pub fn settings_set(app: AppHandle, settings: Settings) -> AppResult<Settings> {
         shell::place_dock(&app)?;
     }
     crate::widgets::service::settings_changed(&app, &before, &settings);
+    if before.accounts != settings.accounts || before.widgets != settings.widgets {
+        crate::accounts::github::refresh_soon(&app);
+    }
     app.emit(SETTINGS_CHANGED, &settings)?;
     Ok(settings)
 }
@@ -83,17 +86,7 @@ pub fn screens_list(app: AppHandle) -> AppResult<Vec<shell::ScreenInfo>> {
 /// Set the show/hide shortcut; it's registered first, so a taken or invalid one isn't saved.
 #[tauri::command]
 pub fn shortcut_set(app: AppHandle, shortcut: String) -> AppResult<Settings> {
-    let store = app.state::<SettingsStore>();
-    if let Err(error) = shell::shortcut::apply(&app, &shortcut) {
-        // Put the working one back.
-        let _ = shell::shortcut::apply(&app, &store.get().toggle_shortcut);
-        return Err(error);
-    }
-    let mut settings = store.get();
-    settings.toggle_shortcut = shortcut.trim().to_string();
-    store.set(settings.clone())?;
-    app.emit(SETTINGS_CHANGED, &settings)?;
-    Ok(store.get())
+    crate::actions::hotkey_set(app, shell::shortcut::HotkeyAction::Toggle, shortcut)
 }
 
 /// The welcome is finished (or skipped): don't show it again.

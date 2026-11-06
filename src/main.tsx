@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 
 import { BubbleApp } from "./bubble/BubbleApp";
+import { CommandApp } from "./command/CommandApp";
 import { Dock } from "./dock/Dock";
 import { useApps } from "./dock/apps";
 import { useGlass } from "./dock/glass/store";
@@ -14,13 +15,18 @@ import { useWidgets } from "./widgets/store";
 import "./design/tokens.css";
 import "./index.css";
 import "./widgets/widgets.css";
+import "./command/command.css";
+import "./settings/features.css";
+import "./dock/screenshot.css";
+import "./widgets/accounts/accounts.css";
 
 function report(what: string) {
   return (error: unknown) => console.error(`failed to load ${what}`, error);
 }
 
 // One bundle serves every window: the dock (default), the widget popup (#panel), the reminder
-// cards (#bubble), settings (#settings) and the first-run welcome (#welcome).
+// cards (#bubble), settings (#settings), the first-run welcome (#welcome) and the command bar
+// (#command).
 const hash = window.location.hash;
 const page = hash.startsWith("#settings")
   ? "settings"
@@ -30,7 +36,9 @@ const page = hash.startsWith("#settings")
       ? "bubble"
       : hash.startsWith("#welcome")
         ? "welcome"
-        : "dock";
+        : hash.startsWith("#command")
+          ? "command"
+          : "dock";
 document.documentElement.classList.add(`${page}-window`);
 
 useSettings.getState().load().catch(report("settings"));
@@ -52,6 +60,8 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <BubbleApp />
     ) : page === "welcome" ? (
       <WelcomeApp />
+    ) : page === "command" ? (
+      <CommandApp />
     ) : (
       <Dock main={isMainDock()} />
     )}

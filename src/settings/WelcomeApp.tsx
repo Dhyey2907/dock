@@ -1,21 +1,91 @@
 import { useState } from "react";
-import { ArrowRight, Check } from "lucide-react";
+import {
+  ArrowRight,
+  Briefcase,
+  Check,
+  Command,
+  Image,
+  KeyRound,
+  LayoutGrid,
+  PanelBottom,
+  type LucideIcon,
+} from "lucide-react";
 
 import type { Edge } from "../core/generated/Edge";
 import type { WidgetEntry } from "../core/generated/WidgetEntry";
 import { ipc } from "../core/ipc";
 import { WIDGETS } from "../widgets/registry";
 import { Choice, StyleCards } from "./controls";
+import { shortcutLabel } from "./shortcut";
 import { useSettings } from "./store";
 
-const STEPS = ["Welcome", "Look", "Widgets"] as const;
+const STEPS = ["Welcome", "Look", "Widgets", "Tour"] as const;
+const TOUR_STEP = STEPS.indexOf("Tour");
+
+interface Slide {
+  icon: LucideIcon;
+  title: string;
+  text: (keys: { toggle: string; command: string }) => string;
+}
+
+/** The tour: one main feature per card. */
+const TOUR: Slide[] = [
+  {
+    icon: Command,
+    title: "The command bar",
+    text: ({ command }) =>
+      `Press ${command} anywhere to find apps, files, settings, notes and workspaces. Type a sum like 18% * 240 to see the answer; Enter copies it.`,
+  },
+  {
+    icon: LayoutGrid,
+    title: "Widgets",
+    text: () =>
+      "Click a widget on the dock for more, drag it sideways to move it, and turn widgets on or off in Settings → Widgets.",
+  },
+  {
+    icon: Briefcase,
+    title: "Workspaces",
+    text: () =>
+      "Save the apps you have open, and where their windows are, under a name. Restore it later from the command bar or Settings.",
+  },
+  {
+    icon: Image,
+    title: "Your latest screenshot",
+    text: () =>
+      "After Win+PrtScn or the Snipping Tool saves a picture, it sits on the dock for two minutes. Drag it straight into an email or chat.",
+  },
+  {
+    icon: KeyRound,
+    title: "Your accounts",
+    text: () =>
+      "Ask Claude, Spotify, Notion, Google Tasks and GitHub Actions widgets work with your own keys and sign-ins, kept in Windows Credential Manager. Set them up in Settings → Accounts.",
+  },
+  {
+    icon: PanelBottom,
+    title: "Back to the taskbar any time",
+    text: ({ toggle }) =>
+      `${toggle} or the tray icon switches between Dock and the Windows taskbar. Every shortcut can be changed in Settings → Shortcuts.`,
+  },
+];
 
 /** First run: what Dock does to the taskbar, a style, and which widgets to start with. */
 export function WelcomeApp() {
   const settings = useSettings((s) => s.settings);
   const update = useSettings((s) => s.update);
   const [step, setStep] = useState(0);
+  const [slide, setSlide] = useState(0);
   if (!settings) return null;
+  const keys = {
+    toggle: settings.toggleShortcut ? shortcutLabel(settings.toggleShortcut) : "The tray icon",
+    command: settings.hotkeys.commandBar
+      ? shortcutLabel(settings.hotkeys.commandBar)
+      : "the command bar shortcut",
+  };
+  const onTour = step === TOUR_STEP;
+  const lastSlide = slide === TOUR.length - 1;
+  const back = () => (onTour && slide > 0 ? setSlide(slide - 1) : setStep(step - 1));
+  const next = () => (onTour ? setSlide(Math.min(slide + 1, TOUR.length - 1)) : setStep(step + 1));
+  const Slide = TOUR[slide];
   const save = (patch: Parameters<typeof update>[0]) =>
     update(patch).catch((error) => console.error("failed to save settings", error));
   const finish = (openSettings: boolean) =>
@@ -95,9 +165,37 @@ export function WelcomeApp() {
         </section>
       )}
 
+      {onTour && (
+        <section className="welcome-page">
+          <h1>A quick tour</h1>
+          <p>
+            {slide + 1} of {TOUR.length}
+          </p>
+          <div className="tour-card" aria-live="polite">
+            <span className="tour-icon">
+              <Slide.icon size={22} />
+            </span>
+            <span>
+              <h2>{Slide.title}</h2>
+              <p>{Slide.text(keys)}</p>
+            </span>
+          </div>
+          <div className="tour-dots" role="group" aria-label="Tour steps">
+            {TOUR.map((t, i) => (
+              <button
+                key={t.title}
+                aria-label={t.title}
+                aria-current={i === slide ? "step" : undefined}
+                onClick={() => setSlide(i)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
       <footer className="welcome-footer">
         {step > 0 ? (
-          <button className="settings-link" onClick={() => setStep(step - 1)}>
+          <button className="settings-link" onClick={back}>
             Back
           </button>
         ) : (
@@ -105,8 +203,8 @@ export function WelcomeApp() {
             Skip
           </button>
         )}
-        {step < STEPS.length - 1 ? (
-          <button className="welcome-next" onClick={() => setStep(step + 1)}>
+        {step < STEPS.length - 1 || !lastSlide ? (
+          <button className="welcome-next" onClick={next}>
             Next <ArrowRight size={16} />
           </button>
         ) : (

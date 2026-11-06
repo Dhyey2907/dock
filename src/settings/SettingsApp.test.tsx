@@ -21,6 +21,9 @@ const defaults: Settings = {
   screen: "",
   docksOn: "one",
   onboarded: true,
+  hotkeys: { commandBar: "Ctrl+Space", quickCapture: "" },
+  accounts: { spotifyClientId: "", googleClientId: "", notionDatabaseId: "", githubRepos: [] },
+  latestScreenshot: true,
 };
 
 const settingsSet = vi.fn(async (settings: Settings) => settings);

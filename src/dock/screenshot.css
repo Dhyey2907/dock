@@ -1,0 +1,47 @@
+/* The latest screenshot, sitting before the widgets for two minutes. */
+.dock-shot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 0 4px;
+  animation: shot-in 0.35s var(--ease);
+}
+.dock-shot-thumb {
+  height: 36px;
+  max-width: 72px;
+  padding: 0;
+  border: 1px solid var(--dock-border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: transparent;
+  cursor: grab;
+}
+.dock-shot-thumb img {
+  display: block;
+  height: 100%;
+  width: auto;
+  pointer-events: none;
+}
+.dock-shot-close {
+  position: absolute;
+  top: 2px;
+  right: -5px;
+  display: none;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+}
+.dock-shot:hover .dock-shot-close {
+  display: grid;
+}
+@keyframes shot-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+}

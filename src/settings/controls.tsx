@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { Check } from "lucide-react";
 
-import { ipc } from "../core/ipc";
+import type { HotkeyAction } from "../core/generated/HotkeyAction";
+import { featuresIpc } from "../core/ipcFeatures";
 import type { Theme } from "../core/generated/Theme";
 import { shortcutFromKey, shortcutLabel } from "./shortcut";
 
@@ -33,9 +34,20 @@ export function Choice<T extends string>({
   );
 }
 
-export function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+export function Row({
+  label,
+  hint,
+  id,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  /** Lets settings search jump here. */
+  id?: string;
+  children: ReactNode;
+}) {
   return (
-    <div className="settings-row">
+    <div className="settings-row" data-setting={id}>
       <span>
         {label}
         {hint && <span className="settings-hint">{hint}</span>}
@@ -110,13 +122,13 @@ export function StyleCards({ value, onChange }: { value: Theme; onChange: (theme
 }
 
 /** Press a key combination to make it the shortcut; it's checked before it's saved. */
-export function ShortcutField({ value }: { value: string }) {
+export function ShortcutField({ value, action = "toggle" }: { value: string; action?: HotkeyAction }) {
   const [recording, setRecording] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const save = (text: string) => {
     setRecording(false);
-    ipc
-      .shortcutSet(text)
+    featuresIpc
+      .hotkeySet(action, text)
       .then(() => setError(null))
       .catch((e: { kind?: string; message?: string }) =>
         setError(
