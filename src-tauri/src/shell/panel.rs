@@ -35,6 +35,8 @@ pub enum PanelContent {
     Widget { kind: WidgetKind },
     /// An app's right-click menu.
     App { menu: AppMenu },
+    /// Quick capture: a note or a to-do, from the shortcut.
+    Capture,
 }
 
 /// What the popup is showing, while it is open.
@@ -54,6 +56,19 @@ pub fn panel_size(kind: WidgetKind) -> (f64, f64) {
         WidgetKind::Music => (340.0, 190.0),
         WidgetKind::Claude => (320.0, 250.0),
         WidgetKind::Calendar | WidgetKind::Unknown => (340.0, 380.0),
+        WidgetKind::Notes => (340.0, 360.0),
+        WidgetKind::Todos => (320.0, 380.0),
+        WidgetKind::Kanban => (400.0, 400.0),
+        WidgetKind::MeetingNotes => (340.0, 360.0),
+        WidgetKind::TimeTracker => (320.0, 380.0),
+        WidgetKind::QuickLinks => (320.0, 340.0),
+        WidgetKind::AppFolders => (320.0, 340.0),
+        WidgetKind::Bookmarks => (360.0, 400.0),
+        WidgetKind::FileSearch => (380.0, 400.0),
+        WidgetKind::PinImage => (300.0, 220.0),
+        WidgetKind::ScreenText => (320.0, 260.0),
+        WidgetKind::SongsToday => (320.0, 380.0),
+        WidgetKind::ClaudeSessions => (360.0, 380.0),
     }
 }
 
@@ -88,6 +103,27 @@ pub fn toggle(app: &AppHandle, kind: WidgetKind, anchor_x: i32) -> AppResult<()>
     show(app, super::DOCK_LABEL, content, panel_size(kind), anchor_x)
 }
 
+/// Size of the quick-capture popup, logical pixels.
+const CAPTURE_SIZE: (f64, f64) = (360.0, 200.0);
+
+/// Open quick capture above the middle of the main dock (or close it, if it's open).
+pub fn show_capture(app: &AppHandle) -> AppResult<()> {
+    if is_showing(app, |open| *open == PanelContent::Capture)? {
+        return close(app);
+    }
+    let Some(geometry) = super::geometry_of(app, super::DOCK_LABEL) else {
+        return Ok(());
+    };
+    let anchor = geometry.screen_x + geometry.screen_width as i32 / 2;
+    show(
+        app,
+        super::DOCK_LABEL,
+        PanelContent::Capture,
+        CAPTURE_SIZE,
+        anchor,
+    )
+}
+
 /// Open an app's right-click menu above it (or close it, if that menu is already open).
 pub fn show_app_menu(app: &AppHandle, menu: AppMenu, anchor_x: i32) -> AppResult<()> {
     let same = |open: &PanelContent| matches!(open, PanelContent::App { menu: m } if m.key == menu.key && m.dock == menu.dock);
@@ -110,7 +146,13 @@ fn is_showing(app: &AppHandle, matches: impl Fn(&PanelContent) -> bool) -> AppRe
 }
 
 /// Show `content` in the popup, `size` logical pixels, centred on `anchor_x` past `dock_label`.
-fn show(app: &AppHandle, dock_label: &str, content: PanelContent, size: (f64, f64), anchor_x: i32) -> AppResult<()> {
+fn show(
+    app: &AppHandle,
+    dock_label: &str,
+    content: PanelContent,
+    size: (f64, f64),
+    anchor_x: i32,
+) -> AppResult<()> {
     let state = app.state::<PanelState>();
     let window = match app.get_webview_window(PANEL_LABEL) {
         Some(window) => window,

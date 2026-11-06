@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { events, ipc } from "../core/ipc";
 import type { PanelContent } from "../core/generated/PanelContent";
 import { useSettings } from "../settings/store";
+import { CapturePanel } from "../widgets/productivity/CapturePanel";
 import { WIDGETS } from "../widgets/registry";
 import { AppMenuPanel } from "./AppMenuPanel";
 
@@ -44,6 +45,7 @@ export function PanelApp() {
     <div className="panel" data-light={theme === "white"} data-kind={kind ?? content?.type}>
       {def && <def.Panel />}
       {content?.type === "app" && <AppMenuPanel menu={content.menu} />}
+      {content?.type === "capture" && <CapturePanel />}
     </div>
   );
 }

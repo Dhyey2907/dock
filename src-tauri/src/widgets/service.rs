@@ -100,6 +100,7 @@ pub fn init(app: &AppHandle) {
         let handle = app.clone();
         let media = crate::media::windows::WindowsMediaPort::new();
         let started = media.start(std::sync::Arc::new(move |music| {
+            crate::productivity::service::music_changed(&handle, music.as_ref());
             publish(&handle, WIDGET_MUSIC, music, |s| &mut s.music);
         }));
         if let Err(error) = started {

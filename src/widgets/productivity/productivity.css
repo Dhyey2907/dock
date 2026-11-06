@@ -1,0 +1,600 @@
+/* Productivity widgets: notes, to-dos, kanban, time, links, folders, bookmarks, files, pins,
+   screen text, songs, Claude Code sessions, quick capture, the area picker and pinned pictures. */
+
+/* ---------- Tiles ---------- */
+.prod-tile-text {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dock[data-size="small"] .prod-tile-text {
+  display: none;
+}
+.prod-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.7);
+}
+.folder-tile {
+  display: grid;
+  grid-template-columns: repeat(2, 11px);
+  gap: 2px;
+}
+.folder-icon-blank {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: var(--panel-hover, rgba(255, 255, 255, 0.12));
+}
+
+/* Text dragged over the dock: it will become a note. */
+html[data-text-drop="true"] .dock-content {
+  outline: 2px dashed var(--dock-accent);
+  outline-offset: -4px;
+  border-radius: inherit;
+}
+
+/* ---------- Shared panel parts ---------- */
+.prod-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.prod-head .panel-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prod-add,
+.prod-form {
+  display: flex;
+  gap: 6px;
+}
+.prod-form {
+  flex-direction: column;
+}
+.prod-form .panel-button {
+  align-self: flex-start;
+}
+.prod-input {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--panel-line);
+  border-radius: 8px;
+  background: var(--panel-hover);
+  color: inherit;
+  font: inherit;
+  outline: none;
+  user-select: text;
+}
+.prod-input:focus {
+  border-color: var(--panel-accent);
+}
+.prod-input::placeholder,
+.note-text::placeholder {
+  color: var(--panel-faint);
+}
+.prod-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  min-height: 0;
+  margin: 0 -6px;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.prod-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  padding: 6px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prod-row:hover,
+.prod-row[data-active="true"] {
+  background: var(--panel-hover);
+}
+.prod-row-two {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  align-items: stretch;
+  gap: 1px;
+}
+.prod-row.prod-row-two {
+  flex-direction: column;
+  align-items: stretch;
+}
+.prod-row-main,
+.prod-row-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prod-row-sub {
+  font-size: 11.5px;
+}
+.prod-hover {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  opacity: 0;
+}
+li:hover > .prod-hover,
+li:hover .prod-hover,
+.prod-hover:focus-visible {
+  opacity: 1;
+}
+.prod-hint {
+  margin: 0;
+  font-size: 11.5px;
+}
+.prod-problem {
+  margin: 0;
+  color: #fca5a5;
+  font-size: 12px;
+}
+.panel[data-light="true"] .prod-problem {
+  color: #b91c1c;
+}
+.prod-actions {
+  display: flex;
+  gap: 8px;
+}
+.prod-secondary {
+  background: var(--panel-hover);
+  color: inherit;
+}
+.panel[data-light="true"] .prod-secondary {
+  color: inherit;
+}
+.prod-chip {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+}
+.prod-chip:hover,
+.prod-chip[data-active="true"] {
+  background: var(--panel-hover);
+}
+.prod-chip[data-active="true"] {
+  font-weight: 600;
+}
+.prod-segments {
+  display: flex;
+  align-self: flex-start;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--panel-hover);
+}
+.prod-segments button {
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+.prod-segments button[data-active="true"] {
+  background: var(--panel-accent);
+  color: #0b0d14;
+  font-weight: 600;
+}
+.panel[data-light="true"] .prod-segments button[data-active="true"] {
+  color: #fff;
+}
+
+/* ---------- Notes ---------- */
+.notes-panel {
+  gap: 10px;
+}
+.note-text {
+  flex: 1;
+  min-height: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-line);
+  border-radius: 10px;
+  background: rgba(253, 230, 138, 0.1);
+  color: inherit;
+  font: inherit;
+  line-height: 1.45;
+  resize: none;
+  outline: none;
+  user-select: text;
+}
+.note-text:focus {
+  border-color: var(--panel-accent);
+}
+.note-list {
+  display: flex;
+  flex-direction: column;
+  max-height: 92px;
+  margin: 0 -6px;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.capture-panel {
+  gap: 10px;
+}
+
+/* ---------- To-dos ---------- */
+.todo-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  border-radius: 7px;
+}
+.todo-row:hover {
+  background: var(--panel-hover);
+}
+.todo-check {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1.5px solid var(--panel-faint);
+  border-radius: 5px;
+  background: transparent;
+  color: #0b0d14;
+}
+.todo-row[data-done="true"] .todo-check {
+  border-color: var(--panel-accent);
+  background: var(--panel-accent);
+}
+.todo-text {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+  user-select: text;
+}
+.todo-row[data-done="true"] .todo-text {
+  color: var(--panel-faint);
+  text-decoration: line-through;
+}
+
+/* ---------- Kanban ---------- */
+.kanban-panel {
+  padding: 12px;
+  gap: 8px;
+}
+.kanban {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  min-height: 0;
+}
+.kanban-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--panel-hover);
+  transition: box-shadow 120ms var(--ease);
+}
+.kanban-col[data-target="true"] {
+  box-shadow: inset 0 0 0 1.5px var(--panel-accent);
+}
+.kanban-title {
+  margin: 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.kanban-cards {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 5px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.kanban[data-dragging="true"] .kanban-cards {
+  overflow: visible;
+}
+.kanban-card {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 6px 7px;
+  border: 1px solid var(--panel-line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  font-size: 12px;
+  line-height: 1.3;
+  touch-action: none;
+  cursor: grab;
+}
+.panel[data-light="true"] .kanban-card {
+  background: rgba(255, 255, 255, 0.7);
+}
+.kanban-card[data-lifted="true"] {
+  z-index: 3;
+  cursor: grabbing;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+  opacity: 0.92;
+}
+.kanban-card[data-gap="true"] {
+  margin-top: 26px;
+}
+.kanban-text {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.kanban-delete {
+  width: 18px;
+  height: 18px;
+}
+.kanban-add {
+  padding: 5px 7px;
+  font-size: 12px;
+}
+
+/* ---------- Time tracker ---------- */
+.time-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border-radius: 7px;
+}
+.time-row:hover {
+  background: var(--panel-hover);
+}
+.time-row[data-active="true"] .time-toggle {
+  background: var(--panel-accent);
+  color: #0b0d14;
+}
+.time-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.time-row[data-active="true"] .time-name {
+  font-weight: 600;
+}
+.time-total {
+  color: var(--panel-faint);
+}
+.time-row[data-active="true"] .time-total {
+  color: inherit;
+}
+
+/* ---------- Quick links and app folders ---------- */
+.link-grid,
+.folder-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.folder-grid {
+  grid-template-columns: repeat(4, 1fr);
+}
+.link-grid li,
+.folder-grid li {
+  position: relative;
+  min-width: 0;
+}
+.link-tile,
+.folder-app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 10px 4px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 11.5px;
+}
+.link-tile {
+  background: var(--panel-hover);
+}
+.link-tile:hover,
+.folder-app:hover {
+  background: var(--panel-hover);
+  filter: brightness(1.15);
+}
+.link-name,
+.folder-app span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.link-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+}
+.folder-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+.folder-tabs .icon-btn[data-active="true"] {
+  background: var(--panel-hover);
+}
+.folder-picker {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+.folder-pick[data-active="true"]::after {
+  content: "✓";
+  margin-left: auto;
+  color: var(--panel-accent);
+  font-weight: 700;
+}
+
+/* ---------- Files, songs and sessions ---------- */
+.file-row,
+.song-row,
+.session-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.prod-row-icon {
+  gap: 10px;
+}
+.song-row,
+.session-row {
+  padding: 5px 6px;
+}
+.song-time {
+  flex: none;
+  width: 58px;
+  font-size: 11.5px;
+}
+.session-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--panel-faint);
+  opacity: 0.5;
+}
+.session-row[data-running="true"] .session-dot {
+  background: #4ade80;
+  box-shadow: 0 0 6px rgba(74, 222, 128, 0.7);
+  opacity: 1;
+}
+
+/* ---------- Screen text ---------- */
+.screen-text {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--panel-hover);
+  font: inherit;
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-y: auto;
+  user-select: text;
+}
+
+/* ---------- Area picker (its own full-screen window) ---------- */
+.snip-window,
+.snip-window body,
+.pin-window,
+.pin-window body {
+  margin: 0;
+  overflow: hidden;
+  background: #000;
+  user-select: none;
+}
+.snip {
+  position: fixed;
+  inset: 0;
+  background-position: 0 0;
+  background-size: 100% 100%;
+  cursor: crosshair;
+}
+.snip-veil {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+}
+.snip-box {
+  position: absolute;
+  outline: 1.5px solid #7dd3fc;
+  box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.35);
+}
+.snip-hint {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(20, 22, 28, 0.85);
+  color: #fff;
+  font-family: var(--font);
+  font-size: 13px;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* ---------- A pinned picture (its own small window) ---------- */
+.pin {
+  position: fixed;
+  inset: 0;
+  cursor: move;
+}
+.pin img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.pin-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 16px;
+  line-height: 24px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.pin:hover .pin-close {
+  opacity: 1;
+}
