@@ -7,6 +7,8 @@ import { useApps } from "./dock/apps";
 import { useGlass } from "./dock/glass/store";
 import { isMainDock } from "./core/ipc";
 import { PanelApp } from "./panel/PanelApp";
+import { PreviewApp, SwitcherApp } from "./preview/PreviewApp";
+import { initAppFeatures, useLaunching } from "./dock/appFeatures";
 import { SettingsApp } from "./settings/SettingsApp";
 import { WelcomeApp } from "./settings/WelcomeApp";
 import { useSettings } from "./settings/store";
@@ -14,6 +16,7 @@ import { useWidgets } from "./widgets/store";
 import "./design/tokens.css";
 import "./index.css";
 import "./widgets/widgets.css";
+import "./dock/apps.css";
 
 function report(what: string) {
   return (error: unknown) => console.error(`failed to load ${what}`, error);
@@ -30,7 +33,11 @@ const page = hash.startsWith("#settings")
       ? "bubble"
       : hash.startsWith("#welcome")
         ? "welcome"
-        : "dock";
+        : hash.startsWith("#preview")
+          ? "preview"
+          : hash.startsWith("#switcher")
+            ? "switcher"
+            : "dock";
 document.documentElement.classList.add(`${page}-window`);
 
 useSettings.getState().load().catch(report("settings"));
@@ -40,6 +47,8 @@ if (widgets) useWidgets.getState().load().catch(report("widgets"));
 if (page === "dock") {
   useApps.getState().load().catch(report("apps"));
   useGlass.getState().load().catch(report("the glass"));
+  initAppFeatures(() => useApps.getState().apps).catch(report("app features"));
+  useApps.subscribe((s) => useLaunching.getState().settle(s.apps));
 }
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
@@ -52,6 +61,10 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <BubbleApp />
     ) : page === "welcome" ? (
       <WelcomeApp />
+    ) : page === "preview" ? (
+      <PreviewApp />
+    ) : page === "switcher" ? (
+      <SwitcherApp />
     ) : (
       <Dock main={isMainDock()} />
     )}

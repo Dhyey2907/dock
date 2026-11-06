@@ -5,6 +5,7 @@ import type { PanelContent } from "../core/generated/PanelContent";
 import { useSettings } from "../settings/store";
 import { WIDGETS } from "../widgets/registry";
 import { AppMenuPanel } from "./AppMenuPanel";
+import { DockMenuPanel, StackPanel } from "./DockPanels";
 
 /** The popup window: a widget's popup or an app's menu, whichever the dock asked for. */
 export function PanelApp() {
@@ -43,7 +44,9 @@ export function PanelApp() {
   return (
     <div className="panel" data-light={theme === "white"} data-kind={kind ?? content?.type}>
       {def && <def.Panel />}
-      {content?.type === "app" && <AppMenuPanel menu={content.menu} />}
+      {content?.type === "app" && <AppMenuPanel key={content.menu.key} menu={content.menu} />}
+      {content?.type === "stack" && <StackPanel stack={content.stack} />}
+      {content?.type === "dock" && <DockMenuPanel menu={content.menu} />}
     </div>
   );
 }

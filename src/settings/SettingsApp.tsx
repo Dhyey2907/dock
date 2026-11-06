@@ -1,7 +1,17 @@
 import { useEffect, useState } from "react";
-import { CalendarDays, Info, LayoutGrid, Monitor, Palette, Zap, type LucideIcon } from "lucide-react";
+import {
+  AppWindow,
+  CalendarDays,
+  Info,
+  LayoutGrid,
+  Monitor,
+  Palette,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
 
 import { events } from "../core/ipc";
+import { AppSettings } from "./AppSettings";
 import { AutomationSettings } from "./AutomationSettings";
 import { CalendarSettings } from "./CalendarSettings";
 import { AboutSection, AppearanceSection, TaskbarSection } from "./sections";
@@ -11,6 +21,7 @@ import { WidgetSettings } from "./WidgetSettings";
 const SECTIONS: { id: string; label: string; icon: LucideIcon }[] = [
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "widgets", label: "Widgets", icon: LayoutGrid },
+  { id: "apps", label: "Apps", icon: AppWindow },
   { id: "calendars", label: "Calendars", icon: CalendarDays },
   { id: "automations", label: "Automations", icon: Zap },
   { id: "taskbar", label: "Taskbar & startup", icon: Monitor },
@@ -67,6 +78,7 @@ export function SettingsApp() {
       <main className="settings">
         {section === "appearance" && <AppearanceSection settings={settings} save={save} />}
         {section === "widgets" && <WidgetSettings settings={settings} save={save} />}
+        {section === "apps" && <AppSettings settings={settings} save={save} />}
         {section === "calendars" && <CalendarSettings settings={settings} />}
         {section === "automations" && <AutomationSettings settings={settings} save={save} />}
         {section === "taskbar" && <TaskbarSection settings={settings} save={save} />}

@@ -23,7 +23,7 @@ base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls", "query"] }
 tokio = { version = "1", features = ["sync", "time", "macros"] }
-image = { version = "0.25", default-features = false, features = ["jpeg", "png", "bmp", "webp"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "bmp", "webp", "ico"] }
 png = "0.17"
 ts-rs = { version = "12", features = ["serde-compat", "chrono-impl"] }
 tauri-plugin-single-instance = "2"
@@ -50,6 +50,7 @@ windows = { version = "0.61", features = [
     "Win32_Devices_FunctionDiscovery",
     "Win32_Media_Audio",
     "Win32_Media_Audio_Endpoints",
+    "Win32_System_LibraryLoader",
     "Win32_System_Power",
     "Win32_System_SystemInformation",
     "Win32_Foundation",

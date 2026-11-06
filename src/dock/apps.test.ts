@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { DockApp } from "../core/generated/DockApp";
+import { dockApp } from "../test/fixtures";
 
-const app = (key: string): DockApp => ({ key, name: key, pinned: true, icon: "", windows: [] });
+const app = (key: string): DockApp => dockApp(key);
 
 let push: ((apps: DockApp[]) => void) | undefined;
 let resolveList: ((apps: DockApp[]) => void) | undefined;
