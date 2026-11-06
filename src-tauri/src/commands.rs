@@ -42,6 +42,7 @@ pub fn settings_set(app: AppHandle, settings: Settings) -> AppResult<Settings> {
         shell::place_dock(&app)?;
     }
     crate::widgets::service::settings_changed(&app, &before, &settings);
+    crate::system::service::settings_changed(&app);
     app.emit(SETTINGS_CHANGED, &settings)?;
     Ok(settings)
 }
@@ -245,6 +246,8 @@ pub fn open_windows_settings(page: String) -> AppResult<()> {
         "bluetooth" => "ms-settings:bluetooth",
         "home" => "ms-settings:",
         "datetime" => "ms-settings:dateandtime",
+        "update" => "ms-settings:windowsupdate",
+        "display" => "ms-settings:display",
         _ => return Err(AppError::InvalidInput("settings page".into())),
     };
     #[cfg(windows)]
@@ -328,6 +331,136 @@ pub fn use_windows_taskbar(app: AppHandle) {
 #[tauri::command]
 pub fn app_quit(app: AppHandle) {
     app.exit(0);
+}
+
+// ---------- System widgets ----------
+
+/// The programs using the most processor and memory. Async: the first reading takes half a
+/// second.
+#[tauri::command(async)]
+pub fn top_apps() -> crate::widgets::stats::TopApps {
+    crate::widgets::stats::top_apps(6)
+}
+
+/// End a program's processes (the popup asks first).
+#[tauri::command(async)]
+pub fn process_end(pids: Vec<u32>, name: String) -> AppResult<()> {
+    crate::widgets::stats::end_task(&pids, &name)
+}
+
+#[tauri::command(async)]
+pub fn bluetooth_devices() -> Vec<crate::system::bluetooth::BluetoothDevice> {
+    crate::system::bluetooth::list()
+}
+
+/// Every screen's DDC/CI brightness. Async: each screen takes a moment to answer.
+#[tauri::command(async)]
+pub fn monitors_brightness() -> Vec<crate::system::brightness::MonitorBrightness> {
+    crate::system::brightness::list()
+}
+
+#[tauri::command(async)]
+pub fn monitor_set_brightness(id: String, percent: u8) -> AppResult<()> {
+    crate::system::brightness::set(&id, percent)
+}
+
+#[tauri::command(async)]
+pub fn wifi_details() -> crate::system::wifi::WifiDetails {
+    crate::system::wifi::read()
+}
+
+/// The public address, from one request (the Wi-Fi popup asks when it opens).
+#[tauri::command]
+pub async fn public_ip() -> Option<String> {
+    crate::system::wifi::public_ip().await
+}
+
+#[tauri::command(async)]
+pub fn uptime_get() -> crate::system::uptime::UptimeState {
+    crate::system::uptime::read()
+}
+
+#[tauri::command(async)]
+pub fn dev_servers() -> Vec<crate::system::devservers::DevServer> {
+    crate::system::devservers::list()
+}
+
+/// Stop the program serving `port` (the popup asks first).
+#[tauri::command(async)]
+pub fn dev_server_stop(port: u16, pid: u32) -> AppResult<()> {
+    crate::system::devservers::stop(port, pid)
+}
+
+/// Open a web page (https, or http on this PC) in the default browser.
+#[tauri::command(async)]
+pub fn open_url(url: String) -> AppResult<()> {
+    crate::system::service::open_url(&url)
+}
+
+#[tauri::command(async)]
+pub fn desktop_icons_get() -> Option<bool> {
+    crate::system::desktop::icons_shown()
+}
+
+#[tauri::command(async)]
+pub fn desktop_icons_set(show: bool) -> AppResult<bool> {
+    crate::system::desktop::set_icons_shown(show)
+}
+
+/// Turn the screens off; the popup closes first.
+#[tauri::command(async)]
+pub fn screen_off(app: AppHandle) -> AppResult<()> {
+    shell::panel::close(&app)?;
+    crate::system::desktop::screens_off();
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub fn wallpaper_get(app: AppHandle) -> crate::system::wallpaper::WallpaperState {
+    crate::system::wallpaper::state(&app.state::<SettingsStore>().get().wallpaper_folder)
+}
+
+#[tauri::command(async)]
+pub fn wallpaper_next(app: AppHandle) -> AppResult<crate::system::wallpaper::WallpaperState> {
+    crate::system::service::next_wallpaper(&app)
+}
+
+/// Windows' folder picker; the chosen folder, or `None` if cancelled. The page saves it.
+#[tauri::command(async)]
+pub fn wallpaper_pick_folder(app: AppHandle) -> Option<String> {
+    crate::system::wallpaper::pick_folder(&app.state::<SettingsStore>().get().wallpaper_folder)
+}
+
+#[tauri::command(async)]
+pub fn display_get() -> crate::system::display::DisplayState {
+    crate::system::display::read()
+}
+
+#[tauri::command(async)]
+pub fn display_set(mode: crate::system::display::DisplayMode) -> AppResult<()> {
+    crate::system::display::set(mode)
+}
+
+#[tauri::command(async)]
+pub fn usb_drives() -> Vec<crate::system::usb::UsbDrive> {
+    crate::system::usb::list()
+}
+
+#[tauri::command(async)]
+pub fn usb_eject(letter: String) -> AppResult<crate::system::usb::EjectResult> {
+    crate::system::usb::eject(&letter)
+}
+
+/// Today's trending GitHub repositories (read at most hourly; the last list when offline).
+#[tauri::command]
+pub async fn github_trending(app: AppHandle) -> crate::system::trending::Trending {
+    crate::system::service::trending(&app).await
+}
+
+/// A reminder card's Open button (download cards).
+#[tauri::command(async)]
+pub fn bubble_open(app: AppHandle, id: String) -> AppResult<()> {
+    crate::system::service::open_from_bubble(&app, &id)
 }
 
 /// Make Windows' "run at sign-in" entry match the setting.

@@ -46,6 +46,14 @@ screen: string,
  */
 docksOn: DocksOn, 
 /**
+ * The wallpaper changer's folder; empty for none.
+ */
+wallpaperFolder: string, 
+/**
+ * Minutes between wallpaper changes; 0 changes only on a click.
+ */
+wallpaperMinutes: number, 
+/**
  * The welcome has been seen.
  */
 onboarded: boolean, };

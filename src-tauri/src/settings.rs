@@ -13,6 +13,8 @@ use ts_rs::TS;
 use crate::error::AppResult;
 
 const FILE_NAME: &str = "settings.json";
+/// The longest wallpaper interval: a day.
+const MAX_WALLPAPER_MINUTES: u32 = 24 * 60;
 
 /// How many docks there are: one, or one on every screen.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
@@ -106,6 +108,30 @@ pub enum WidgetKind {
     Music,
     Claude,
     Calendar,
+    /// The programs using the most processor and memory, with End task.
+    TopApps,
+    /// Paired Bluetooth devices and their batteries.
+    Bluetooth,
+    /// Brightness for external screens (DDC/CI).
+    Brightness,
+    /// Network name, signal, local and public address.
+    Wifi,
+    /// Time since the PC started, and a pending Windows Update restart.
+    Uptime,
+    /// Local servers listening on this PC.
+    DevServers,
+    /// Show or hide the desktop icons.
+    DesktopIcons,
+    /// Turn the screens off.
+    ScreenOff,
+    /// Pictures from a folder as the wallpaper, in turn.
+    Wallpaper,
+    /// Extend, duplicate or one screen only.
+    DisplayMode,
+    /// Removable drives, with Safely Remove.
+    UsbDrives,
+    /// Today's trending GitHub repositories.
+    GithubTrending,
     /// A widget from a newer version of the dock; dropped on load.
     #[serde(other)]
     #[ts(skip)]
@@ -114,7 +140,7 @@ pub enum WidgetKind {
 
 impl WidgetKind {
     /// Every widget, in the default order (left to right).
-    pub const ALL: [WidgetKind; 8] = [
+    pub const ALL: [WidgetKind; 20] = [
         WidgetKind::Music,
         WidgetKind::Focus,
         WidgetKind::Claude,
@@ -123,6 +149,18 @@ impl WidgetKind {
         WidgetKind::Status,
         WidgetKind::Weather,
         WidgetKind::Clock,
+        WidgetKind::TopApps,
+        WidgetKind::Bluetooth,
+        WidgetKind::Brightness,
+        WidgetKind::Wifi,
+        WidgetKind::Uptime,
+        WidgetKind::DevServers,
+        WidgetKind::DesktopIcons,
+        WidgetKind::ScreenOff,
+        WidgetKind::Wallpaper,
+        WidgetKind::DisplayMode,
+        WidgetKind::UsbDrives,
+        WidgetKind::GithubTrending,
     ];
 }
 
@@ -171,6 +209,12 @@ pub struct Automations {
     /// Windows switches to dark at sunset and back to light at sunrise. Changes a Windows
     /// setting, so it starts off.
     pub sunset_dark_mode: bool,
+    /// A card when a connected Bluetooth device's battery runs low.
+    pub bluetooth_battery: bool,
+    /// A card, with Open, when a download finishes in your Downloads folder.
+    pub download_finished: bool,
+    /// A card when Claude's 5-hour window resets.
+    pub claude_reset: bool,
 }
 
 impl Default for Automations {
@@ -180,6 +224,9 @@ impl Default for Automations {
             ai_limit_warnings: true,
             focus_music: false,
             sunset_dark_mode: false,
+            bluetooth_battery: true,
+            download_finished: true,
+            claude_reset: true,
         }
     }
 }
@@ -245,6 +292,10 @@ pub struct Settings {
     pub screen: String,
     /// One dock, or one on every screen.
     pub docks_on: DocksOn,
+    /// The wallpaper changer's folder; empty for none.
+    pub wallpaper_folder: String,
+    /// Minutes between wallpaper changes; 0 changes only on a click.
+    pub wallpaper_minutes: u32,
     /// The welcome has been seen.
     pub onboarded: bool,
 }
@@ -269,6 +320,8 @@ impl Default for Settings {
             toggle_shortcut: "Ctrl+Alt+D".into(),
             screen: String::new(),
             docks_on: DocksOn::default(),
+            wallpaper_folder: String::new(),
+            wallpaper_minutes: 30,
             onboarded: false,
         }
     }
@@ -290,6 +343,8 @@ impl Settings {
             }
         }
         self.weather_place = self.weather_place.trim().chars().take(80).collect();
+        self.wallpaper_folder = self.wallpaper_folder.trim().to_string();
+        self.wallpaper_minutes = self.wallpaper_minutes.min(MAX_WALLPAPER_MINUTES);
         let valid = |t: &str| chrono::NaiveTime::parse_from_str(t.trim(), "%H:%M").is_ok();
         if !valid(&self.quiet_hours.start) || !valid(&self.quiet_hours.end) {
             self.quiet_hours = QuietHours {
@@ -423,6 +478,27 @@ mod tests {
         for kind in WidgetKind::ALL {
             assert_eq!(widgets.iter().filter(|w| w.kind == kind).count(), 1);
         }
+    }
+
+    #[test]
+    fn wallpaper_settings_are_tidied() {
+        let settings = Settings {
+            wallpaper_folder: r"  C:\Pictures  ".into(),
+            wallpaper_minutes: 100_000,
+            ..Settings::default()
+        }
+        .normalized();
+        assert_eq!(settings.wallpaper_folder, r"C:\Pictures");
+        assert_eq!(settings.wallpaper_minutes, 24 * 60);
+    }
+
+    #[test]
+    fn new_automations_default_on() {
+        let a = Automations::default();
+        assert!(a.bluetooth_battery && a.download_finished && a.claude_reset);
+        // An older file without them gets the defaults.
+        let old: Automations = serde_json::from_str(r#"{"meetingMode":false}"#).unwrap();
+        assert!(!old.meeting_mode && old.download_finished);
     }
 
     #[test]

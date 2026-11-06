@@ -15,11 +15,21 @@ const defaults: Settings = {
   temperatureUnit: "celsius",
   weatherPlace: "",
   calendars: [],
-  automations: { meetingMode: true, aiLimitWarnings: true, focusMusic: false, sunsetDarkMode: false },
+  automations: {
+    meetingMode: true,
+    aiLimitWarnings: true,
+    focusMusic: false,
+    sunsetDarkMode: false,
+    bluetoothBattery: true,
+    downloadFinished: true,
+    claudeReset: true,
+  },
   quietHours: { enabled: false, start: "22:00", end: "08:00" },
   toggleShortcut: "Ctrl+Alt+D",
   screen: "",
   docksOn: "one",
+  wallpaperFolder: "",
+  wallpaperMinutes: 30,
   onboarded: true,
 };
 

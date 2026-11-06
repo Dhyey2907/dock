@@ -24,6 +24,21 @@ const AUTOMATIONS: { key: keyof Automations; label: string; hint: string }[] = [
     label: "Sunset dark mode",
     hint: "Windows switches to dark at sunset and back to light at sunrise (from the weather's sun times). Changes a Windows setting.",
   },
+  {
+    key: "bluetoothBattery",
+    label: "Low Bluetooth battery",
+    hint: "A reminder when a connected Bluetooth device drops to 20%.",
+  },
+  {
+    key: "downloadFinished",
+    label: "Download finished",
+    hint: "A card with an Open button when a new file finishes arriving in your Downloads folder.",
+  },
+  {
+    key: "claudeReset",
+    label: "Claude limit reset",
+    hint: "A heads-up when your Claude 5-hour window resets.",
+  },
 ];
 
 /** One switch per automation, and the quiet hours that hold reminders. */

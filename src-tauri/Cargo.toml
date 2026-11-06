@@ -38,7 +38,11 @@ notify = "8"
 [target.'cfg(windows)'.dependencies]
 # Same major as Tauri's own `windows` dependency so HWND types line up.
 windows-core = "0.61"
+windows-collections = "0.2"
 windows = { version = "0.61", features = [
+    "Devices_Bluetooth",
+    "Devices_Bluetooth_GenericAttributeProfile",
+    "Devices_Enumeration",
     "Devices_Geolocation",
     "Devices_Radios",
     "Foundation",
@@ -47,7 +51,17 @@ windows = { version = "0.61", features = [
     "Storage_Streams",
     "Win32_System_WinRT",
     "Networking_Connectivity",
+    "Win32_Devices_DeviceAndDriverInstallation",
+    "Win32_Devices_Display",
     "Win32_Devices_FunctionDiscovery",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_Ndis",
+    "Win32_NetworkManagement_WiFi",
+    "Win32_Security",
+    "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_IO",
+    "Win32_System_Ioctl",
+    "Win32_System_ProcessStatus",
     "Win32_Media_Audio",
     "Win32_Media_Audio_Endpoints",
     "Win32_System_Power",

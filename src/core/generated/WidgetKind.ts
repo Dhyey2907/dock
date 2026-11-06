@@ -3,4 +3,4 @@
 /**
  * A widget on the dock.
  */
-export type WidgetKind = "clock" | "weather" | "status" | "system" | "focus" | "music" | "claude" | "calendar";
+export type WidgetKind = "clock" | "weather" | "status" | "system" | "focus" | "music" | "claude" | "calendar" | "topApps" | "bluetooth" | "brightness" | "wifi" | "uptime" | "devServers" | "desktopIcons" | "screenOff" | "wallpaper" | "displayMode" | "usbDrives" | "githubTrending";

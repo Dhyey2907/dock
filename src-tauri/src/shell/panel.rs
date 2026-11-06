@@ -53,6 +53,18 @@ pub fn panel_size(kind: WidgetKind) -> (f64, f64) {
         WidgetKind::Focus => (280.0, 250.0),
         WidgetKind::Music => (340.0, 190.0),
         WidgetKind::Claude => (320.0, 250.0),
+        WidgetKind::TopApps => (340.0, 380.0),
+        WidgetKind::Bluetooth => (320.0, 300.0),
+        WidgetKind::Brightness => (320.0, 260.0),
+        WidgetKind::Wifi => (320.0, 290.0),
+        WidgetKind::Uptime => (280.0, 200.0),
+        WidgetKind::DevServers => (340.0, 320.0),
+        WidgetKind::DesktopIcons => (260.0, 170.0),
+        WidgetKind::ScreenOff => (260.0, 170.0),
+        WidgetKind::Wallpaper => (320.0, 270.0),
+        WidgetKind::DisplayMode => (300.0, 260.0),
+        WidgetKind::UsbDrives => (320.0, 280.0),
+        WidgetKind::GithubTrending => (360.0, 420.0),
         WidgetKind::Calendar | WidgetKind::Unknown => (340.0, 380.0),
     }
 }
@@ -110,7 +122,13 @@ fn is_showing(app: &AppHandle, matches: impl Fn(&PanelContent) -> bool) -> AppRe
 }
 
 /// Show `content` in the popup, `size` logical pixels, centred on `anchor_x` past `dock_label`.
-fn show(app: &AppHandle, dock_label: &str, content: PanelContent, size: (f64, f64), anchor_x: i32) -> AppResult<()> {
+fn show(
+    app: &AppHandle,
+    dock_label: &str,
+    content: PanelContent,
+    size: (f64, f64),
+    anchor_x: i32,
+) -> AppResult<()> {
     let state = app.state::<PanelState>();
     let window = match app.get_webview_window(PANEL_LABEL) {
         Some(window) => window,
