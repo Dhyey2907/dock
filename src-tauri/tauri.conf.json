@@ -24,6 +24,7 @@
         "resizable": false,
         "maximizable": false,
         "minimizable": false,
+        "dragDropEnabled": false,
         "visible": false
       }
     ],

@@ -7,6 +7,7 @@ mod error;
 mod glass;
 mod logging;
 mod media;
+mod productivity;
 mod quick;
 mod settings;
 mod shell;
@@ -65,6 +66,8 @@ pub fn run() {
             app.manage(calendar::service::CalendarService::default());
             app.manage(claude::service::ClaudeService::default());
             app.manage(automations::service::AutomationState::default());
+            app.manage(productivity::snip::SnipState::default());
+            productivity::service::init(handle)?;
             commands::sync_autostart(handle, launch_at_startup);
 
             shell::init(handle)?;
@@ -105,6 +108,12 @@ pub fn run() {
             tauri::WindowEvent::Focused(false) if window.label() == shell::panel::PANEL_LABEL => {
                 if let Err(error) = shell::panel::close(window.app_handle()) {
                     tracing::warn!(%error, "failed to close the popup");
+                }
+            }
+            // The area picker goes away if you switch to another window.
+            tauri::WindowEvent::Focused(false) if window.label() == productivity::snip::SNIP_LABEL => {
+                if let Err(error) = productivity::snip::cancel(window.app_handle()) {
+                    tracing::warn!(%error, "failed to close the area picker");
                 }
             }
             _ => {}
@@ -160,6 +169,39 @@ pub fn run() {
             commands::quick_set_brightness,
             commands::quick_open_windows,
             commands::app_quit,
+            productivity::commands::notes_get,
+            productivity::commands::note_save,
+            productivity::commands::note_delete,
+            productivity::commands::todos_get,
+            productivity::commands::todo_change,
+            productivity::commands::capture_save,
+            productivity::commands::kanban_get,
+            productivity::commands::kanban_set,
+            productivity::commands::timelog_get,
+            productivity::commands::timelog_set,
+            productivity::commands::links_get,
+            productivity::commands::links_set,
+            productivity::commands::folders_get,
+            productivity::commands::folders_set,
+            productivity::commands::link_open,
+            productivity::commands::folder_app_launch,
+            productivity::commands::start_menu_apps,
+            productivity::commands::bookmarks_get,
+            productivity::commands::file_search,
+            productivity::commands::file_open,
+            productivity::commands::songs_get,
+            productivity::commands::claude_sessions_get,
+            productivity::commands::snip_start,
+            productivity::commands::snip_backdrop,
+            productivity::commands::snip_finish,
+            productivity::commands::snip_cancel,
+            productivity::commands::pin_clipboard,
+            productivity::commands::pin_image,
+            productivity::commands::pin_close,
+            productivity::commands::pins_close_all,
+            productivity::commands::pins_count,
+            productivity::commands::screen_text_last,
+            productivity::commands::text_copy,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

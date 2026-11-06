@@ -23,6 +23,22 @@ import type { SystemStats } from "./generated/SystemStats";
 import type { Weather } from "./generated/Weather";
 import type { WidgetKind } from "./generated/WidgetKind";
 import type { WidgetSnapshot } from "./generated/WidgetSnapshot";
+import type { AppFolders } from "./generated/AppFolders";
+import type { Bookmark } from "./generated/Bookmark";
+import type { CaptureKind } from "./generated/CaptureKind";
+import type { ClaudeActivity } from "./generated/ClaudeActivity";
+import type { FileHit } from "./generated/FileHit";
+import type { FolderApp } from "./generated/FolderApp";
+import type { KanbanBoard } from "./generated/KanbanBoard";
+import type { Note } from "./generated/Note";
+import type { QuickLinks } from "./generated/QuickLinks";
+import type { ScreenText } from "./generated/ScreenText";
+import type { SnipBackdrop } from "./generated/SnipBackdrop";
+import type { SnipMode } from "./generated/SnipMode";
+import type { SongsToday } from "./generated/SongsToday";
+import type { TimeLog } from "./generated/TimeLog";
+import type { Todo } from "./generated/Todo";
+import type { TodoChange } from "./generated/TodoChange";
 
 /** Windows Settings pages the widgets may open. */
 export type WindowsSettingsPage =
@@ -88,6 +104,45 @@ export const ipc = {
   focusPause: () => invoke<void>("focus_pause"),
   focusReset: () => invoke<void>("focus_reset"),
   openWindowsSettings: (page: WindowsSettingsPage) => invoke<void>("open_windows_settings", { page }),
+  // Productivity widgets.
+  notesGet: () => invoke<Note[]>("notes_get"),
+  /** Save a note's text (a new note when `id` is null); resolves to its id. */
+  noteSave: (id: string | null, text: string) => invoke<string>("note_save", { id, text }),
+  noteDelete: (id: string) => invoke<void>("note_delete", { id }),
+  todosGet: () => invoke<Todo[]>("todos_get"),
+  todoChange: (change: TodoChange) => invoke<Todo[]>("todo_change", { change }),
+  captureSave: (kind: CaptureKind, text: string) => invoke<void>("capture_save", { kind, text }),
+  kanbanGet: () => invoke<KanbanBoard>("kanban_get"),
+  kanbanSet: (board: KanbanBoard) => invoke<KanbanBoard>("kanban_set", { board }),
+  timelogGet: () => invoke<TimeLog>("timelog_get"),
+  timelogSet: (log: TimeLog) => invoke<TimeLog>("timelog_set", { log }),
+  linksGet: () => invoke<QuickLinks>("links_get"),
+  linksSet: (links: QuickLinks) => invoke<QuickLinks>("links_set", { links }),
+  foldersGet: () => invoke<AppFolders>("folders_get"),
+  foldersSet: (folders: AppFolders) => invoke<AppFolders>("folders_set", { folders }),
+  /** Open a web address or a folder/file on this PC. */
+  linkOpen: (target: string) => invoke<void>("link_open", { target }),
+  folderAppLaunch: (path: string) => invoke<void>("folder_app_launch", { path }),
+  startMenuApps: () => invoke<FolderApp[]>("start_menu_apps"),
+  bookmarksGet: () => invoke<Bookmark[]>("bookmarks_get"),
+  fileSearch: (query: string) => invoke<FileHit[]>("file_search", { query }),
+  fileOpen: (path: string, reveal: boolean) => invoke<void>("file_open", { path, reveal }),
+  songsGet: () => invoke<SongsToday>("songs_get"),
+  claudeSessionsGet: () => invoke<ClaudeActivity>("claude_sessions_get"),
+  snipStart: (mode: SnipMode) => invoke<void>("snip_start", { mode }),
+  snipBackdrop: () => invoke<SnipBackdrop | null>("snip_backdrop"),
+  /** The chosen area, as fractions (0 to 1) of the picker window. */
+  snipFinish: (x: number, y: number, width: number, height: number) =>
+    invoke<void>("snip_finish", { x, y, width, height }),
+  snipCancel: () => invoke<void>("snip_cancel"),
+  /** Pin the clipboard's picture; false when it holds none. */
+  pinClipboard: () => invoke<boolean>("pin_clipboard"),
+  pinImage: (id: number) => invoke<string | null>("pin_image", { id }),
+  pinClose: (id: number) => invoke<void>("pin_close", { id }),
+  pinsCloseAll: () => invoke<void>("pins_close_all"),
+  pinsCount: () => invoke<number>("pins_count"),
+  screenTextLast: () => invoke<ScreenText>("screen_text_last"),
+  textCopy: (text: string) => invoke<void>("text_copy", { text }),
 };
 
 function on<T>(name: string) {
@@ -134,4 +189,15 @@ export const events = {
   onClaude: on<ClaudeUsage>("widget-claude"),
   onBubbles: on<Bubble[]>("bubbles-changed"),
   onSettingsSection: on<string>("settings-section"),
+  onNotes: on<Note[]>("notes-changed"),
+  onTodos: on<Todo[]>("todos-changed"),
+  onKanban: on<KanbanBoard>("kanban-changed"),
+  onTimelog: on<TimeLog>("timelog-changed"),
+  onLinks: on<QuickLinks>("links-changed"),
+  onFolders: on<AppFolders>("folders-changed"),
+  onSongs: on<SongsToday>("songs-changed"),
+  onClaudeActivity: on<ClaudeActivity>("claude-activity"),
+  onPins: on<number>("pins-changed"),
+  onScreenText: on<ScreenText>("screen-text"),
+  onSnipOpen: on<SnipMode>("snip-open"),
 };

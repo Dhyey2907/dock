@@ -5,4 +5,4 @@ import type { WidgetKind } from "./WidgetKind";
 /**
  * What the popup shows.
  */
-export type PanelContent = { "type": "widget", kind: WidgetKind, } | { "type": "app", menu: AppMenu, } | { "type": "gallery" };
+export type PanelContent = { "type": "widget", kind: WidgetKind, } | { "type": "app", menu: AppMenu, } | { "type": "gallery" } | { "type": "capture" };

@@ -202,6 +202,32 @@ pub enum WidgetKind {
     Music,
     Claude,
     Calendar,
+    /// A sticky note that saves as you type.
+    Notes,
+    /// A checklist; the dock shows how many are left.
+    Todos,
+    /// To do, Doing and Done, with cards you drag between them.
+    Kanban,
+    /// Notes for your current or next calendar event.
+    MeetingNotes,
+    /// A timer per project, with this week's totals.
+    TimeTracker,
+    /// Favourite websites and folders, one click each.
+    QuickLinks,
+    /// Apps grouped into one button that opens a small grid.
+    AppFolders,
+    /// Chrome and Edge bookmarks.
+    Bookmarks,
+    /// Instant search through the Windows Search index.
+    FileSearch,
+    /// Float a screen area or the clipboard's picture on top.
+    PinImage,
+    /// Copy the text in an area of the screen.
+    ScreenText,
+    /// The songs you've played today.
+    SongsToday,
+    /// Running and recent Claude Code sessions.
+    ClaudeSessions,
     /// A widget from a newer version of the dock; dropped on load.
     #[serde(other)]
     #[ts(skip)]
@@ -210,7 +236,7 @@ pub enum WidgetKind {
 
 impl WidgetKind {
     /// Every widget, in the default order (left to right).
-    pub const ALL: [WidgetKind; 8] = [
+    pub const ALL: [WidgetKind; 21] = [
         WidgetKind::Music,
         WidgetKind::Focus,
         WidgetKind::Claude,
@@ -219,6 +245,19 @@ impl WidgetKind {
         WidgetKind::Status,
         WidgetKind::Weather,
         WidgetKind::Clock,
+        WidgetKind::Notes,
+        WidgetKind::Todos,
+        WidgetKind::Kanban,
+        WidgetKind::MeetingNotes,
+        WidgetKind::TimeTracker,
+        WidgetKind::QuickLinks,
+        WidgetKind::AppFolders,
+        WidgetKind::Bookmarks,
+        WidgetKind::FileSearch,
+        WidgetKind::PinImage,
+        WidgetKind::ScreenText,
+        WidgetKind::SongsToday,
+        WidgetKind::ClaudeSessions,
     ];
 }
 

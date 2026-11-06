@@ -30,14 +30,19 @@ pub fn apply(app: &AppHandle, text: &str) -> AppResult<()> {
     manager
         .unregister_all()
         .map_err(|e| AppError::Platform(e.to_string()))?;
-    let Some(shortcut) = shortcut else { return Ok(()) };
-    manager
-        .on_shortcut(shortcut, |app, _shortcut, event| {
-            if event.state == ShortcutState::Pressed {
-                super::toggle_dock(app);
-            }
-        })
-        .map_err(|_| AppError::InvalidInput("Another app already uses that shortcut.".into()))
+    let registered = match shortcut {
+        Some(shortcut) => manager
+            .on_shortcut(shortcut, |app, _shortcut, event| {
+                if event.state == ShortcutState::Pressed {
+                    super::toggle_dock(app);
+                }
+            })
+            .map_err(|_| AppError::InvalidInput("Another app already uses that shortcut.".into())),
+        None => Ok(()),
+    };
+    // Clearing the shortcuts above cleared quick capture too.
+    crate::productivity::register_capture_shortcut(app);
+    registered
 }
 
 #[cfg(test)]
