@@ -20,4 +20,16 @@ focusMusic: boolean,
  * Windows switches to dark at sunset and back to light at sunrise. Changes a Windows
  * setting, so it starts off.
  */
-sunsetDarkMode: boolean, };
+sunsetDarkMode: boolean, 
+/**
+ * A card when a connected Bluetooth device's battery runs low.
+ */
+bluetoothBattery: boolean, 
+/**
+ * A card, with Open, when a download finishes in your Downloads folder.
+ */
+downloadFinished: boolean, 
+/**
+ * A card when Claude's 5-hour window resets.
+ */
+claudeReset: boolean, };

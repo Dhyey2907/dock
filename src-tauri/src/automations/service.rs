@@ -19,9 +19,9 @@ use chrono::{DateTime, Local, NaiveDateTime, TimeZone, Utc};
 use tauri::{AppHandle, Listener, Manager};
 
 use super::{
-    claude_alert, claude_bubble, focus_bubble, focus_music, is_quiet, meeting_bubble, meetings_due,
-    next_meeting_reminder, next_sun_change, theme, theme_bubble, theme_for, Bubble, ClaudeMemory,
-    MusicAction, ThemeChoice,
+    claude_alert, claude_bubble, claude_reset, claude_reset_bubble, focus_bubble, focus_music, is_quiet,
+    meeting_bubble, meetings_due, next_meeting_reminder, next_sun_change, theme, theme_bubble, theme_for,
+    Bubble, ClaudeMemory, MusicAction, ResetMemory, ThemeChoice,
 };
 use crate::{
     media::{MediaCommand, PlaybackStatus},
@@ -36,6 +36,7 @@ pub struct AutomationState {
     /// Calendar events that already had their reminder.
     reminded: Mutex<HashSet<String>>,
     claude: Mutex<ClaudeMemory>,
+    claude_reset: Mutex<ResetMemory>,
     /// The theme sunset dark mode last aimed for; changes only at sunrise and sunset, so a theme
     /// you pick by hand in between is left alone.
     theme_target: Mutex<Option<ThemeChoice>>,
@@ -123,7 +124,7 @@ fn evaluate_soon(app: &AppHandle) {
     });
 }
 
-fn show(app: &AppHandle, settings: &Settings, card: Bubble) {
+pub(crate) fn show(app: &AppHandle, settings: &Settings, card: Bubble) {
     let quiet = is_quiet(&settings.quiet_hours, Local::now().time());
     if quiet {
         tracing::debug!(id = %card.id, "reminder held for quiet hours");
@@ -283,6 +284,16 @@ fn evaluate(app: &AppHandle) {
         if let Some(alert) = alert {
             show(app, &settings, claude_bubble(&alert, now, settings.clock_24h));
         }
+    }
+
+    // Claude's 5-hour window resetting.
+    if settings.automations.claude_reset {
+        let usage = crate::claude::service::current(app);
+        let mut memory = state.claude_reset.lock().expect("automation lock");
+        if let Some(reset) = claude_reset(&usage, &mut memory, now) {
+            show(app, &settings, claude_reset_bubble(reset, now));
+        }
+        wake.extend(memory.next());
     }
 
     // Sunset dark mode: act only when the target changes (at sunrise or sunset).

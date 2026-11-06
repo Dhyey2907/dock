@@ -1,5 +1,15 @@
 import { useEffect, useState } from "react";
-import { CalendarClock, MoonStar, Sparkles, Timer, X, type LucideIcon } from "lucide-react";
+import {
+  BatteryLow,
+  CalendarClock,
+  Download,
+  MoonStar,
+  RotateCcw,
+  Sparkles,
+  Timer,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 
 import { events, ipc } from "../core/ipc";
 import type { Bubble } from "../core/generated/Bubble";
@@ -11,6 +21,9 @@ const ICONS: Record<BubbleKind, LucideIcon> = {
   claude: Sparkles,
   focus: Timer,
   theme: MoonStar,
+  bluetooth: BatteryLow,
+  download: Download,
+  claudeReset: RotateCcw,
 };
 
 /** The reminder cards window: the automations' cards, newest nearest the dock. */
@@ -56,6 +69,14 @@ export function BubbleApp() {
               <span className="bubble-title">{card.title}</span>
               <span className="bubble-body">{card.body}</span>
             </span>
+            {card.kind === "download" && (
+              <button
+                className="bubble-action"
+                onClick={() => ipc.bubbleOpen(card.id).catch((error) => console.error(error))}
+              >
+                Open
+              </button>
+            )}
             <button
               className="bubble-close"
               aria-label="Dismiss"

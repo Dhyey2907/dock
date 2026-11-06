@@ -39,6 +39,31 @@ export const CATEGORY_LABELS: Record<WidgetCategory, string> = {
   media: "Media",
   accounts: "Accounts",
 };
+import {
+  BluetoothPanel,
+  BluetoothTile,
+  BrightnessPanel,
+  BrightnessTile,
+  DesktopIconsPanel,
+  DesktopIconsTile,
+  DisplayModePanel,
+  DisplayModeTile,
+  ScreenOffPanel,
+  ScreenOffTile,
+  WallpaperPanel,
+  WallpaperTile,
+} from "./DeviceWidgets";
+import { GithubTrendingPanel, GithubTrendingTile, WifiPanel, WifiTile } from "./NetWidgets";
+import {
+  DevServersPanel,
+  DevServersTile,
+  TopAppsPanel,
+  TopAppsTile,
+  UptimePanel,
+  UptimeTile,
+  UsbDrivesPanel,
+  UsbDrivesTile,
+} from "./ToolWidgets";
 
 export interface WidgetDefinition {
   label: string;
@@ -200,5 +225,89 @@ export const WIDGETS: Partial<Record<WidgetKind, WidgetDefinition>> = {
     Tile: ClaudeSessionsTile,
     Panel: ClaudeSessionsPanel,
     category: "productivity",
+  },
+  topApps: {
+    label: "Top apps",
+    description: "The programs using the most processor and memory, with End task.",
+    Tile: TopAppsTile,
+    Panel: TopAppsPanel,
+    category: "system",
+  },
+  bluetooth: {
+    label: "Bluetooth devices",
+    description: "Your paired devices and their battery levels.",
+    Tile: BluetoothTile,
+    Panel: BluetoothPanel,
+    category: "system",
+  },
+  brightness: {
+    label: "Screen brightness",
+    description: "A brightness slider for each external screen.",
+    Tile: BrightnessTile,
+    Panel: BrightnessPanel,
+    category: "system",
+  },
+  wifi: {
+    label: "Wi-Fi details",
+    description: "Network name, signal, and your local and public addresses.",
+    Tile: WifiTile,
+    Panel: WifiPanel,
+    category: "system",
+  },
+  uptime: {
+    label: "Uptime",
+    description: "Time since the PC started, and whether an update needs a restart.",
+    Tile: UptimeTile,
+    Panel: UptimePanel,
+    category: "system",
+  },
+  devServers: {
+    label: "Local servers",
+    description: "Dev servers running on this PC: open one in the browser or stop it.",
+    Tile: DevServersTile,
+    Panel: DevServersPanel,
+    category: "system",
+  },
+  desktopIcons: {
+    label: "Desktop icons",
+    description: "Show or hide the icons on your desktop.",
+    Tile: DesktopIconsTile,
+    Panel: DesktopIconsPanel,
+    category: "system",
+  },
+  screenOff: {
+    label: "Screen off",
+    description: "Turn the screens off; the mouse or a key wakes them.",
+    Tile: ScreenOffTile,
+    Panel: ScreenOffPanel,
+    category: "system",
+  },
+  wallpaper: {
+    label: "Wallpaper changer",
+    description: "Pictures from a folder as your wallpaper, in turn.",
+    Tile: WallpaperTile,
+    Panel: WallpaperPanel,
+    category: "system",
+  },
+  displayMode: {
+    label: "Display mode",
+    description: "Extend, duplicate or use one screen only.",
+    Tile: DisplayModeTile,
+    Panel: DisplayModePanel,
+    category: "system",
+  },
+  usbDrives: {
+    label: "USB drives",
+    description: "Removable drives, with Safely Remove.",
+    Tile: UsbDrivesTile,
+    Panel: UsbDrivesPanel,
+    category: "system",
+  },
+  githubTrending: {
+    label: "GitHub trending",
+    description: "Today's trending repositories on GitHub.",
+    Tile: GithubTrendingTile,
+    Panel: GithubTrendingPanel,
+    category: "info",
   },
 };

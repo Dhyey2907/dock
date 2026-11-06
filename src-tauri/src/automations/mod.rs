@@ -38,6 +38,12 @@ pub enum BubbleKind {
     Claude,
     Focus,
     Theme,
+    /// A Bluetooth device's battery is low.
+    Bluetooth,
+    /// A download finished (the card has an Open button).
+    Download,
+    /// Claude's 5-hour window reset.
+    ClaudeReset,
 }
 
 /// A reminder card above the dock.
@@ -257,6 +263,66 @@ pub fn claude_bubble(alert: &ClaudeAlert, now: DateTime<Utc>, clock_24h: Option<
         title,
         body,
         expires_at: now + lasts,
+    }
+}
+
+// ---------- Claude window reset ----------
+
+/// The 5-hour window being waited on, and the last one announced.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ResetMemory {
+    pending: Option<DateTime<Utc>>,
+    announced: Option<DateTime<Utc>>,
+}
+
+impl ResetMemory {
+    /// When the window being waited on resets, for sleeping until then.
+    pub fn next(&self) -> Option<DateTime<Utc>> {
+        self.pending
+    }
+}
+
+/// Notes the window in use; returns its reset time once that has passed (once per window).
+/// A window you were stopped in counts too, by the limit's reset time.
+pub fn claude_reset(
+    usage: &ClaudeUsage,
+    memory: &mut ResetMemory,
+    now: DateTime<Utc>,
+) -> Option<DateTime<Utc>> {
+    let five_hour_limit = usage
+        .limited
+        .filter(|l| l.kind == LimitKind::FiveHour)
+        .map(|l| l.resets_at);
+    let window_reset = usage
+        .window
+        .as_ref()
+        .filter(|w| w.messages > 0)
+        .map(|w| w.resets_at);
+    // A reset that has come is taken first, so a new window noted below can't replace it.
+    let due = memory.pending.filter(|p| *p <= now);
+    if due.is_some() {
+        memory.pending = None;
+    }
+    for reset in [window_reset, five_hour_limit].into_iter().flatten() {
+        if reset > now && memory.announced != Some(reset) && memory.pending.is_none_or(|p| p < reset) {
+            memory.pending = Some(reset);
+        }
+    }
+    let due = due?;
+    if memory.announced == Some(due) {
+        return None;
+    }
+    memory.announced = Some(due);
+    Some(due)
+}
+
+pub fn claude_reset_bubble(resets_at: DateTime<Utc>, now: DateTime<Utc>) -> Bubble {
+    Bubble {
+        id: format!("claude:reset:{}", resets_at.timestamp()),
+        kind: BubbleKind::ClaudeReset,
+        title: "Claude's 5-hour window has reset".into(),
+        body: "A fresh window starts with your next message.".into(),
+        expires_at: now + Duration::seconds(20),
     }
 }
 
@@ -525,6 +591,65 @@ mod tests {
             "Claude's 5-hour limit is reached"
         );
         assert_eq!(claude_alert(&limited, &mut memory, now), None);
+    }
+
+    #[test]
+    fn claude_reset_is_announced_once_when_the_window_ends() {
+        let mut memory = ResetMemory::default();
+        let mut use_now = usage("2026-11-05T09:00:00Z", Some(40));
+        use_now.window.as_mut().unwrap().messages = 12;
+        let reset = utc("2026-11-05T14:00:00Z");
+        assert_eq!(
+            claude_reset(&use_now, &mut memory, utc("2026-11-05T10:00:00Z")),
+            None
+        );
+        assert_eq!(memory.next(), Some(reset));
+        // Still the old summary after the reset time (nothing has been used since): announced.
+        assert_eq!(
+            claude_reset(&use_now, &mut memory, utc("2026-11-05T14:00:01Z")),
+            Some(reset)
+        );
+        assert_eq!(memory.next(), None);
+        assert_eq!(
+            claude_reset(&use_now, &mut memory, utc("2026-11-05T14:05:00Z")),
+            None
+        );
+        let card = claude_reset_bubble(reset, utc("2026-11-05T14:00:01Z"));
+        assert_eq!(card.kind, BubbleKind::ClaudeReset);
+    }
+
+    #[test]
+    fn claude_reset_follows_a_five_hour_limit() {
+        let mut memory = ResetMemory::default();
+        let limited = ClaudeUsage {
+            limited: Some(ActiveLimit {
+                kind: LimitKind::FiveHour,
+                resets_at: utc("2026-11-05T15:00:00Z"),
+            }),
+            ..ClaudeUsage::default()
+        };
+        assert_eq!(
+            claude_reset(&limited, &mut memory, utc("2026-11-05T12:00:00Z")),
+            None
+        );
+        assert_eq!(
+            claude_reset(&ClaudeUsage::default(), &mut memory, utc("2026-11-05T15:00:00Z")),
+            Some(utc("2026-11-05T15:00:00Z"))
+        );
+        // A weekly limit isn't a 5-hour reset; an unused window isn't either.
+        let mut fresh = ResetMemory::default();
+        let weekly = ClaudeUsage {
+            limited: Some(ActiveLimit {
+                kind: LimitKind::Weekly,
+                resets_at: utc("2026-11-07T15:00:00Z"),
+            }),
+            ..usage("2026-11-05T09:00:00Z", None)
+        };
+        assert_eq!(
+            claude_reset(&weekly, &mut fresh, utc("2026-11-05T10:00:00Z")),
+            None
+        );
+        assert_eq!(fresh.next(), None);
     }
 
     #[test]

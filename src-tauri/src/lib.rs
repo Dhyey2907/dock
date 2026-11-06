@@ -11,6 +11,7 @@ mod productivity;
 mod quick;
 mod settings;
 mod shell;
+mod system;
 mod widgets;
 
 use tauri::Manager;
@@ -68,6 +69,7 @@ pub fn run() {
             app.manage(automations::service::AutomationState::default());
             app.manage(productivity::snip::SnipState::default());
             productivity::service::init(handle)?;
+            app.manage(system::service::SystemState::default());
             commands::sync_autostart(handle, launch_at_startup);
 
             shell::init(handle)?;
@@ -82,6 +84,7 @@ pub fn run() {
                 // Off the main thread: creating windows there can deadlock WebView2.
                 std::thread::spawn(move || shell::floating::restore(&handle));
             }
+            system::service::init(handle);
             let settings = handle.state::<SettingsStore>().get();
             if let Err(error) = shell::shortcut::apply(handle, &settings.toggle_shortcut) {
                 tracing::warn!(%error, "show/hide shortcut not set");
@@ -202,6 +205,29 @@ pub fn run() {
             productivity::commands::pins_count,
             productivity::commands::screen_text_last,
             productivity::commands::text_copy,
+            commands::top_apps,
+            commands::process_end,
+            commands::bluetooth_devices,
+            commands::monitors_brightness,
+            commands::monitor_set_brightness,
+            commands::wifi_details,
+            commands::public_ip,
+            commands::uptime_get,
+            commands::dev_servers,
+            commands::dev_server_stop,
+            commands::open_url,
+            commands::desktop_icons_get,
+            commands::desktop_icons_set,
+            commands::screen_off,
+            commands::wallpaper_get,
+            commands::wallpaper_next,
+            commands::wallpaper_pick_folder,
+            commands::display_get,
+            commands::display_set,
+            commands::usb_drives,
+            commands::usb_eject,
+            commands::github_trending,
+            commands::bubble_open,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

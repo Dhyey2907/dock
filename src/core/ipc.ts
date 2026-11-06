@@ -39,10 +39,22 @@ import type { SongsToday } from "./generated/SongsToday";
 import type { TimeLog } from "./generated/TimeLog";
 import type { Todo } from "./generated/Todo";
 import type { TodoChange } from "./generated/TodoChange";
+import type { BluetoothDevice } from "./generated/BluetoothDevice";
+import type { DevServer } from "./generated/DevServer";
+import type { DisplayMode } from "./generated/DisplayMode";
+import type { DisplayState } from "./generated/DisplayState";
+import type { EjectResult } from "./generated/EjectResult";
+import type { MonitorBrightness } from "./generated/MonitorBrightness";
+import type { TopApps } from "./generated/TopApps";
+import type { Trending } from "./generated/Trending";
+import type { UptimeState } from "./generated/UptimeState";
+import type { UsbDrive } from "./generated/UsbDrive";
+import type { WallpaperState } from "./generated/WallpaperState";
+import type { WifiDetails } from "./generated/WifiDetails";
 
 /** Windows Settings pages the widgets may open. */
 export type WindowsSettingsPage =
-  "location" | "network" | "sound" | "battery" | "datetime" | "bluetooth" | "home";
+  "location" | "network" | "sound" | "battery" | "datetime" | "bluetooth" | "home" | "update" | "display";
 
 /** Typed wrappers for every backend command, so call sites never spell command names. */
 export const ipc = {
@@ -143,6 +155,31 @@ export const ipc = {
   pinsCount: () => invoke<number>("pins_count"),
   screenTextLast: () => invoke<ScreenText>("screen_text_last"),
   textCopy: (text: string) => invoke<void>("text_copy", { text }),
+  // System widgets.
+  topApps: () => invoke<TopApps>("top_apps"),
+  processEnd: (pids: number[], name: string) => invoke<void>("process_end", { pids, name }),
+  bluetoothDevices: () => invoke<BluetoothDevice[]>("bluetooth_devices"),
+  monitorsBrightness: () => invoke<MonitorBrightness[]>("monitors_brightness"),
+  monitorSetBrightness: (id: string, percent: number) =>
+    invoke<void>("monitor_set_brightness", { id, percent: Math.round(percent) }),
+  wifiDetails: () => invoke<WifiDetails>("wifi_details"),
+  publicIp: () => invoke<string | null>("public_ip"),
+  uptimeGet: () => invoke<UptimeState>("uptime_get"),
+  devServers: () => invoke<DevServer[]>("dev_servers"),
+  devServerStop: (port: number, pid: number) => invoke<void>("dev_server_stop", { port, pid }),
+  openUrl: (url: string) => invoke<void>("open_url", { url }),
+  desktopIconsGet: () => invoke<boolean | null>("desktop_icons_get"),
+  desktopIconsSet: (show: boolean) => invoke<boolean>("desktop_icons_set", { show }),
+  screenOff: () => invoke<void>("screen_off"),
+  wallpaperGet: () => invoke<WallpaperState>("wallpaper_get"),
+  wallpaperNext: () => invoke<WallpaperState>("wallpaper_next"),
+  wallpaperPickFolder: () => invoke<string | null>("wallpaper_pick_folder"),
+  displayGet: () => invoke<DisplayState>("display_get"),
+  displaySet: (mode: DisplayMode) => invoke<void>("display_set", { mode }),
+  usbDrives: () => invoke<UsbDrive[]>("usb_drives"),
+  usbEject: (letter: string) => invoke<EjectResult>("usb_eject", { letter }),
+  githubTrending: () => invoke<Trending>("github_trending"),
+  bubbleOpen: (id: string) => invoke<void>("bubble_open", { id }),
 };
 
 function on<T>(name: string) {
