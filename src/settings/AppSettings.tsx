@@ -218,7 +218,11 @@ export function AppSettings({ settings, save }: { settings: Settings; save: Save
 
       <h3>Windows</h3>
       {toggle("Window previews", "previews", "Hover an app to see its windows.")}
-      {toggle("Alt+1 to Alt+9", "numberShortcuts", "Open your pinned apps in order.")}
+      {toggle(
+        "Win+1 to Win+9",
+        "numberShortcuts",
+        "Open the apps on the dock in order, like the Windows taskbar.",
+      )}
       {toggle(
         "Dock's own Alt+Tab",
         "altTab",

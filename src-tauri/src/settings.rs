@@ -745,7 +745,7 @@ pub struct AppsSettings {
     pub sort_by_use: bool,
     /// Pinned apps followed by a divider, by dock key.
     pub separators: Vec<String>,
-    /// Alt+1 … Alt+9 open the pinned apps in order.
+    /// Win+1 … Win+9 open the apps on the dock in order.
     pub number_shortcuts: bool,
     /// An app's icon bounces while it starts.
     pub launch_bounce: bool,

@@ -54,7 +54,13 @@ pub const GALLERY_SIZE: (f64, f64) = (420.0, 540.0);
 #[derive(Default)]
 pub struct PanelState {
     open: Mutex<Option<PanelContent>>,
+    /// What closed last, and when: clicking a widget whose popup is open first takes focus
+    /// from the popup (closing it), then arrives as a click that would open it again.
+    closed: Mutex<Option<(PanelContent, std::time::Instant)>>,
 }
+
+/// A click this soon after its popup closed is the click that closed it.
+const REOPEN_GUARD: std::time::Duration = std::time::Duration::from_millis(400);
 
 /// A popup's size in logical pixels.
 pub fn panel_size(kind: WidgetKind) -> (f64, f64) {
@@ -237,7 +243,14 @@ pub fn popup_rect(app: &AppHandle, dock_label: &str, anchor_x: i32, outer: (u32,
 
 /// Whether the popup is on screen showing something `matches` accepts.
 fn is_showing(app: &AppHandle, matches: impl Fn(&PanelContent) -> bool) -> AppResult<bool> {
-    let open = app.state::<PanelState>().open.lock().expect("panel lock").clone();
+    let state = app.state::<PanelState>();
+    // Just closed by the click that's asking now: treat it as still open, so it stays closed.
+    if let Some((content, at)) = state.closed.lock().expect("panel lock").take() {
+        if at.elapsed() < REOPEN_GUARD && matches(&content) {
+            return Ok(true);
+        }
+    }
+    let open = state.open.lock().expect("panel lock").clone();
     let visible = match app.get_webview_window(PANEL_LABEL) {
         Some(window) => window.is_visible()?,
         None => false,
@@ -294,7 +307,11 @@ pub fn current(app: &AppHandle) -> Option<PanelContent> {
 }
 
 pub fn close(app: &AppHandle) -> AppResult<()> {
-    let was_open = app.state::<PanelState>().open.lock().expect("panel lock").take();
+    let state = app.state::<PanelState>();
+    let was_open = state.open.lock().expect("panel lock").take();
+    if let Some(content) = &was_open {
+        *state.closed.lock().expect("panel lock") = Some((content.clone(), std::time::Instant::now()));
+    }
     if let Some(window) = app.get_webview_window(PANEL_LABEL) {
         window.hide()?;
     }

@@ -145,6 +145,7 @@ pub fn run() {
             commands::settings_can_undo,
             commands::gallery_toggle,
             commands::folder_open,
+            commands::switcher_debug,
             commands::dock_folders_set,
             commands::folder_app_click,
             commands::panel_detach,

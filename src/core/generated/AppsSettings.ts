@@ -33,7 +33,7 @@ sortByUse: boolean,
  */
 separators: Array<string>, 
 /**
- * Alt+1 … Alt+9 open the pinned apps in order.
+ * Win+1 … Win+9 open the apps on the dock in order.
  */
 numberShortcuts: boolean, 
 /**

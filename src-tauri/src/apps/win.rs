@@ -686,6 +686,11 @@ pub fn frame_rect(hwnd: isize) -> Option<crate::shell::placement::Rect> {
     Some(to_rect(r))
 }
 
+pub fn is_minimized(hwnd: isize) -> bool {
+    // SAFETY: a plain query on a window handle.
+    unsafe { windows::Win32::UI::WindowsAndMessaging::IsIconic(HWND(hwnd as *mut c_void)) }.as_bool()
+}
+
 pub fn is_maximized(hwnd: isize) -> bool {
     // SAFETY: a plain query on a window handle.
     unsafe { windows::Win32::UI::WindowsAndMessaging::IsZoomed(HWND(hwnd as *mut c_void)) }.as_bool()

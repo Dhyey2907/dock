@@ -342,6 +342,23 @@ pub fn folder_open(app: AppHandle, window: WebviewWindow, id: String, anchor_x: 
     crate::apps::service::show_folder(&app, window.label(), &id, anchor_x)
 }
 
+/// Dev builds only: step the Alt+Tab switcher (Some(forward)) or close it (None), for testing
+/// its look (the real keys come from a hook that ignores simulated presses).
+#[tauri::command]
+pub fn switcher_debug(app: AppHandle, forward: Option<bool>) {
+    #[cfg(all(windows, debug_assertions))]
+    {
+        use crate::apps::{hooks::SwitchKey, switcher};
+        match forward {
+            Some(true) => switcher::handle(&app, SwitchKey::Next),
+            Some(false) => switcher::handle(&app, SwitchKey::Previous),
+            None => switcher::handle(&app, SwitchKey::Cancel),
+        }
+    }
+    #[cfg(not(all(windows, debug_assertions)))]
+    let _ = (app, forward);
+}
+
 /// Save the dock's folders, leaving every other setting as it is now.
 #[tauri::command]
 pub fn dock_folders_set(app: AppHandle, folders: Vec<crate::settings::DockFolder>) -> AppResult<Settings> {

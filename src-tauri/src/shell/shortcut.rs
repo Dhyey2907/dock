@@ -1,24 +1,15 @@
 //! Global keyboard shortcuts: show or hide the dock, the command bar, quick capture. All are
 //! registered together, so changing one never leaves another unregistered.
 
-use std::sync::Mutex;
-
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use ts_rs::TS;
 
 use crate::{
     error::{AppError, AppResult},
     settings::Settings,
 };
-
-/// Event sent to every window when the quick capture shortcut is pressed.
-/// Dock's own shortcuts registered now (the ones the hotkey editor sets).
-static PLANNED: Mutex<Vec<Shortcut>> = Mutex::new(Vec::new());
-/// Whether Alt+1 … Alt+9 are registered.
-static NUMBERS: Mutex<bool> = Mutex::new(false);
-
 
 /// Something a global shortcut does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -122,9 +113,6 @@ pub fn apply_all(app: &AppHandle, settings: &Settings) -> AppResult<()> {
     manager
         .unregister_all()
         .map_err(|e| AppError::Platform(e.to_string()))?;
-    // Clearing everything cleared Alt+1 … Alt+9 too.
-    *NUMBERS.lock().unwrap_or_else(|e| e.into_inner()) = false;
-    *PLANNED.lock().unwrap_or_else(|e| e.into_inner()) = planned.iter().map(|(_, s)| *s).collect();
     let mut taken = None;
     for (action, shortcut) in planned {
         let result = manager.on_shortcut(shortcut, move |app, _shortcut, event| {
@@ -137,9 +125,6 @@ pub fn apply_all(app: &AppHandle, settings: &Settings) -> AppResult<()> {
             taken = Some(action);
         }
     }
-    if let Err(error) = set_numbers(app, settings.apps.number_shortcuts) {
-        tracing::warn!(%error, "Alt+number shortcuts not set");
-    }
     match taken {
         Some(_) => Err(AppError::InvalidInput(
             "Another app already uses that shortcut.".into(),
@@ -148,53 +133,9 @@ pub fn apply_all(app: &AppHandle, settings: &Settings) -> AppResult<()> {
     }
 }
 
-/// Alt+`n` for `n` in 1..=9.
-pub fn number_shortcuts() -> Vec<(usize, Shortcut)> {
-    const DIGITS: [Code; 9] = [
-        Code::Digit1,
-        Code::Digit2,
-        Code::Digit3,
-        Code::Digit4,
-        Code::Digit5,
-        Code::Digit6,
-        Code::Digit7,
-        Code::Digit8,
-        Code::Digit9,
-    ];
-    DIGITS
-        .iter()
-        .enumerate()
-        .map(|(i, &code)| (i + 1, Shortcut::new(Some(Modifiers::ALT), code)))
-        .collect()
-}
-
-/// Turn Alt+1 … Alt+9 (open the pinned apps in order) on or off. A number another app
-/// already uses is skipped.
+/// Turn the number shortcuts (Win+1 … Win+9 open the dock's apps in order) on or off.
 pub fn set_numbers(app: &AppHandle, on: bool) -> AppResult<()> {
-    let mut registered = NUMBERS.lock().unwrap_or_else(|e| e.into_inner());
-    if *registered == on {
-        return Ok(());
-    }
-    let manager = app.global_shortcut();
-    for (n, shortcut) in number_shortcuts() {
-        // Never take the keys of one of Dock's own shortcuts.
-        if PLANNED.lock().unwrap_or_else(|e| e.into_inner()).contains(&shortcut) {
-            continue;
-        }
-        let result = if on {
-            manager.on_shortcut(shortcut, move |app, _shortcut, event| {
-                if event.state == ShortcutState::Pressed {
-                    crate::apps::service::open_nth(app, n);
-                }
-            })
-        } else {
-            manager.unregister(shortcut)
-        };
-        if let Err(error) = result {
-            tracing::debug!(%error, n, "Alt+number shortcut skipped");
-        }
-    }
-    *registered = on;
+    super::winkeys::set_enabled(app, on);
     Ok(())
 }
 
@@ -205,9 +146,6 @@ mod tests {
     #[test]
     fn shortcuts_need_a_modifier_and_a_real_key() {
         assert!(parse("Ctrl+Alt+D").unwrap().is_some());
-        let numbers = number_shortcuts();
-        assert_eq!(numbers.len(), 9);
-        assert_eq!(numbers[8], (9, parse("Alt+9").unwrap().unwrap()));
         assert!(parse("Shift+Super+Space").unwrap().is_some());
         assert!(parse("  ").unwrap().is_none());
         assert!(parse("D").is_err());

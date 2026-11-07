@@ -127,7 +127,7 @@ pub fn settings_changed(app: &AppHandle) {
         rescan_soon(app);
     }
     if let Err(error) = shell::shortcut::set_numbers(app, settings.apps.number_shortcuts) {
-        tracing::warn!(%error, "Alt+number shortcuts not set");
+        tracing::warn!(%error, "Win+number keys not set");
     }
 }
 
@@ -659,7 +659,7 @@ pub fn open_nth(app: &AppHandle, n: usize) {
         .and_then(|b| b.get(&item.key))
         .map_or(0, |r| r.x + r.width as i32 / 2);
     if let Err(error) = click(app, DOCK_LABEL, &item.key, anchor) {
-        tracing::warn!(%error, n, "Alt+number didn't open an app");
+        tracing::warn!(%error, n, "Win+number didn't open an app");
     }
 }
 
