@@ -20,6 +20,9 @@ import { Bars, Card, CardButton, DotGrid, IconTile, Ring } from "./parts";
 import { duration, until } from "./format";
 import { useStopwatch, useTimer } from "./clockStore";
 
+/** One shared empty list, so a store read without data stays the same between renders. */
+const NONE: never[] = [];
+
 const readScreenTime = () => ipc.screenTime();
 
 /** Screen Time: today's time at the PC, with the hours as bars. */
@@ -45,7 +48,7 @@ export function DayTimelineCard() {
   const { data } = useLoaded(readScreenTime, 60_000);
   const focus = useWidgets((s) => s.focus);
   const weather = useWidgets((s) => s.weather);
-  const events = useWidgets((s) => s.calendar?.events ?? []);
+  const events = useWidgets((s) => s.calendar?.events) ?? NONE;
   const now = new Date(useNow(60_000));
   const today = now.toDateString();
   const meetings = events.filter((e) => !e.allDay && new Date(e.start).toDateString() === today);
@@ -229,7 +232,7 @@ export function NotesCard() {
 
 /** Calendar: the next event and how soon it starts. */
 export function CalendarCard() {
-  const events = useWidgets((s) => s.calendar?.events ?? []);
+  const events = useWidgets((s) => s.calendar?.events) ?? NONE;
   const now = useNow(60_000);
   const next = events.find((e) => Date.parse(e.end) > now);
   const started = next && Date.parse(next.start) <= now;
@@ -262,9 +265,7 @@ export function CurrencyCard() {
         <ArrowRightLeft strokeWidth={2.4} />
       </IconTile>
       <span className="card-col">
-        <span className="card-label card-dim">
-          1 {data?.from ?? "…"} = {data?.to ?? ""}
-        </span>
+        <span className="card-label card-dim">{data ? `${data.from} → ${data.to}` : "…"}</span>
         <span className="card-big card-tabular">
           {failed ? "—" : data ? data.rate.toFixed(data.rate >= 100 ? 1 : 3) : "…"}
         </span>

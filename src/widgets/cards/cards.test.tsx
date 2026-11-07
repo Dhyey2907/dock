@@ -149,6 +149,29 @@ describe("card widgets", () => {
     expect(container.textContent).not.toMatch(/undefined|NaN/);
   });
 
+  it.each(every)("%s draws with no data yet", async (_kind, Card) => {
+    const filled = { widgets: useWidgets.getState(), productivity: useProductivity.getState() };
+    useWidgets.setState({
+      claude: undefined,
+      stats: undefined,
+      sound: undefined,
+      weather: undefined,
+      music: undefined,
+      calendar: undefined,
+    } as never);
+    useProductivity.setState({ todos: [], notes: [] } as never);
+    try {
+      const { container } = render(<Card />);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(container.querySelector(".card")).not.toBeNull();
+    } finally {
+      useWidgets.setState(filled.widgets);
+      useProductivity.setState(filled.productivity);
+    }
+  });
+
   it("covers the whole no-setup set", () => {
     expect(Object.keys(CARD_WIDGETS).length).toBeGreaterThanOrEqual(54);
   });

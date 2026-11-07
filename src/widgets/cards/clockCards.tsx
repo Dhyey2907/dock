@@ -3,6 +3,9 @@ import { useWidgets } from "../store";
 import { useNow } from "../useNow";
 import { Card } from "./parts";
 
+/** One shared empty list, so a store read without data stays the same between renders. */
+const NONE: never[] = [];
+
 /** Hours, minutes and seconds in `zone` (the PC's own when left out). */
 function partsIn(now: number, zone?: string) {
   const fmt = new Intl.DateTimeFormat("en-GB", {
@@ -155,7 +158,7 @@ export function FlipClockCard() {
 }
 
 function useZones() {
-  return useSettings((s) => s.settings?.cards.worldClocks ?? []);
+  return useSettings((s) => s.settings?.cards.worldClocks) ?? NONE;
 }
 
 /** World Clocks: three small analog faces. */

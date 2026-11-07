@@ -18,6 +18,9 @@ import { useWidgets } from "../store";
 import { useNow } from "../useNow";
 import { Card } from "./parts";
 
+/** One shared empty list, so a store read without data stays the same between renders. */
+const NONE: never[] = [];
+
 const ICONS: Record<string, LucideIcon> = {
   sun: Sun,
   moon: Moon,
@@ -116,7 +119,7 @@ function Day({ date, icon, high, low }: { date: string; icon: string; high: numb
 
 /** Weather Forecast: the next four days. */
 export function WeatherForecastCard() {
-  const days = useWidgets((s) => s.weather?.days ?? []);
+  const days = useWidgets((s) => s.weather?.days) ?? NONE;
   return (
     <Card className="card-days">
       {days.slice(1, 5).map((d) => (
@@ -159,7 +162,7 @@ export function WeatherStatusCard() {
 
 /** Hourly: the next six hours. */
 export function HourlyCard() {
-  const hours = useWidgets((s) => s.weather?.hours ?? []);
+  const hours = useWidgets((s) => s.weather?.hours) ?? NONE;
   return (
     <Card className="card-days">
       {hours.map((h) => (

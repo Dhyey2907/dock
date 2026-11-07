@@ -100,17 +100,19 @@ export function Ring({
           strokeDasharray={`${usable} ${circumference}`}
           transform={`rotate(${rotate} 50 50)`}
         />
-        <circle
-          cx="50"
-          cy="50"
-          r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth={stroke * 2}
-          strokeLinecap="round"
-          strokeDasharray={`${filled} ${circumference}`}
-          transform={`rotate(${rotate} 50 50)`}
-        />
+        {filled > 0.5 && (
+          <circle
+            cx="50"
+            cy="50"
+            r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth={stroke * 2}
+            strokeLinecap="round"
+            strokeDasharray={`${filled} ${circumference}`}
+            transform={`rotate(${rotate} 50 50)`}
+          />
+        )}
       </svg>
       {children && <span className="card-ring-label">{children}</span>}
     </span>

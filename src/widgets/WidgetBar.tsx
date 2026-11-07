@@ -10,6 +10,7 @@ import { useGlass } from "../dock/glass/store";
 import { useSettings } from "../settings/store";
 import { reorderVisible, slotAt } from "./logic";
 import { WIDGETS } from "./registry";
+import { WidgetBoundary } from "./WidgetBoundary";
 
 /** How far the pointer must move before a press becomes a drag. */
 const DRAG_THRESHOLD = 6;
@@ -251,6 +252,8 @@ export function WidgetBar({ side = "all" }: { side?: WidgetSide }) {
             title={hoverPreviews && !def.windowsOnly ? undefined : def.label}
             onMouseEnter={onEnter(entry.kind)}
             onMouseLeave={onLeave}
+            // Pressing anything in a widget (a card's own buttons too) cancels a coming preview.
+            onPointerDownCapture={() => window.clearTimeout(peekTimer.current)}
             onPointerDown={onPointerDown(entry.kind, index)}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
@@ -264,7 +267,9 @@ export function WidgetBar({ side = "all" }: { side?: WidgetSide }) {
               toggle(entry.kind);
             }}
           >
-            {asCard(def) && def.Card ? <def.Card /> : <def.Tile />}
+            <WidgetBoundary name={def.label}>
+              {asCard(def) && def.Card ? <def.Card /> : <def.Tile />}
+            </WidgetBoundary>
           </button>
         );
       })}

@@ -50,7 +50,36 @@ fn enabled(settings: &Settings, kind: WidgetKind) -> bool {
 }
 
 fn wants_stats(settings: &Settings) -> bool {
-    enabled(settings, WidgetKind::System) || enabled(settings, WidgetKind::Status)
+    [
+        WidgetKind::System,
+        WidgetKind::Status,
+        WidgetKind::Cpu,
+        WidgetKind::Ram,
+        WidgetKind::Temperature,
+        WidgetKind::Battery,
+    ]
+    .into_iter()
+    .any(|kind| enabled(settings, kind))
+}
+
+/// Whether any widget on the dock shows the weather (the weather card and its relatives,
+/// and the cards that put today's temperature next to the time).
+fn wants_weather(settings: &Settings) -> bool {
+    [
+        WidgetKind::Weather,
+        WidgetKind::WeatherDetails,
+        WidgetKind::WeatherForecast,
+        WidgetKind::TodayForecast,
+        WidgetKind::WeatherStatus,
+        WidgetKind::Hourly,
+        WidgetKind::SunriseSunset,
+        WidgetKind::SevenDays,
+        WidgetKind::Today,
+        WidgetKind::ClockWeather,
+        WidgetKind::DayTimeline,
+    ]
+    .into_iter()
+    .any(|kind| enabled(settings, kind))
 }
 
 pub fn snapshot(app: &AppHandle) -> WidgetSnapshot {
@@ -129,7 +158,7 @@ pub fn init(app: &AppHandle) {
 /// Settings changed: wake whatever depends on them.
 pub fn settings_changed(app: &AppHandle, before: &Settings, after: &Settings) {
     let state = app.state::<WidgetsState>();
-    if enabled(before, WidgetKind::Weather) != enabled(after, WidgetKind::Weather)
+    if wants_weather(before) != wants_weather(after)
         || before.weather_place != after.weather_place
         || before.temperature_unit != after.temperature_unit
     {
@@ -169,7 +198,7 @@ async fn weather_loop(app: AppHandle) {
     let wake = app.state::<WidgetsState>().weather_now.clone();
     loop {
         let settings = app.state::<SettingsStore>().get();
-        let wait = if enabled(&settings, WidgetKind::Weather) {
+        let wait = if wants_weather(&settings) {
             let unit = settings.temperature_unit;
             let weather = fetch_weather(&http, &settings).await;
             let wait = if weather.status == WeatherStatus::Ready {

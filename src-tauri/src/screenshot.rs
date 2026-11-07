@@ -65,7 +65,7 @@ pub fn is_picture(path: &Path) -> bool {
 
 /// The Screenshots folder (it moves if the user moved it).
 #[cfg(windows)]
-fn folder() -> Option<PathBuf> {
+pub fn folder() -> Option<PathBuf> {
     use windows::Win32::{
         System::Com::CoTaskMemFree,
         UI::Shell::{FOLDERID_Screenshots, SHGetKnownFolderPath, KF_FLAG_DEFAULT},
@@ -80,7 +80,7 @@ fn folder() -> Option<PathBuf> {
 }
 
 #[cfg(not(windows))]
-fn folder() -> Option<PathBuf> {
+pub fn folder() -> Option<PathBuf> {
     None
 }
 

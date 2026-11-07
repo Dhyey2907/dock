@@ -930,3 +930,15 @@
   grid-column: 1 / 4;
   font-size: 11.5px;
 }
+
+/* Play and pause read better solid, as in Lumabar. */
+.card-button :is(.lucide-play, .lucide-pause) {
+  fill: currentColor;
+}
+
+/* A widget that crashed: a small warning in its place. */
+.widget-failed {
+  display: grid;
+  place-items: center;
+  opacity: 0.6;
+}

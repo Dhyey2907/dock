@@ -71,6 +71,9 @@ pub struct PanelState {
     hovered: AtomicBool,
     /// Bumped by every open and close, so a close planned earlier doesn't close a newer popup.
     generation: AtomicU64,
+    /// Bumped only by opening and closing: a show that a close overtook (or a newer show
+    /// replaced) mustn't put its window on screen.
+    epoch: AtomicU64,
 }
 
 /// A click this soon after its popup closed is the click that closed it.
@@ -396,6 +399,7 @@ fn show(
     let settings = app.state::<SettingsStore>().get();
 
     state.generation.fetch_add(1, Ordering::SeqCst);
+    let epoch = state.epoch.fetch_add(1, Ordering::SeqCst) + 1;
     state.peek.store(peek, Ordering::SeqCst);
     state.hovered.store(false, Ordering::SeqCst);
     *state.open.lock().expect("panel lock") = Some(content.clone());
@@ -422,6 +426,11 @@ fn show(
     // Shown (and later hidden) straight through Windows, in order: going through Tauri's queue
     // could let an earlier close hide the popup after this show, or the other way round, which
     // left an empty popup on screen.
+    // Closed (or opened again) while this was being placed: leave it to the newer one.
+    let current = || state.epoch.load(Ordering::SeqCst) == epoch;
+    if !current() {
+        return Ok(());
+    }
     #[cfg(windows)]
     {
         let hwnd = window.hwnd()?.0 as isize;
@@ -431,6 +440,10 @@ fn show(
             crate::apps::win::make_activatable(hwnd);
             crate::apps::win::show_on_top(hwnd);
             crate::apps::win::activate(hwnd);
+        }
+        // A close that slipped in between the check and the show: undo the show.
+        if !current() && state.open.lock().expect("panel lock").is_none() {
+            crate::apps::win::hide_quietly(hwnd);
         }
     }
     #[cfg(not(windows))]
@@ -541,6 +554,7 @@ pub fn current(app: &AppHandle) -> Option<PanelContent> {
 pub fn close(app: &AppHandle) -> AppResult<()> {
     let state = app.state::<PanelState>();
     state.generation.fetch_add(1, Ordering::SeqCst);
+    state.epoch.fetch_add(1, Ordering::SeqCst);
     let was_peek = state.peek.swap(false, Ordering::SeqCst);
     let was_open = state.open.lock().expect("panel lock").take();
     if let Some(content) = &was_open {

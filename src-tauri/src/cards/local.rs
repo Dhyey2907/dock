@@ -283,11 +283,14 @@ pub fn recent_files() -> Vec<RecentFile> {
         return Vec::new();
     };
     let dir = PathBuf::from(appdata).join(r"Microsoft\Windows\Recent");
-    newest_in(&dir, 8, |p| {
+    newest_in(&dir, 16, |p| {
         p.extension().is_some_and(|e| e.eq_ignore_ascii_case("lnk"))
     })
     .into_iter()
     .map(|f| file_entry(f, true))
+    // Windows also lists app links it opened (ms-gamingoverlay and the like): not files.
+    .filter(|f| !f.name.starts_with("ms-") && !f.name.contains("---"))
+    .take(8)
     .collect()
 }
 
@@ -302,12 +305,11 @@ pub fn downloads() -> Vec<RecentFile> {
         .collect()
 }
 
-/// The newest screenshots (Pictures\Screenshots), with small pictures.
+/// The newest screenshots (Windows' Screenshots folder, wherever it is), with small pictures.
 pub fn screenshots() -> Vec<RecentFile> {
-    let Some(profile) = std::env::var_os("USERPROFILE") else {
+    let Some(dir) = crate::screenshot::folder() else {
         return Vec::new();
     };
-    let dir = PathBuf::from(profile).join(r"Pictures\Screenshots");
     newest_in(&dir, 3, crate::screenshot::is_picture)
         .into_iter()
         .map(|f| {

@@ -37,11 +37,6 @@ export function ClaudeCard() {
 export function ClaudePlanCard() {
   const claude = useWidgets((s) => s.claude);
   const session = Math.round(claude?.limited ? 100 : (claude?.window?.percent ?? 0));
-  // The week's use against seven of your usual 5-hour limits (an estimate, like the session).
-  const weekly =
-    claude?.usualLimit && claude.usualLimit > 0
-      ? Math.min(100, Math.round((claude.weekTokens / (claude.usualLimit * 7)) * 100))
-      : 0;
   const model = claude?.window?.models[0]?.model.replace(/^claude-/, "") ?? "—";
   return (
     <Card className="card-ai">
@@ -50,11 +45,22 @@ export function ClaudePlanCard() {
       </IconTile>
       <span className="card-col card-grow">
         <LimitRow label="Session" percent={session} />
-        <LimitRow label="Weekly" percent={weekly} />
+        <span className="card-limit">
+          <span className="card-label">Week</span>
+          <span className="card-faint">{tokens(claude?.weekTokens ?? 0)} tokens</span>
+        </span>
         <span className="card-faint card-small">{model}</span>
       </span>
     </Card>
   );
+}
+
+/** "4.2M", "860K". */
+function tokens(n: number) {
+  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`;
+  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`;
+  if (n >= 1e3) return `${Math.round(n / 1e3)}K`;
+  return String(n);
 }
 
 function LimitRow({ label, percent, note }: { label: string; percent: number; note?: string }) {
