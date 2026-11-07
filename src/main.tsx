@@ -28,6 +28,7 @@ import "./command/command.css";
 import "./settings/features.css";
 import "./dock/screenshot.css";
 import "./widgets/accounts/accounts.css";
+import "./widgets/cards/cards.css";
 import "./design/windows.css";
 
 // No browser menu (Back, Refresh, Save as, Print) anywhere: Dock's own menus open instead,

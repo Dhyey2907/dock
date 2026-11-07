@@ -328,7 +328,9 @@ pub fn claude_reset_bubble(resets_at: DateTime<Utc>, now: DateTime<Utc>) -> Bubb
 
 // ---------- Sunset dark mode ----------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, ts_rs::TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
 pub enum ThemeChoice {
     Light,
     Dark,

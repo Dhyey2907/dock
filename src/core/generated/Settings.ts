@@ -3,6 +3,7 @@ import type { AccountSettings } from "./AccountSettings";
 import type { AppsSettings } from "./AppsSettings";
 import type { Automations } from "./Automations";
 import type { CalendarSource } from "./CalendarSource";
+import type { CardSettings } from "./CardSettings";
 import type { DockLook } from "./DockLook";
 import type { DockSize } from "./DockSize";
 import type { DockStyle } from "./DockStyle";
@@ -89,4 +90,8 @@ accounts: AccountSettings,
 /**
  * A new screenshot shows on the dock for two minutes, ready to drag.
  */
-latestScreenshot: boolean, };
+latestScreenshot: boolean, 
+/**
+ * Choices for the card widgets (cities, tickers, usernames).
+ */
+cards: CardSettings, };

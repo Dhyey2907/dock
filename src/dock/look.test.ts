@@ -18,6 +18,7 @@ const look: Settings["look"] = {
   search: "box",
   taskView: true,
   nativeFlyouts: true,
+  widgetStyle: "simple",
 };
 
 describe("dock look", () => {

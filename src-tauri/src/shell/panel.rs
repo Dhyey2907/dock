@@ -118,6 +118,8 @@ pub fn panel_size(kind: WidgetKind) -> (f64, f64) {
         WidgetKind::ClaudeSessions => (360.0, 380.0),
         // These open Windows' own flyouts; the size is only a fallback.
         WidgetKind::HiddenIcons | WidgetKind::Language | WidgetKind::Notifications => (280.0, 200.0),
+        // Card widgets: a details popup, or their choices.
+        _ => (340.0, 360.0),
     }
 }
 

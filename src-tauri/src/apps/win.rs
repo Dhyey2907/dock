@@ -686,6 +686,30 @@ pub fn frame_rect(hwnd: isize) -> Option<crate::shell::placement::Rect> {
     Some(to_rect(r))
 }
 
+/// The name of the app that owns `hwnd` ("Google Chrome"), the way the dock names it.
+pub fn app_name_of_window(hwnd: isize) -> Option<String> {
+    let handle = HWND(hwnd as *mut c_void);
+    let mut pid = 0;
+    // SAFETY: a read-only query on a window handle.
+    unsafe { GetWindowThreadProcessId(handle, Some(&mut pid)) };
+    if pid == 0 {
+        return None;
+    }
+    let exe = process_exe(pid);
+    let app_id = window_app_id(handle, pid).or_else(|| {
+        exe.as_deref()
+            .and_then(super::implicit_app_id)
+            .map(str::to_string)
+    });
+    Some(match (&app_id, &exe) {
+        (Some(id), _) => cached_name(id, || {
+            app_id_name(id).unwrap_or_else(|| exe.as_deref().map(program_name).unwrap_or_else(|| id.clone()))
+        }),
+        (None, Some(exe)) => cached_name(exe, || program_name(exe)),
+        (None, None) => return None,
+    })
+}
+
 /// A window's size for its live picture: as it is on screen, or for a minimized window the size
 /// it restores to (Windows still draws minimized windows' pictures, at that size).
 pub fn picture_size(hwnd: isize) -> Option<(u32, u32)> {

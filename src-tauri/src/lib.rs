@@ -3,6 +3,7 @@ mod actions;
 mod apps;
 mod automations;
 mod calendar;
+mod cards;
 mod claude;
 mod command;
 mod commands;
@@ -77,6 +78,7 @@ pub fn run() {
             app.manage(system::service::SystemState::default());
             app.manage(command::CommandState::default());
             app.manage(workspaces::WorkspaceStore::open(&handle.path().app_data_dir()?));
+            cards::screentime::start(&handle.path().app_data_dir()?);
             app.manage(screenshot::ScreenshotState::default());
             app.manage(accounts::github::GithubService::default());
             commands::sync_autostart(handle, launch_at_startup);
@@ -192,6 +194,26 @@ pub fn run() {
             commands::system_clock,
             commands::tooltip_show,
             commands::shell_task_view,
+            commands::screen_time,
+            commands::codex_usage,
+            commands::net_speed,
+            commands::cpu_temperature,
+            commands::drives,
+            commands::recycle_bin,
+            commands::recycle_bin_empty,
+            commands::recent_files,
+            commands::downloads_list,
+            commands::screenshots_list,
+            commands::open_listed_file,
+            commands::stock_quotes,
+            commands::coin_price,
+            commands::currency_rate,
+            commands::github_contributions,
+            commands::leetcode_stats,
+            commands::windows_theme,
+            commands::screen_capture,
+            commands::web_search,
+            commands::windows_theme_set,
             commands::panel_current,
             commands::panel_close,
             commands::widgets_snapshot,

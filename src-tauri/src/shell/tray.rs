@@ -123,7 +123,7 @@ pub fn press(button: TrayButton) {
         .name("tray-button".into())
         .spawn(move || {
             #[cfg(windows)]
-            if !win::invoke(button) {
+            if !win::invoke(button) && !win::invoke_revealed(button) {
                 match button.shortcut() {
                     Some(key) => win::win_shortcut(key),
                     None => tracing::warn!(?button, "taskbar button not found"),
@@ -289,11 +289,40 @@ mod win {
     /// while the taskbar is shown, just before hiding it; waits as long as UI Automation takes
     /// (well under a second).
     pub fn remember() {
-        if let Some(Ok(buttons)) = in_mta(find_buttons) {
-            if !buttons.is_empty() {
-                *REMEMBERED.lock().unwrap_or_else(|e| e.into_inner()) = buttons;
-            }
+        if let Some(Ok(found)) = in_mta(find_buttons) {
+            let mut remembered = REMEMBERED.lock().unwrap_or_else(|e| e.into_inner());
+            // A taskbar that's still starting (Explorer restarted) may not show every button
+            // yet: keep the ones it didn't list from before.
+            let mut kept: Vec<Remembered> = remembered
+                .drain(..)
+                .filter(|old| !found.iter().any(|new| new.0 == old.0))
+                .collect();
+            let mut buttons = found;
+            buttons.append(&mut kept);
+            *remembered = buttons;
         }
+    }
+
+    /// The last resort, when no remembered button works (Explorer restarted while the taskbar
+    /// was hidden): show the taskbar for a moment, press the button on it, hide it again.
+    pub fn invoke_revealed(button: TrayButton) -> bool {
+        crate::shell::taskbar::with_taskbar_shown(|| {
+            // The taskbar lists its buttons a moment after it shows.
+            for _ in 0..15 {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                let pressed = in_mta(move || {
+                    let matches = |name: &str| button.names().iter().any(|prefix| name.starts_with(prefix));
+                    find_buttons()
+                        .ok()
+                        .and_then(|buttons| buttons.into_iter().find(|b| matches(&b.0)))
+                        .is_some_and(|b| press_element(&b.1))
+                });
+                if pressed == Some(true) {
+                    return true;
+                }
+            }
+            false
+        })
     }
 
     fn press_element(element: &IUIAutomationElement) -> bool {

@@ -24,6 +24,7 @@ const defaults: Settings = {
     search: "box",
     taskView: true,
     nativeFlyouts: true,
+    widgetStyle: "simple",
   },
   autoHide: false,
   taskbarMode: "autoHide",
@@ -54,6 +55,16 @@ const defaults: Settings = {
   hotkeys: { commandBar: "Ctrl+Space", quickCapture: "" },
   accounts: { spotifyClientId: "", googleClientId: "", notionDatabaseId: "", githubRepos: [] },
   latestScreenshot: true,
+  cards: {
+    worldClocks: [],
+    stocks: [],
+    metric: "bitcoin",
+    currencyFrom: "USD",
+    currencyTo: "INR",
+    githubUser: "",
+    leetcodeUser: "",
+    timerMinutes: 10,
+  },
 };
 
 const settingsSet = vi.fn(async (settings: Settings) => settings);

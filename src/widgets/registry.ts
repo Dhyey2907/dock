@@ -14,6 +14,7 @@ import {
   SpotifyTile,
 } from "./accounts/AccountWidgets";
 import type { TrayButton } from "../core/generated/TrayButton";
+import { CARD_OF, CARD_WIDGETS, type CardCategory, type CardWidget } from "./cards/cardRegistry";
 import { CalendarPanel, CalendarTile } from "./CalendarWidget";
 import { HiddenIconsTile, LanguageTile, NoPanel, NotificationsTile } from "./TrayWidgets";
 import { ClaudePanel, ClaudeTile } from "./ClaudeWidget";
@@ -40,16 +41,32 @@ import { TimeTrackerPanel, TimeTrackerTile } from "./productivity/TimeTrackerWid
 import { TodosPanel, TodosTile } from "./productivity/TodosWidget";
 
 /** Where a widget sits in the gallery. */
-export type WidgetCategory = "productivity" | "system" | "info" | "media" | "accounts";
+export type WidgetCategory = "productivity" | "system" | "info" | "media" | "accounts" | CardCategory;
 
 /** Gallery sections, top to bottom. */
-export const CATEGORY_ORDER: WidgetCategory[] = ["productivity", "system", "info", "media", "accounts"];
+export const CATEGORY_ORDER: WidgetCategory[] = [
+  "ai",
+  "productivity",
+  "system",
+  "info",
+  "media",
+  "weather",
+  "clocks",
+  "online",
+  "files",
+  "accounts",
+];
 
 export const CATEGORY_LABELS: Record<WidgetCategory, string> = {
+  ai: "AI",
   productivity: "Productivity",
   system: "System",
   info: "Information",
-  media: "Media",
+  media: "Media & Audio",
+  weather: "Weather",
+  clocks: "Clocks",
+  online: "Stocks & Online",
+  files: "Apps & Files",
   accounts: "Accounts",
 };
 import {
@@ -94,6 +111,12 @@ export interface WidgetDefinition {
   category?: WidgetCategory;
   Tile: ComponentType;
   Panel: ComponentType;
+  /** Its Lumabar-style card, shown when the widget style is Cards (or always, for cardOnly). */
+  Card?: ComponentType;
+  /** Only comes as a card. */
+  cardOnly?: boolean;
+  /** Has no popup: clicking it does nothing (its card has its own controls). */
+  noPanel?: boolean;
 }
 
 /** The widgets this version can show. Kinds not listed here are skipped on the dock. */
@@ -394,3 +417,21 @@ export const WIDGETS: Partial<Record<WidgetKind, WidgetDefinition>> = {
     category: "accounts",
   },
 };
+
+// The card looks of the widgets above, and the widgets that only come as cards.
+for (const [kind, Card] of Object.entries(CARD_OF) as [WidgetKind, ComponentType][]) {
+  const def = WIDGETS[kind];
+  if (def) def.Card = Card;
+}
+for (const [kind, card] of Object.entries(CARD_WIDGETS) as [WidgetKind, CardWidget][]) {
+  WIDGETS[kind] = {
+    label: card.label,
+    description: card.description,
+    category: card.category,
+    Tile: card.Card,
+    Card: card.Card,
+    Panel: card.Panel ?? NoPanel,
+    cardOnly: true,
+    noPanel: !card.Panel,
+  };
+}

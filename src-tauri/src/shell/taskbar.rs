@@ -85,6 +85,25 @@ static LOCK: Mutex<()> = Mutex::new(());
 /// Whether the dock is hiding the taskbar right now (between `apply_system` and
 /// `restore_system`). Re-hiding only ever happens while this is set, so it can't undo a restore.
 static ACTIVE: AtomicBool = AtomicBool::new(false);
+/// The dock is showing the hidden taskbar for a moment on purpose (to press one of its buttons);
+/// the re-hide hook leaves it alone meanwhile.
+static REVEALING: AtomicBool = AtomicBool::new(false);
+
+/// Run `work` with the Windows taskbar shown, if the dock is hiding it, then hide it again.
+/// For pressing one of its buttons when no remembered one works; the taskbar shows briefly.
+pub fn with_taskbar_shown<T>(work: impl FnOnce() -> T) -> T {
+    if !ACTIVE.load(Ordering::SeqCst) {
+        return work();
+    }
+    REVEALING.store(true, Ordering::SeqCst);
+    #[cfg(windows)]
+    win::System.set_visible(true);
+    let result = work();
+    #[cfg(windows)]
+    win::System.set_visible(false);
+    REVEALING.store(false, Ordering::SeqCst);
+    result
+}
 
 pub fn init(data_dir: &Path) {
     let _ = FILE.set(data_dir.join(FILE_NAME));
@@ -117,6 +136,9 @@ pub fn apply_system(mode: TaskbarMode) {
 /// hide it once more, unless the dock has since put it back for good.
 pub fn rehide_system(mode: TaskbarMode) {
     if mode != TaskbarMode::Hidden {
+        return;
+    }
+    if REVEALING.load(Ordering::SeqCst) {
         return;
     }
     let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());

@@ -126,6 +126,78 @@ pub enum PopupStyle {
     Compact,
 }
 
+/// How widgets are drawn on the dock: compact text and icons, or Lumabar-style cards.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum WidgetStyle {
+    #[default]
+    Simple,
+    /// Rounded cards with rings, bars and charts, as tall as the dock allows.
+    Cards,
+}
+
+/// Choices for the card widgets that show things of your choosing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase", default)]
+#[ts(export)]
+pub struct CardSettings {
+    /// Time zones for the world clocks ("America/New_York"), up to three.
+    pub world_clocks: Vec<String>,
+    /// Stock tickers ("AAPL"), up to three; the first is the single-stock cards'.
+    pub stocks: Vec<String>,
+    /// The Metric card's coin, by CoinGecko id ("bitcoin").
+    pub metric: String,
+    pub currency_from: String,
+    pub currency_to: String,
+    pub github_user: String,
+    pub leetcode_user: String,
+    /// The Timer card's countdown, in minutes.
+    pub timer_minutes: u32,
+}
+
+impl Default for CardSettings {
+    fn default() -> Self {
+        Self {
+            world_clocks: vec![
+                "America/New_York".into(),
+                "Europe/London".into(),
+                "Asia/Tokyo".into(),
+            ],
+            stocks: vec!["AAPL".into(), "NVDA".into(), "MSFT".into()],
+            metric: "bitcoin".into(),
+            currency_from: "USD".into(),
+            currency_to: "INR".into(),
+            github_user: String::new(),
+            leetcode_user: String::new(),
+            timer_minutes: 10,
+        }
+    }
+}
+
+impl CardSettings {
+    fn tidied(mut self) -> Self {
+        let clean = |list: Vec<String>, upper: bool| -> Vec<String> {
+            list.into_iter()
+                .map(|t| t.trim().chars().take(40).collect::<String>())
+                .map(|t| if upper { t.to_uppercase() } else { t })
+                .filter(|t| !t.is_empty())
+                .take(3)
+                .collect()
+        };
+        self.world_clocks = clean(self.world_clocks, false);
+        self.stocks = clean(self.stocks, true);
+        let short = |t: &str, n: usize| t.trim().chars().take(n).collect::<String>();
+        self.metric = short(&self.metric, 40).to_lowercase();
+        self.currency_from = short(&self.currency_from, 3).to_uppercase();
+        self.currency_to = short(&self.currency_to, 3).to_uppercase();
+        self.github_user = short(&self.github_user, 39);
+        self.leetcode_user = short(&self.leetcode_user, 40);
+        self.timer_minutes = self.timer_minutes.clamp(1, 600);
+        self
+    }
+}
+
 /// The search button: an icon, a box like Windows 11's "Search" box, or none.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
@@ -171,6 +243,7 @@ pub struct DockLook {
     /// The clock, Status and tray buttons open Windows' own flyouts (calendar, Quick Settings)
     /// rather than the dock's popups.
     pub native_flyouts: bool,
+    pub widget_style: WidgetStyle,
 }
 
 impl Default for DockLook {
@@ -190,6 +263,7 @@ impl Default for DockLook {
             search: SearchStyle::default(),
             task_view: true,
             native_flyouts: true,
+            widget_style: WidgetStyle::default(),
         }
     }
 }
@@ -299,6 +373,114 @@ pub enum WidgetKind {
     Language,
     /// The notification bell: Windows' notification centre.
     Notifications,
+    /// Claude's 5-hour and weekly use, and your most-used model.
+    ClaudePlan,
+    /// ChatGPT/Codex plan limits, read from Codex's own files on this PC.
+    CodexUsage,
+    /// Your day on one line: time on the PC by hour, focus rounds, meetings, sunrise and sunset.
+    DayTimeline,
+    /// Today's time at the PC, hour by hour, and per app.
+    ScreenTime,
+    /// A countdown that starts in one click.
+    Timer,
+    /// Start, pause and lap from the dock.
+    Stopwatch,
+    /// Convert between two currencies at today's rate.
+    Currency,
+    /// Processor load as a ring.
+    Cpu,
+    /// Memory in use as a ring.
+    Ram,
+    /// Processor temperature as a gauge, with processor and memory load.
+    Temperature,
+    /// Download and upload speed with a live line.
+    NetSpeed,
+    /// Charge as a filling gauge.
+    Battery,
+    /// Wi-Fi, Bluetooth and airplane mode.
+    QuickToggles,
+    /// Switch Windows between light and dark.
+    ThemeToggle,
+    /// How much of today is behind you.
+    DayProgress,
+    /// How much of the month is behind you.
+    MonthProgress,
+    /// The year as a grid of dots, filling up.
+    YearProgress,
+    /// Volume for your speakers or headphones.
+    AudioOutput,
+    /// Title, artist and play/pause in a smaller card.
+    NowPlayingCompact,
+    /// One round play button with the track's progress.
+    NowPlayingMini,
+    /// The track with a progress bar and skip.
+    NowPlayingBar,
+    /// A live price, such as BTC/USD.
+    Metric,
+    /// Your GitHub contribution grid and streak.
+    GithubActivity,
+    /// LeetCode problems solved.
+    Leetcode,
+    /// The files you opened last.
+    RecentFiles,
+    /// What the Recycle Bin holds, and a click to empty it.
+    RecycleBin,
+    /// Search the web, or open a folder by its path.
+    WebSearch,
+    /// Free space on your drive.
+    Storage,
+    /// Your newest screenshots.
+    Screenshots,
+    /// The newest file in Downloads.
+    Downloads,
+    /// Capture the screen, a window or an area.
+    ScreenCapture,
+    /// Wind, rain and the day's range.
+    WeatherDetails,
+    /// The next four days.
+    WeatherForecast,
+    /// Today next to the next three days.
+    TodayForecast,
+    /// The conditions in words, with your town.
+    WeatherStatus,
+    /// The next six hours.
+    Hourly,
+    /// Where the sun is between sunrise and sunset.
+    SunriseSunset,
+    /// One ticker's price and daily change.
+    Stock,
+    /// One ticker with today's line.
+    StockChart,
+    /// Three tickers at a glance.
+    StockWatchlist,
+    /// Large time with seconds and the date.
+    BigClock,
+    /// Split-flap digits that turn every minute.
+    FlipClock,
+    /// Three small analog faces for other cities.
+    WorldClocks,
+    /// A white analog face with a sweeping second hand.
+    AnalogClassic,
+    /// The classic face, in black.
+    AnalogDark,
+    /// This week as a strip of days, with today's temperature.
+    SevenDays,
+    /// Three cities in a list, with their hour difference.
+    WorldClockList,
+    /// One more city in big digits.
+    WorldTime,
+    /// Weekday, date, time and weather in one card.
+    Today,
+    /// The full date, set large.
+    Date,
+    /// Today's date as a calendar page.
+    DayNumber,
+    /// Hands and hour ticks, nothing else.
+    AnalogMinimal,
+    /// The time as a seven-segment display.
+    SegmentClock,
+    /// Time, date and temperature as three colour blocks.
+    ClockWeather,
     /// A widget from a newer version of the dock; dropped on load.
     #[serde(other)]
     #[ts(skip)]
@@ -307,7 +489,7 @@ pub enum WidgetKind {
 
 impl WidgetKind {
     /// Every widget, in the default order (left to right).
-    pub const ALL: [WidgetKind; 41] = [
+    pub const ALL: [WidgetKind; 95] = [
         WidgetKind::Music,
         WidgetKind::Focus,
         WidgetKind::Claude,
@@ -349,6 +531,60 @@ impl WidgetKind {
         WidgetKind::Notion,
         WidgetKind::GoogleTasks,
         WidgetKind::GithubActions,
+        WidgetKind::ClaudePlan,
+        WidgetKind::CodexUsage,
+        WidgetKind::DayTimeline,
+        WidgetKind::ScreenTime,
+        WidgetKind::Timer,
+        WidgetKind::Stopwatch,
+        WidgetKind::Currency,
+        WidgetKind::Cpu,
+        WidgetKind::Ram,
+        WidgetKind::Temperature,
+        WidgetKind::NetSpeed,
+        WidgetKind::Battery,
+        WidgetKind::QuickToggles,
+        WidgetKind::ThemeToggle,
+        WidgetKind::DayProgress,
+        WidgetKind::MonthProgress,
+        WidgetKind::YearProgress,
+        WidgetKind::AudioOutput,
+        WidgetKind::NowPlayingCompact,
+        WidgetKind::NowPlayingMini,
+        WidgetKind::NowPlayingBar,
+        WidgetKind::Metric,
+        WidgetKind::GithubActivity,
+        WidgetKind::Leetcode,
+        WidgetKind::RecentFiles,
+        WidgetKind::RecycleBin,
+        WidgetKind::WebSearch,
+        WidgetKind::Storage,
+        WidgetKind::Screenshots,
+        WidgetKind::Downloads,
+        WidgetKind::ScreenCapture,
+        WidgetKind::WeatherDetails,
+        WidgetKind::WeatherForecast,
+        WidgetKind::TodayForecast,
+        WidgetKind::WeatherStatus,
+        WidgetKind::Hourly,
+        WidgetKind::SunriseSunset,
+        WidgetKind::Stock,
+        WidgetKind::StockChart,
+        WidgetKind::StockWatchlist,
+        WidgetKind::BigClock,
+        WidgetKind::FlipClock,
+        WidgetKind::WorldClocks,
+        WidgetKind::AnalogClassic,
+        WidgetKind::AnalogDark,
+        WidgetKind::SevenDays,
+        WidgetKind::WorldClockList,
+        WidgetKind::WorldTime,
+        WidgetKind::Today,
+        WidgetKind::Date,
+        WidgetKind::DayNumber,
+        WidgetKind::AnalogMinimal,
+        WidgetKind::SegmentClock,
+        WidgetKind::ClockWeather,
     ];
 }
 
@@ -562,6 +798,8 @@ pub struct Settings {
     pub accounts: AccountSettings,
     /// A new screenshot shows on the dock for two minutes, ready to drag.
     pub latest_screenshot: bool,
+    /// Choices for the card widgets (cities, tickers, usernames).
+    pub cards: CardSettings,
 }
 
 impl Default for Settings {
@@ -594,6 +832,7 @@ impl Default for Settings {
             hotkeys: Hotkeys::default(),
             accounts: AccountSettings::default(),
             latest_screenshot: true,
+            cards: CardSettings::default(),
         }
     }
 }
@@ -642,6 +881,7 @@ impl Settings {
             }
         }
         self.look = self.look.clamped();
+        self.cards = self.cards.tidied();
         self.weather_place = self.weather_place.trim().chars().take(80).collect();
         self.wallpaper_folder = self.wallpaper_folder.trim().to_string();
         self.wallpaper_minutes = self.wallpaper_minutes.min(MAX_WALLPAPER_MINUTES);

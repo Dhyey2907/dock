@@ -32,6 +32,17 @@ pub struct DayForecast {
     pub icon: String,
 }
 
+/// One hour ahead.
+#[derive(Debug, Clone, PartialEq, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct HourForecast {
+    /// "2026-11-05T14:00"
+    pub time: String,
+    pub temperature: i32,
+    pub icon: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -61,6 +72,16 @@ pub struct Weather {
     pub sunset: Option<String>,
     /// Today first.
     pub days: Vec<DayForecast>,
+    /// The next six hours, from the coming one.
+    pub hours: Vec<HourForecast>,
+    /// Wind now, km/h.
+    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wind_kmh: Option<i32>,
+    /// Today's highest chance of rain, percent.
+    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rain_chance: Option<i32>,
     pub unit: TemperatureUnit,
 }
 
@@ -75,6 +96,9 @@ impl Weather {
             sunrise: None,
             sunset: None,
             days: Vec::new(),
+            hours: Vec::new(),
+            wind_kmh: None,
+            rain_chance: None,
             unit,
         }
     }
@@ -139,6 +163,42 @@ pub fn parse_forecast(json: &Value, unit: TemperatureUnit) -> Option<Weather> {
         })
         .collect();
     let first = |name: &str| column(name).first().and_then(Value::as_str).map(str::to_string);
+    // The next six hours from now ("now" is the current reading's hour).
+    let hourly = json.get("hourly");
+    let hour_column = |name: &str| -> Vec<Value> {
+        hourly
+            .and_then(|h| h.get(name))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
+    let now = current.get("time").and_then(Value::as_str).unwrap_or("");
+    let (times, temps, hour_codes, day_flags) = (
+        hour_column("time"),
+        hour_column("temperature_2m"),
+        hour_column("weather_code"),
+        hour_column("is_day"),
+    );
+    let hours = (0..times.len())
+        .filter(|&i| times[i].as_str().is_some_and(|t| t > now))
+        .take(6)
+        .filter_map(|i| {
+            let is_day = day_flags.get(i).and_then(Value::as_i64).unwrap_or(1) == 1;
+            Some(HourForecast {
+                time: times[i].as_str()?.to_string(),
+                temperature: temps.get(i)?.as_f64()?.round() as i32,
+                icon: describe(hour_codes.get(i)?.as_i64()?, is_day).1.to_string(),
+            })
+        })
+        .collect();
+    let wind_kmh = current
+        .get("wind_speed_10m")
+        .and_then(Value::as_f64)
+        .map(|w| w.round() as i32);
+    let rain_chance = column("precipitation_probability_max")
+        .first()
+        .and_then(Value::as_f64)
+        .map(|p| p.round() as i32);
     Some(Weather {
         status: WeatherStatus::Ready,
         temperature: Some(temp.round() as i32),
@@ -148,6 +208,9 @@ pub fn parse_forecast(json: &Value, unit: TemperatureUnit) -> Option<Weather> {
         sunrise: first("sunrise"),
         sunset: first("sunset"),
         days,
+        hours,
+        wind_kmh,
+        rain_chance,
         unit,
     })
 }
@@ -266,10 +329,12 @@ pub async fn forecast(http: &reqwest::Client, lat: f64, lon: f64, unit: Temperat
         &[
             ("latitude", lat.to_string()),
             ("longitude", lon.to_string()),
-            ("current", "temperature_2m,weather_code,is_day".into()),
+            ("current", "temperature_2m,weather_code,is_day,wind_speed_10m".into()),
+            ("hourly", "temperature_2m,weather_code,is_day".into()),
             (
                 "daily",
-                "weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset".into(),
+                "weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max"
+                    .into(),
             ),
             ("forecast_days", "6".into()),
             ("temperature_unit", unit_name.into()),

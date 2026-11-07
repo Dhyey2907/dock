@@ -12,6 +12,7 @@ import { ipc } from "../core/ipc";
 import type { DockLook } from "../core/generated/DockLook";
 import type { PopupStyle } from "../core/generated/PopupStyle";
 import type { SearchStyle } from "../core/generated/SearchStyle";
+import type { WidgetStyle } from "../core/generated/WidgetStyle";
 import { Choice, Row, ShortcutField, Slider, StyleCards, Toggle } from "./controls";
 
 type Save = (patch: Partial<Settings>) => void;
@@ -198,6 +199,21 @@ function LookRows({ settings, save }: { settings: Settings; save: Save }) {
       </Row>
       <Row label="Magnify on hover" id="magnify" hint="App icons grow as the mouse passes over them.">
         <Toggle label="Magnify on hover" checked={look.magnify} onChange={(magnify) => set({ magnify })} />
+      </Row>
+      <Row
+        label="Widget style"
+        id="widgetStyle"
+        hint="Cards show rings, charts and controls right on the dock, like Lumabar. They need room: pick the Large size or a bigger size slider."
+      >
+        <Choice<WidgetStyle>
+          label="Widget style"
+          value={look.widgetStyle}
+          options={[
+            ["simple", "Simple"],
+            ["cards", "Cards"],
+          ]}
+          onChange={(widgetStyle) => set({ widgetStyle })}
+        />
       </Row>
       <Row
         label="Apps in the middle"

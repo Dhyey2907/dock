@@ -448,6 +448,168 @@ pub fn panel_toggle(app: AppHandle, kind: crate::settings::WidgetKind, anchor_x:
     shell::panel::toggle(&app, kind, anchor_x)
 }
 
+// ---------- Card widgets ----------
+
+/// Today's screen time, per hour and per app.
+#[tauri::command]
+pub fn screen_time() -> crate::cards::screentime::ScreenTime {
+    crate::cards::screentime::today()
+}
+
+/// Your ChatGPT plan's Codex limits, from Codex's own files; `None` when it isn't used here.
+#[tauri::command(async)]
+pub fn codex_usage() -> Option<crate::cards::local::CodexUsage> {
+    crate::cards::local::codex_usage()
+}
+
+/// Network speed since the last call.
+#[tauri::command]
+pub fn net_speed() -> crate::cards::local::NetSpeed {
+    crate::cards::local::net_speed()
+}
+
+/// The PC's temperature in °C, when Windows reports one.
+#[tauri::command(async)]
+pub fn cpu_temperature() -> Option<f64> {
+    crate::cards::local::temperature()
+}
+
+#[tauri::command(async)]
+pub fn drives() -> Vec<crate::cards::local::Drive> {
+    crate::cards::local::drives()
+}
+
+#[tauri::command(async)]
+pub fn recycle_bin() -> crate::cards::local::RecycleBin {
+    crate::cards::local::recycle_bin()
+}
+
+/// Empty the Recycle Bin for good (the card asked first).
+#[tauri::command(async)]
+pub fn recycle_bin_empty() -> AppResult<()> {
+    crate::cards::local::empty_recycle_bin()
+}
+
+#[tauri::command(async)]
+pub fn recent_files() -> Vec<crate::cards::local::RecentFile> {
+    crate::cards::local::recent_files()
+}
+
+#[tauri::command(async)]
+pub fn downloads_list() -> Vec<crate::cards::local::RecentFile> {
+    crate::cards::local::downloads()
+}
+
+#[tauri::command(async)]
+pub fn screenshots_list() -> Vec<crate::cards::local::RecentFile> {
+    crate::cards::local::screenshots()
+}
+
+/// Open a file one of the cards listed.
+#[tauri::command(async)]
+pub fn open_listed_file(path: String) -> AppResult<()> {
+    crate::cards::local::open_listed(&path)
+}
+
+#[tauri::command]
+pub async fn stock_quotes(app: AppHandle) -> Result<Vec<crate::cards::online::Quote>, AppError> {
+    let symbols = app.state::<crate::settings::SettingsStore>().get().cards.stocks;
+    Ok(crate::cards::online::quotes(&symbols).await)
+}
+
+#[tauri::command]
+pub async fn coin_price(app: AppHandle) -> Result<crate::cards::online::CoinPrice, AppError> {
+    let id = app.state::<crate::settings::SettingsStore>().get().cards.metric;
+    crate::cards::online::coin(&id).await
+}
+
+#[tauri::command]
+pub async fn currency_rate(app: AppHandle) -> Result<crate::cards::online::Rate, AppError> {
+    let cards = app.state::<crate::settings::SettingsStore>().get().cards;
+    crate::cards::online::rate(&cards.currency_from, &cards.currency_to).await
+}
+
+#[tauri::command]
+pub async fn github_contributions(app: AppHandle) -> Result<crate::cards::online::Contributions, AppError> {
+    let user = app
+        .state::<crate::settings::SettingsStore>()
+        .get()
+        .cards
+        .github_user;
+    crate::cards::online::contributions(&user).await
+}
+
+#[tauri::command]
+pub async fn leetcode_stats(app: AppHandle) -> Result<crate::cards::online::LeetcodeStats, AppError> {
+    let user = app
+        .state::<crate::settings::SettingsStore>()
+        .get()
+        .cards
+        .leetcode_user;
+    crate::cards::online::leetcode(&user).await
+}
+
+/// The Search card: a folder path opens in File Explorer; anything else is searched on the web.
+#[tauri::command(async)]
+pub fn web_search(query: String) -> AppResult<()> {
+    let query = query.trim();
+    if query.is_empty() || query.len() > 500 {
+        return Err(AppError::InvalidInput("nothing to search".into()));
+    }
+    let path = std::path::Path::new(query);
+    #[cfg(windows)]
+    if path.is_absolute() && path.is_dir() {
+        crate::apps::win::open(query);
+        return Ok(());
+    }
+    let encoded: String = query
+        .bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
+            b' ' => "+".to_string(),
+            _ => format!("%{b:02X}"),
+        })
+        .collect();
+    #[cfg(windows)]
+    crate::apps::win::open(&format!("https://www.google.com/search?q={encoded}"));
+    #[cfg(not(windows))]
+    let _ = (path, encoded);
+    Ok(())
+}
+
+/// Windows' own screen capture (the Snipping Tool's bar, as Windows + Shift + S opens).
+#[tauri::command(async)]
+pub fn screen_capture() {
+    #[cfg(windows)]
+    crate::apps::win::open("ms-screenclip:");
+}
+
+/// Whether Windows is in dark mode.
+#[tauri::command]
+pub fn windows_theme() -> Option<crate::automations::ThemeChoice> {
+    #[cfg(windows)]
+    {
+        crate::automations::theme::current()
+    }
+    #[cfg(not(windows))]
+    None
+}
+
+/// Switch Windows to light or dark (the Theme Toggle card). Only logged under DOCK_DRY_RUN=1.
+#[tauri::command(async)]
+pub fn windows_theme_set(choice: crate::automations::ThemeChoice) -> AppResult<()> {
+    if std::env::var("DOCK_DRY_RUN").is_ok_and(|v| v == "1") {
+        tracing::info!(?choice, "dry run: would switch the Windows theme");
+        return Ok(());
+    }
+    #[cfg(windows)]
+    {
+        crate::automations::theme::apply(choice)
+    }
+    #[cfg(not(windows))]
+    Ok(())
+}
+
 /// Press one of the Windows taskbar corner's buttons (it opens Windows' own flyout).
 #[tauri::command]
 pub fn tray_press(button: shell::tray::TrayButton) {

@@ -4,6 +4,18 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 import type { DockFolder } from "./generated/DockFolder";
 import type { InputLanguage } from "./generated/InputLanguage";
+import type { CodexUsage } from "./generated/CodexUsage";
+import type { CoinPrice } from "./generated/CoinPrice";
+import type { Contributions } from "./generated/Contributions";
+import type { Drive } from "./generated/Drive";
+import type { LeetcodeStats } from "./generated/LeetcodeStats";
+import type { NetSpeed } from "./generated/NetSpeed";
+import type { Quote } from "./generated/Quote";
+import type { Rate } from "./generated/Rate";
+import type { RecentFile } from "./generated/RecentFile";
+import type { RecycleBin } from "./generated/RecycleBin";
+import type { ScreenTime } from "./generated/ScreenTime";
+import type { ThemeChoice } from "./generated/ThemeChoice";
 import type { SystemClock } from "./generated/SystemClock";
 import type { SystemLook } from "./generated/SystemLook";
 import type { TrayButton } from "./generated/TrayButton";
@@ -151,6 +163,27 @@ export const ipc = {
   panelPin: () => invoke<void>("panel_pin"),
   panelFit: (height: number) => invoke<void>("panel_fit", { height: Math.ceil(height) }),
   trayPress: (button: TrayButton) => invoke<void>("tray_press", { button }),
+  // Card widgets
+  screenTime: () => invoke<ScreenTime>("screen_time"),
+  codexUsage: () => invoke<CodexUsage | null>("codex_usage"),
+  netSpeed: () => invoke<NetSpeed>("net_speed"),
+  cpuTemperature: () => invoke<number | null>("cpu_temperature"),
+  drives: () => invoke<Drive[]>("drives"),
+  recycleBin: () => invoke<RecycleBin>("recycle_bin"),
+  recycleBinEmpty: () => invoke<void>("recycle_bin_empty"),
+  recentFiles: () => invoke<RecentFile[]>("recent_files"),
+  downloadsList: () => invoke<RecentFile[]>("downloads_list"),
+  screenshotsList: () => invoke<RecentFile[]>("screenshots_list"),
+  openListedFile: (path: string) => invoke<void>("open_listed_file", { path }),
+  stockQuotes: () => invoke<Quote[]>("stock_quotes"),
+  coinPrice: () => invoke<CoinPrice>("coin_price"),
+  currencyRate: () => invoke<Rate>("currency_rate"),
+  githubContributions: () => invoke<Contributions>("github_contributions"),
+  leetcodeStats: () => invoke<LeetcodeStats>("leetcode_stats"),
+  screenCapture: () => invoke<void>("screen_capture"),
+  webSearch: (query: string) => invoke<void>("web_search", { query }),
+  windowsTheme: () => invoke<ThemeChoice | null>("windows_theme"),
+  windowsThemeSet: (choice: ThemeChoice) => invoke<void>("windows_theme_set", { choice }),
   inputLanguage: () => invoke<InputLanguage>("input_language"),
   systemLook: () => invoke<SystemLook>("system_look"),
   systemClock: () => invoke<SystemClock>("system_clock"),

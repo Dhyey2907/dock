@@ -120,6 +120,8 @@ export function WidgetBar({ side = "all" }: { side?: WidgetSide }) {
       ipc.trayPress(native).catch((error) => console.error("failed to open Windows' flyout", error));
       return;
     }
+    // A card with no popup: its own controls do the work.
+    if (WIDGETS[kind]?.noPanel) return;
     const anchor = anchorOf(kind);
     if (anchor === null) return;
     // A click on the widget being previewed keeps its popup open.
@@ -129,9 +131,13 @@ export function WidgetBar({ side = "all" }: { side?: WidgetSide }) {
     ipc.panelToggle(kind, anchor).catch((error) => console.error("failed to open the popup", error));
   };
 
+  // Cards for card-only widgets, and for every widget with a card when the style is Cards.
+  const asCard = (def: { Card?: unknown; cardOnly?: boolean }) =>
+    Boolean(def.Card) && (def.cardOnly || settings.look.widgetStyle === "cards");
+
   const hoverPreviews = settings.look.widgetHover && !drag;
   const onEnter = (kind: WidgetKind) => () => {
-    if (!hoverPreviews || WIDGETS[kind]?.windowsOnly) return;
+    if (!hoverPreviews || WIDGETS[kind]?.windowsOnly || WIDGETS[kind]?.noPanel) return;
     window.clearTimeout(peekTimer.current);
     // Another popup (not a preview) is open: leave it.
     if (open !== null && peeking.current === null) return;
@@ -236,7 +242,7 @@ export function WidgetBar({ side = "all" }: { side?: WidgetSide }) {
               if (el) tiles.current.set(entry.kind, el);
               else tiles.current.delete(entry.kind);
             }}
-            className="dock-widget"
+            className={asCard(def) ? "dock-widget dock-card" : "dock-widget"}
             data-kind={entry.kind}
             data-size={entry.size}
             data-open={open === entry.kind}
@@ -258,7 +264,7 @@ export function WidgetBar({ side = "all" }: { side?: WidgetSide }) {
               toggle(entry.kind);
             }}
           >
-            <def.Tile />
+            {asCard(def) && def.Card ? <def.Card /> : <def.Tile />}
           </button>
         );
       })}
