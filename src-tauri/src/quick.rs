@@ -74,11 +74,11 @@ mod win {
         core::{w, BSTR},
         Devices::Radios::{Radio, RadioAccessStatus, RadioKind as WinKind, RadioState},
         Win32::System::{
-            Variant::VARIANT,
             Com::{
                 CoCreateInstance, CoSetProxyBlanket, CLSCTX_INPROC_SERVER, EOAC_NONE, RPC_C_AUTHN_LEVEL_CALL,
                 RPC_C_IMP_LEVEL_IMPERSONATE,
             },
+            Variant::VARIANT,
             Wmi::{
                 IWbemClassObject, IWbemLocator, IWbemServices, WbemLocator, WBEM_FLAG_FORWARD_ONLY,
                 WBEM_FLAG_RETURN_IMMEDIATELY, WBEM_GENERIC_FLAG_TYPE, WBEM_INFINITE,
@@ -131,7 +131,9 @@ mod win {
                 .and_then(|op| op.get())
                 .map_err(platform("could not switch the radio"))?;
             if status != RadioAccessStatus::Allowed {
-                return Err(AppError::Platform("Windows didn't allow switching the radio".into()));
+                return Err(AppError::Platform(
+                    "Windows didn't allow switching the radio".into(),
+                ));
             }
         }
         if found {
@@ -196,7 +198,10 @@ mod win {
 
     pub fn brightness() -> AppResult<u8> {
         let services = connect()?;
-        let screen = first(&services, "SELECT CurrentBrightness FROM WmiMonitorBrightness WHERE Active=TRUE")?;
+        let screen = first(
+            &services,
+            "SELECT CurrentBrightness FROM WmiMonitorBrightness WHERE Active=TRUE",
+        )?;
         let mut value = VARIANT::default();
         // SAFETY: reading one property into a local VARIANT.
         unsafe { screen.Get(w!("CurrentBrightness"), 0, &mut value, None, None) }
@@ -207,7 +212,10 @@ mod win {
 
     pub fn set_brightness(level: u8) -> AppResult<()> {
         let services = connect()?;
-        let screen = first(&services, "SELECT * FROM WmiMonitorBrightnessMethods WHERE Active=TRUE")?;
+        let screen = first(
+            &services,
+            "SELECT * FROM WmiMonitorBrightnessMethods WHERE Active=TRUE",
+        )?;
         // SAFETY: COM calls on objects owned here; every out-parameter is a local of the right type.
         unsafe {
             let mut path = VARIANT::default();
@@ -233,7 +241,9 @@ mod win {
                 .map_err(platform("could not reach brightness"))?;
             let signature: IWbemClassObject =
                 signature.ok_or_else(|| AppError::Platform("could not reach brightness".into()))?;
-            let args = signature.SpawnInstance(0).map_err(platform("could not set brightness"))?;
+            let args = signature
+                .SpawnInstance(0)
+                .map_err(platform("could not set brightness"))?;
             args.Put(w!("Timeout"), 0, &VARIANT::from(1i32), 0)
                 .map_err(platform("could not set brightness"))?;
             args.Put(w!("Brightness"), 0, &VARIANT::from(i32::from(level)), 0)

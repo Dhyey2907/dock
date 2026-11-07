@@ -1,5 +1,7 @@
 import { Flame, Star, Wifi, WifiOff } from "lucide-react";
 
+import { Fluent } from "../core/Fluent";
+import { useWindowsLook } from "../core/system";
 import { ipc } from "../core/ipc";
 import { compactCount, signalWord } from "./systemLogic";
 import { Note } from "./systemShared";
@@ -10,6 +12,8 @@ import { useWidgets } from "./store";
 
 export function WifiTile() {
   const network = useWidgets((s) => s.network);
+  const windowsLook = useWindowsLook();
+  if (windowsLook) return <Fluent glyph={network?.connected ? "wifi" : "offline"} />;
   const Icon = network?.connected ? Wifi : WifiOff;
   return <Icon size={18} strokeWidth={1.9} aria-hidden="true" />;
 }

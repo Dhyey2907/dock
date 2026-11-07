@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { PanelBottom, Search, Settings2 } from "lucide-react";
+import { Columns2, PanelBottom, Search, Settings2 } from "lucide-react";
 
 import { ipc } from "../core/ipc";
 import { useSettings } from "../settings/store";
@@ -15,6 +15,9 @@ import type { Ink } from "./glass/styles";
 import { WidgetBar } from "../widgets/WidgetBar";
 import { useAutoHide } from "./useAutoHide";
 import { fitShrink, lookStyle, roomFor } from "./look";
+import { Fluent } from "../core/Fluent";
+import { useSystemLook, useWatchSystemLook } from "../core/system";
+import { useTooltip } from "./tooltip";
 
 /** Four squares, like the Windows key. */
 function StartMark() {
@@ -25,6 +28,48 @@ function StartMark() {
       <rect x="1" y="9.6" width="7.4" height="7.4" rx="1.4" />
       <rect x="9.6" y="9.6" width="7.4" height="7.4" rx="1.4" />
     </svg>
+  );
+}
+
+/** Windows 11's Start mark: four tiles in the accent blue, lit from the top left. */
+function WindowsStartMark() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
+      <defs>
+        <linearGradient id="start-tile" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#4cc2ff" />
+          <stop offset="1" stopColor="#0078d4" />
+        </linearGradient>
+      </defs>
+      <rect x="1" y="1" width="9.4" height="9.4" rx="1" fill="url(#start-tile)" />
+      <rect x="11.6" y="1" width="9.4" height="9.4" rx="1" fill="url(#start-tile)" />
+      <rect x="1" y="11.6" width="9.4" height="9.4" rx="1" fill="url(#start-tile)" />
+      <rect x="11.6" y="11.6" width="9.4" height="9.4" rx="1" fill="url(#start-tile)" />
+    </svg>
+  );
+}
+
+function report(error: unknown) {
+  console.error(error);
+}
+
+/** A dock button with a Windows-style label on hover. */
+function BarButton({
+  label,
+  className = "dock-icon-button",
+  onClick,
+  children,
+}: {
+  label: string;
+  className?: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  const tooltip = useTooltip(label);
+  return (
+    <button className={className} aria-label={label} onClick={onClick} {...tooltip}>
+      {children}
+    </button>
   );
 }
 
@@ -49,6 +94,8 @@ export function Dock({ main = true }: { main?: boolean }) {
     return () => window.clearTimeout(timer);
   }, []);
   const emptyClicks = useEmptyDockClicks();
+  useWatchSystemLook();
+  const system = useSystemLook((s) => s.look);
   useDragOverRaise();
   useReportButtonRects(apps, contentRef);
 
@@ -70,6 +117,14 @@ export function Dock({ main = true }: { main?: boolean }) {
   if (!settings) return null;
   const split = settings.style === "split";
   const corners = settings.look.corners / 100;
+  const windowsLook = settings.theme === "windows";
+  // Apps in the middle of a full-width bar: widgets split around them, like Windows 11.
+  const centred = settings.style === "full" && settings.look.centerApps;
+  const look = settings.look;
+  const style = {
+    ...lookStyle(settings, settings.autoShrink && settings.style !== "full" ? shrink : 1),
+    ...(windowsLook && system ? { "--system-accent": system.accent } : {}),
+  } as CSSProperties;
   return (
     <div
       className="dock"
@@ -83,9 +138,9 @@ export function Dock({ main = true }: { main?: boolean }) {
       data-room={roomFor(settings)}
       data-magnify={settings.look.magnify}
       data-startup={starting && settings.look.startupAnimation}
-      style={
-        lookStyle(settings, settings.autoShrink && settings.style !== "full" ? shrink : 1) as CSSProperties
-      }
+      data-center={look.centerApps}
+      data-system-light={windowsLook && (system?.light ?? false)}
+      style={style}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
@@ -97,25 +152,41 @@ export function Dock({ main = true }: { main?: boolean }) {
         {!split && (
           <Glass theme={settings.theme} corners={settings.style === "pill" ? corners : 0} onInk={setInk} />
         )}
-        <div className="dock-group" data-tauri-drag-region>
+        {main && centred && (
+          <div className="dock-group dock-group-left" data-tauri-drag-region>
+            <WidgetBar side="left" />
+          </div>
+        )}
+        <div className="dock-group dock-group-apps" data-tauri-drag-region>
           {split && <Glass theme={settings.theme} corners={corners} onInk={setInk} />}
-          <button
+          <BarButton
+            label="Start"
             className="dock-icon-button dock-start"
-            aria-label="Start"
-            title="Start"
-            onClick={() => ipc.shellStart().catch((error) => console.error(error))}
+            onClick={() => ipc.shellStart().catch(report)}
           >
-            <StartMark />
-          </button>
-          <button
-            className="dock-icon-button"
-            aria-label="Search"
-            title="Search"
-            onClick={() => ipc.shellSearch().catch((error) => console.error(error))}
-          >
-            <Search size={18} strokeWidth={2} />
-          </button>
-          <div className="dock-divider" data-tauri-drag-region />
+            {windowsLook ? <WindowsStartMark /> : <StartMark />}
+          </BarButton>
+          {look.search === "box" && (
+            <BarButton
+              label="Search"
+              className="dock-search-box"
+              onClick={() => ipc.shellSearch().catch(report)}
+            >
+              {windowsLook ? <Fluent glyph="search" size={15} /> : <Search size={16} strokeWidth={2} />}
+              <span>Search</span>
+            </BarButton>
+          )}
+          {look.search === "icon" && (
+            <BarButton label="Search" onClick={() => ipc.shellSearch().catch(report)}>
+              {windowsLook ? <Fluent glyph="search" size={18} /> : <Search size={18} strokeWidth={2} />}
+            </BarButton>
+          )}
+          {look.taskView && (
+            <BarButton label="Task View" onClick={() => ipc.taskView().catch(report)}>
+              {windowsLook ? <Fluent glyph="taskView" size={18} /> : <Columns2 size={18} strokeWidth={1.8} />}
+            </BarButton>
+          )}
+          {!windowsLook && <div className="dock-divider" data-tauri-drag-region />}
           <div className="dock-apps" data-tauri-drag-region>
             {rowItems(apps, settings.apps.folders).map((item) =>
               item.type === "app" ? (
@@ -127,27 +198,25 @@ export function Dock({ main = true }: { main?: boolean }) {
           </div>
         </div>
         <div className="dock-spacer" data-tauri-drag-region />
-        <div className="dock-group" data-tauri-drag-region>
+        <div className="dock-group dock-group-tray" data-tauri-drag-region>
           {split && <Glass theme={settings.theme} corners={corners} onInk={setInk} />}
           {main && <ScreenshotThumb />}
-          {main && <WidgetBar />}
-          <button
-            className="dock-icon-button"
-            aria-label="Switch to the Windows taskbar"
-            title={`Switch to the Windows taskbar
-Bring Dock back with the tray icon${settings?.toggleShortcut ? ` or ${settings.toggleShortcut}` : ""}`}
-            onClick={() => ipc.switchToWindowsTaskbar().catch((error) => console.error(error))}
-          >
-            <PanelBottom size={18} strokeWidth={1.8} />
-          </button>
-          <button
-            className="dock-icon-button"
-            aria-label="Settings"
-            title="Settings"
-            onClick={() => ipc.openSettings().catch((error) => console.error(error))}
-          >
-            <Settings2 size={18} strokeWidth={1.8} />
-          </button>
+          {main && <WidgetBar side={centred ? "right" : "all"} />}
+          {/* The Windows look keeps the bar like the taskbar: these two are in the dock's
+              right-click menu instead. */}
+          {!windowsLook && (
+            <BarButton
+              label={`Switch to the Windows taskbar (bring Dock back with the tray icon${settings.toggleShortcut ? ` or ${settings.toggleShortcut}` : ""})`}
+              onClick={() => ipc.switchToWindowsTaskbar().catch(report)}
+            >
+              <PanelBottom size={18} strokeWidth={1.8} />
+            </BarButton>
+          )}
+          {!windowsLook && (
+            <BarButton label="Settings" onClick={() => ipc.openSettings().catch(report)}>
+              <Settings2 size={18} strokeWidth={1.8} />
+            </BarButton>
+          )}
           <ShowDesktopButton />
         </div>
       </div>

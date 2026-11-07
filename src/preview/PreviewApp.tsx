@@ -6,6 +6,19 @@ import type { SwitchItem } from "../core/generated/SwitchItem";
 import { events, ipc } from "../core/ipc";
 import { useIcon } from "../core/useIcon";
 import { useSettings } from "../settings/store";
+import { useSystemLook, useWatchSystemLook } from "../core/system";
+
+/** The theme attributes shared by the preview, tooltip and switcher pages. */
+function useThemeAttrs() {
+  const theme = useSettings((s) => s.settings?.theme);
+  useWatchSystemLook();
+  const system = useSystemLook((s) => s.look);
+  return {
+    "data-light": theme === "white",
+    "data-theme": theme,
+    "data-system-light": theme === "windows" && (system?.light ?? false),
+  };
+}
 
 function report(error: unknown) {
   console.error("preview action failed", error);
@@ -59,12 +72,19 @@ function AppIcon({ source, size }: { source: string; size: number }) {
  *  areas these cards leave for them. */
 export function PreviewApp() {
   const content = useContent(listenPreview, previewNow, previewClosed);
-  const theme = useSettings((s) => s.settings?.theme);
+  const attrs = useThemeAttrs();
   if (!content) return null;
+  if (content.tooltip) {
+    return (
+      <div className="preview preview-tooltip" {...attrs}>
+        {content.tooltip}
+      </div>
+    );
+  }
   return (
     <div
       className="preview"
-      data-light={theme === "white"}
+      {...attrs}
       onMouseEnter={() => ipc.previewHover(true).catch(report)}
       onMouseLeave={() => ipc.previewHover(false).catch(report)}
     >
@@ -152,10 +172,10 @@ function SwitchCell({ item, selected }: { item: SwitchItem; selected: boolean })
  *  its icon and title, the chosen one outlined. Windows draws the pictures into the gaps. */
 export function SwitcherApp() {
   const state = useContent<SwitcherState>(listenSwitcher, switcherNow);
-  const theme = useSettings((s) => s.settings?.theme);
+  const attrs = useThemeAttrs();
   if (!state) return null;
   return (
-    <div className="switcher" data-light={theme === "white"}>
+    <div className="switcher" {...attrs}>
       {state.items.map((item, i) => (
         <SwitchCell key={item.hwnd} item={item} selected={i === state.selected} />
       ))}

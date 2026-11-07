@@ -3,7 +3,10 @@
 //! clicked, with Windows' acrylic blur behind it. Clicking elsewhere closes it; clicking the
 //! same widget again toggles it.
 
-use std::sync::Mutex;
+use std::sync::{
+    atomic::{AtomicBool, AtomicU64, Ordering},
+    Mutex,
+};
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
@@ -19,6 +22,8 @@ use crate::{
 pub const PANEL_LABEL: &str = "panel";
 /// Event telling the popup page which widget to show.
 pub const PANEL_OPEN: &str = "panel-open";
+/// Event telling the dock page a widget preview became a normal popup.
+pub const PANEL_PINNED: &str = "panel-pinned";
 /// Event telling the dock page the popup closed.
 pub const PANEL_CLOSED: &str = "panel-closed";
 /// Gap between the dock and its popup, in logical pixels.
@@ -38,7 +43,9 @@ pub enum PanelContent {
     /// The widget gallery: add, remove and size widgets.
     Gallery,
     /// A folder of apps on the dock.
-    Folder { folder: crate::apps::service::FolderView },
+    Folder {
+        folder: crate::apps::service::FolderView,
+    },
     /// Quick capture: a note or a to-do, from the shortcut.
     Capture,
     /// A pinned folder's files.
@@ -57,6 +64,13 @@ pub struct PanelState {
     /// What closed last, and when: clicking a widget whose popup is open first takes focus
     /// from the popup (closing it), then arrives as a click that would open it again.
     closed: Mutex<Option<(PanelContent, std::time::Instant)>>,
+    /// Opened by hovering a widget (a preview): it doesn't take the focus, and goes away when
+    /// the cursor leaves. A click on it or on its widget keeps it open like a normal popup.
+    peek: AtomicBool,
+    /// The cursor is on the popup.
+    hovered: AtomicBool,
+    /// Bumped by every open and close, so a close planned earlier doesn't close a newer popup.
+    generation: AtomicU64,
 }
 
 /// A click this soon after its popup closed is the click that closed it.
@@ -102,6 +116,8 @@ pub fn panel_size(kind: WidgetKind) -> (f64, f64) {
         WidgetKind::ScreenText => (320.0, 260.0),
         WidgetKind::SongsToday => (320.0, 380.0),
         WidgetKind::ClaudeSessions => (360.0, 380.0),
+        // These open Windows' own flyouts; the size is only a fallback.
+        WidgetKind::HiddenIcons | WidgetKind::Language | WidgetKind::Notifications => (280.0, 200.0),
     }
 }
 
@@ -130,21 +146,112 @@ pub fn panel_rect(screen: Rect, dock: Rect, edge: Edge, anchor_x: i32, size: (u3
 /// already open. Async-safe: creating the window off the main thread avoids a WebView2 deadlock.
 pub fn toggle(app: &AppHandle, kind: WidgetKind, anchor_x: i32) -> AppResult<()> {
     let content = PanelContent::Widget { kind };
+    let state = app.state::<PanelState>();
+    // Clicking the widget that's being previewed keeps its popup open, as a normal popup.
+    if state.peek.load(Ordering::SeqCst) && is_showing(app, |open| *open == content)? {
+        state.peek.store(false, Ordering::SeqCst);
+        state.generation.fetch_add(1, Ordering::SeqCst);
+        #[cfg(windows)]
+        if let Some(window) = app.get_webview_window(PANEL_LABEL) {
+            let hwnd = window.hwnd()?.0 as isize;
+            crate::apps::win::make_activatable(hwnd);
+            crate::apps::win::activate(hwnd);
+        }
+        return Ok(());
+    }
     if is_showing(app, |open| *open == content)? {
         return close(app);
     }
-    show(app, super::DOCK_LABEL, content, panel_size(kind), anchor_x)
+    show(app, super::DOCK_LABEL, content, panel_size(kind), anchor_x, false)
+}
+
+/// Hovering a widget: show its popup as a preview, without taking the focus. Nothing happens
+/// while another popup or menu is open (a widget preview only replaces another preview).
+pub fn peek(app: &AppHandle, kind: WidgetKind, anchor_x: i32) -> AppResult<()> {
+    let content = PanelContent::Widget { kind };
+    let state = app.state::<PanelState>();
+    let peeking = state.peek.load(Ordering::SeqCst);
+    if is_showing(app, |open| *open == content)? {
+        state.generation.fetch_add(1, Ordering::SeqCst);
+        return Ok(());
+    }
+    if is_open(app) && !peeking {
+        return Ok(());
+    }
+    show(app, super::DOCK_LABEL, content, panel_size(kind), anchor_x, true)
+}
+
+/// Close a widget preview after `delay`, unless the cursor reaches it (or another opens).
+pub fn unpeek_later(app: &AppHandle, delay: std::time::Duration) {
+    let state = app.state::<PanelState>();
+    if !state.peek.load(Ordering::SeqCst) {
+        return;
+    }
+    let generation = state.generation.load(Ordering::SeqCst);
+    let app = app.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(delay);
+        let state = app.state::<PanelState>();
+        let still = state.generation.load(Ordering::SeqCst) == generation
+            && state.peek.load(Ordering::SeqCst)
+            && !state.hovered.load(Ordering::SeqCst);
+        if still {
+            if let Err(error) = close(&app) {
+                tracing::warn!(%error, "failed to close the widget preview");
+            }
+        }
+    });
+}
+
+/// A click inside a widget preview: it becomes a normal popup that has the focus (so typing
+/// works), and stays until you click elsewhere.
+pub fn pin(app: &AppHandle) -> AppResult<()> {
+    let state = app.state::<PanelState>();
+    if !state.peek.swap(false, Ordering::SeqCst) {
+        return Ok(());
+    }
+    state.generation.fetch_add(1, Ordering::SeqCst);
+    app.emit(PANEL_PINNED, ())?;
+    #[cfg(windows)]
+    if let Some(window) = app.get_webview_window(PANEL_LABEL) {
+        let hwnd = window.hwnd()?.0 as isize;
+        crate::apps::win::make_activatable(hwnd);
+        crate::apps::win::activate(hwnd);
+    }
+    Ok(())
+}
+
+/// The cursor arrived on (or left) the popup.
+pub fn set_hovered(app: &AppHandle, hovered: bool) {
+    let state = app.state::<PanelState>();
+    state.hovered.store(hovered, Ordering::SeqCst);
+    if hovered {
+        state.generation.fetch_add(1, Ordering::SeqCst);
+    } else {
+        unpeek_later(app, std::time::Duration::from_millis(300));
+    }
 }
 
 /// Open a dock folder's popup above it (or close it, if that folder is open).
-pub fn toggle_folder(app: &AppHandle, view: crate::apps::service::FolderView, anchor_x: i32) -> AppResult<()> {
+pub fn toggle_folder(
+    app: &AppHandle,
+    view: crate::apps::service::FolderView,
+    anchor_x: i32,
+) -> AppResult<()> {
     let same = |open: &PanelContent| matches!(open, PanelContent::Folder { folder } if folder.id == view.id && folder.dock == view.dock);
     if is_showing(app, same)? {
         return close(app);
     }
     let dock = view.dock.clone();
     let size = view.size();
-    show(app, &dock, PanelContent::Folder { folder: view }, size, anchor_x)
+    show(
+        app,
+        &dock,
+        PanelContent::Folder { folder: view },
+        size,
+        anchor_x,
+        false,
+    )
 }
 
 /// Open the widget gallery above the dock's › button (or close it, if it's open).
@@ -152,7 +259,14 @@ pub fn toggle_gallery(app: &AppHandle, anchor_x: i32) -> AppResult<()> {
     if is_showing(app, |open| *open == PanelContent::Gallery)? {
         return close(app);
     }
-    show(app, super::DOCK_LABEL, PanelContent::Gallery, GALLERY_SIZE, anchor_x)
+    show(
+        app,
+        super::DOCK_LABEL,
+        PanelContent::Gallery,
+        GALLERY_SIZE,
+        anchor_x,
+        false,
+    )
 }
 
 /// Size of the quick-capture popup, logical pixels.
@@ -173,6 +287,7 @@ pub fn show_capture(app: &AppHandle) -> AppResult<()> {
         PanelContent::Capture,
         CAPTURE_SIZE,
         anchor,
+        false,
     )
 }
 
@@ -184,7 +299,7 @@ pub fn show_app_menu(app: &AppHandle, menu: AppMenu, anchor_x: i32) -> AppResult
     }
     let dock = menu.dock.clone();
     let size = menu.size();
-    show(app, &dock, PanelContent::App { menu }, size, anchor_x)
+    show(app, &dock, PanelContent::App { menu }, size, anchor_x, false)
 }
 
 /// Open a pinned folder's files above it (or close them, if already open).
@@ -194,7 +309,7 @@ pub fn show_stack(app: &AppHandle, dock: &str, stack: StackView, anchor_x: i32) 
         return close(app);
     }
     let size = stack.size();
-    show(app, dock, PanelContent::Stack { stack }, size, anchor_x)
+    show(app, dock, PanelContent::Stack { stack }, size, anchor_x, false)
 }
 
 /// Open the dock's own menu at `anchor_x` (or close it, if already open).
@@ -204,7 +319,7 @@ pub fn show_dock_menu(app: &AppHandle, menu: DockMenu, anchor_x: i32) -> AppResu
     }
     let dock = menu.dock.clone();
     let size = menu.size();
-    show(app, &dock, PanelContent::Dock { menu }, size, anchor_x)
+    show(app, &dock, PanelContent::Dock { menu }, size, anchor_x, false)
 }
 
 /// Whether a popup (menu, stack or widget) is on screen.
@@ -252,19 +367,21 @@ fn is_showing(app: &AppHandle, matches: impl Fn(&PanelContent) -> bool) -> AppRe
     }
     let open = state.open.lock().expect("panel lock").clone();
     let visible = match app.get_webview_window(PANEL_LABEL) {
-        Some(window) => window.is_visible()?,
+        Some(window) => window_visible(&window)?,
         None => false,
     };
     Ok(visible && open.as_ref().is_some_and(matches))
 }
 
 /// Show `content` in the popup, `size` logical pixels, centred on `anchor_x` past `dock_label`.
+/// A `peek` (a widget preview) shows without taking the focus.
 fn show(
     app: &AppHandle,
     dock_label: &str,
     content: PanelContent,
     size: (f64, f64),
     anchor_x: i32,
+    peek: bool,
 ) -> AppResult<()> {
     let state = app.state::<PanelState>();
     let window = match app.get_webview_window(PANEL_LABEL) {
@@ -276,6 +393,9 @@ fn show(
     }
     let settings = app.state::<SettingsStore>().get();
 
+    state.generation.fetch_add(1, Ordering::SeqCst);
+    state.peek.store(peek, Ordering::SeqCst);
+    state.hovered.store(false, Ordering::SeqCst);
     *state.open.lock().expect("panel lock") = Some(content.clone());
     // Content first, so the popup never flashes the previous widget. (A popup window opened for
     // the first time asks for this itself once its page has loaded.)
@@ -286,7 +406,7 @@ fn show(
         tauri::Theme::Dark
     }))?;
     let (width, height) = size;
-    window.set_size(tauri::LogicalSize::new(width, height))?;
+    set_page_size(&window, width, height)?;
     // Windows makes an undecorated window with a shadow taller than asked; place it by the size
     // it really has, so it never covers the dock.
     let outer = window.outer_size()?;
@@ -294,11 +414,121 @@ fn show(
         return Ok(());
     };
     window.set_position(PhysicalPosition::new(rect.x, rect.y))?;
-    window.show()?;
+    // Reading the position back waits until the move above has happened, so the popup never
+    // shows where it was last time.
+    let _ = window.outer_position()?;
+    // Shown (and later hidden) straight through Windows, in order: going through Tauri's queue
+    // could let an earlier close hide the popup after this show, or the other way round, which
+    // left an empty popup on screen.
     #[cfg(windows)]
-    super::make_tool_window(&window, false)?;
-    window.set_focus()?;
+    {
+        let hwnd = window.hwnd()?.0 as isize;
+        if peek {
+            crate::apps::win::show_on_top_quietly(hwnd);
+        } else {
+            crate::apps::win::make_activatable(hwnd);
+            crate::apps::win::show_on_top(hwnd);
+            crate::apps::win::activate(hwnd);
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        window.show()?;
+        if !peek {
+            window.set_focus()?;
+        }
+    }
     Ok(())
+}
+
+/// Size a popup window's page to `width` × `height` logical pixels. Done straight through
+/// Windows (in order, at once), then checked: Windows can add a title bar's height to a frameless
+/// tool window, and the check takes that back off.
+pub fn set_page_size(window: &tauri::WebviewWindow, width: f64, height: f64) -> AppResult<()> {
+    #[cfg(windows)]
+    {
+        let scale = window.scale_factor()?;
+        let want = ((width * scale).round() as i32, (height * scale).round() as i32);
+        let hwnd = window.hwnd()?.0 as isize;
+        // Only the height is ever off (by a title bar's worth); the width is left as asked.
+        let mut height_px = want.1;
+        crate::apps::win::resize(hwnd, want.0, height_px);
+        for _ in 0..2 {
+            let Some((_, client_h)) = crate::apps::win::client_size(hwnd) else {
+                break;
+            };
+            let extra = client_h - want.1;
+            if extra.abs() <= 1 {
+                break;
+            }
+            let next = height_px - extra;
+            // Never fight Windows down to nothing: a correction this big means something else
+            // is going on, so keep the size asked for.
+            if next < want.1 / 2 || next > want.1 * 2 {
+                crate::apps::win::resize(hwnd, want.0, want.1);
+                break;
+            }
+            height_px = next;
+            crate::apps::win::resize(hwnd, want.0, height_px);
+        }
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        window.set_size(tauri::LogicalSize::new(width, height))?;
+        Ok(())
+    }
+}
+
+/// The open menu's page measured its content: make the popup exactly that tall, keeping its
+/// edge against the dock where it is.
+pub fn fit_height(app: &AppHandle, height: f64) -> AppResult<()> {
+    let Some(window) = app.get_webview_window(PANEL_LABEL) else {
+        return Ok(());
+    };
+    if !window_visible(&window)? {
+        return Ok(());
+    }
+    let height = height.clamp(40.0, 900.0);
+    let scale = window.scale_factor()?;
+    let position = window.outer_position()?;
+    let before = window.outer_size()?;
+    let width = f64::from(window.inner_size()?.width) / scale;
+    set_page_size(&window, width, height)?;
+    let after = window.outer_size()?;
+    if app.state::<SettingsStore>().get().edge == Edge::Bottom {
+        // Grow or shrink upwards, so the bottom stays just above the dock.
+        let y = position.y + before.height as i32 - after.height as i32;
+        window.set_position(PhysicalPosition::new(position.x, y))?;
+    }
+    Ok(())
+}
+
+/// Whether the popup window is on screen.
+fn window_visible(window: &tauri::WebviewWindow) -> AppResult<bool> {
+    #[cfg(windows)]
+    {
+        Ok(crate::apps::win::is_visible(window.hwnd()?.0 as isize))
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(window.is_visible()?)
+    }
+}
+
+/// The popup lost the focus: close it, unless Windows was only moving the focus around while
+/// showing it (the popup is in front again by now), or it's a preview (which never had it).
+pub fn focus_lost(app: &AppHandle) -> AppResult<()> {
+    #[cfg(windows)]
+    if let Some(window) = app.get_webview_window(PANEL_LABEL) {
+        if crate::apps::win::foreground() == window.hwnd()?.0 as isize {
+            return Ok(());
+        }
+    }
+    if app.state::<PanelState>().peek.load(Ordering::SeqCst) {
+        return Ok(());
+    }
+    close(app)
 }
 
 /// What the popup is showing, for a popup page that just loaded.
@@ -308,15 +538,31 @@ pub fn current(app: &AppHandle) -> Option<PanelContent> {
 
 pub fn close(app: &AppHandle) -> AppResult<()> {
     let state = app.state::<PanelState>();
+    state.generation.fetch_add(1, Ordering::SeqCst);
+    let was_peek = state.peek.swap(false, Ordering::SeqCst);
     let was_open = state.open.lock().expect("panel lock").take();
     if let Some(content) = &was_open {
-        *state.closed.lock().expect("panel lock") = Some((content.clone(), std::time::Instant::now()));
+        // A preview closing because the cursor left isn't the click on its widget.
+        if !was_peek {
+            *state.closed.lock().expect("panel lock") = Some((content.clone(), std::time::Instant::now()));
+        }
     }
     if let Some(window) = app.get_webview_window(PANEL_LABEL) {
+        #[cfg(windows)]
+        crate::apps::win::hide_quietly(window.hwnd()?.0 as isize);
+        #[cfg(not(windows))]
         window.hide()?;
     }
     if was_open.is_some() {
         app.emit(PANEL_CLOSED, ())?;
+    }
+    Ok(())
+}
+
+/// Make the popup window ahead of time (at startup), so the first popup opens at once.
+pub fn prepare(app: &AppHandle) -> AppResult<()> {
+    if app.get_webview_window(PANEL_LABEL).is_none() {
+        create(app)?;
     }
     Ok(())
 }
@@ -337,7 +583,13 @@ fn create(app: &AppHandle) -> AppResult<tauri::WebviewWindow> {
         })
         .build()?;
     #[cfg(windows)]
-    round_corners(&window);
+    {
+        round_corners(&window);
+        // A tool window: never on the taskbar or in Alt+Tab. It's shown and hidden straight
+        // through Windows after this, which keeps the style.
+        super::make_tool_window(&window, false)?;
+        crate::apps::win::hide_quietly(window.hwnd()?.0 as isize);
+    }
     Ok(window)
 }
 

@@ -11,6 +11,7 @@ function report(error: unknown) {
 /** Show the desktop; hovering a moment peeks at it. */
 export function ShowDesktopButton() {
   const apps = useSettings((s) => s.settings?.apps);
+  const windowsLook = useSettings((s) => s.settings?.theme === "windows");
   const timer = useRef<number | undefined>(undefined);
   const peeking = useRef(false);
   const stopPeek = () => {
@@ -41,7 +42,8 @@ export function ShowDesktopButton() {
         ipc.showDesktop().catch(report);
       }}
     >
-      <Monitor size={17} strokeWidth={1.8} />
+      {/* Windows 11 has only a thin strip at the far edge. */}
+      {!windowsLook && <Monitor size={17} strokeWidth={1.8} />}
     </button>
   );
 }

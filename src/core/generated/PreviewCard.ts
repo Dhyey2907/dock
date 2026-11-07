@@ -3,7 +3,11 @@
 /**
  * One window's card in the preview popup, in logical pixels from the popup's top-left.
  */
-export type PreviewCard = { hwnd: number, title: string, active: boolean, minimized: boolean, hung: boolean, x: number, y: number, width: number, height: number, 
+export type PreviewCard = { hwnd: number, title: string, active: boolean, 
+/**
+ * No live picture (Windows couldn't size the window): the page shows the app icon.
+ */
+minimized: boolean, hung: boolean, x: number, y: number, width: number, height: number, 
 /**
  * Where the live picture goes (inside the card, below the title).
  */

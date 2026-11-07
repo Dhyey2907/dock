@@ -147,7 +147,7 @@ mod win {
             UI::{
                 Shell::{SHAppBarMessage, ABM_GETSTATE, ABM_SETSTATE, APPBARDATA},
                 WindowsAndMessaging::{
-                    EnumWindows, FindWindowW, GetClassNameW, ShowWindow, SW_HIDE, SW_SHOWNA,
+                    EnumWindows, FindWindowW, GetClassNameW, IsWindowVisible, ShowWindow, SW_HIDE, SW_SHOWNA,
                 },
             },
         },
@@ -205,6 +205,12 @@ mod win {
         }
 
         fn set_visible(&self, visible: bool) {
+            // Hiding a shown taskbar: note its corner buttons first, for the dock's tray buttons
+            // to press while it's hidden.
+            // SAFETY: a read-only query on Explorer's taskbar window.
+            if !visible && primary().is_some_and(|tray| unsafe { IsWindowVisible(tray) }.as_bool()) {
+                crate::shell::tray::remember();
+            }
             for tray in all() {
                 // SAFETY: showing or hiding Explorer's own top-level taskbar windows.
                 let _ = unsafe { ShowWindow(tray, if visible { SW_SHOWNA } else { SW_HIDE }) };

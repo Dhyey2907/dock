@@ -109,6 +109,15 @@ pub fn run() {
                     }
                 });
             }
+            // The popup window is ready before the first click (made off the main thread:
+            // making a window there would wait on the main thread, which is busy right here).
+            let handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                if let Err(error) = shell::panel::prepare(&handle) {
+                    tracing::warn!(%error, "failed to prepare the popup");
+                }
+            });
             tracing::info!(version = env!("CARGO_PKG_VERSION"), "dock started");
             Ok(())
         })
@@ -120,7 +129,7 @@ pub fn run() {
             }
             // A popup closes as soon as you click anywhere else.
             tauri::WindowEvent::Focused(false) if window.label() == shell::panel::PANEL_LABEL => {
-                if let Err(error) = shell::panel::close(window.app_handle()) {
+                if let Err(error) = shell::panel::focus_lost(window.app_handle()) {
                     tracing::warn!(%error, "failed to close the popup");
                 }
             }
@@ -171,6 +180,18 @@ pub fn run() {
             commands::dock_geometry,
             commands::glass_get,
             commands::panel_toggle,
+            commands::widget_peek,
+            commands::widget_unpeek,
+            commands::panel_hover,
+            commands::panel_pin,
+            commands::panel_fit,
+            commands::folder_app_menu,
+            commands::tray_press,
+            commands::input_language,
+            commands::system_look,
+            commands::system_clock,
+            commands::tooltip_show,
+            commands::shell_task_view,
             commands::panel_current,
             commands::panel_close,
             commands::widgets_snapshot,

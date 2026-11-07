@@ -7,7 +7,7 @@ export type SwitchItem = { hwnd: number, title: string, appName: string,
  */
 icon: string, 
 /**
- * Minimized: no live picture, so the page shows the app's icon instead.
+ * No live picture (Windows couldn't size the window), so the page shows its icon instead.
  */
 minimized: boolean, 
 /**

@@ -13,7 +13,9 @@ import {
   SpotifyPanel,
   SpotifyTile,
 } from "./accounts/AccountWidgets";
+import type { TrayButton } from "../core/generated/TrayButton";
 import { CalendarPanel, CalendarTile } from "./CalendarWidget";
+import { HiddenIconsTile, LanguageTile, NoPanel, NotificationsTile } from "./TrayWidgets";
 import { ClaudePanel, ClaudeTile } from "./ClaudeWidget";
 import { ClockPanel, ClockTile } from "./ClockWidget";
 import { FocusPanel, FocusTile } from "./FocusWidget";
@@ -78,6 +80,14 @@ import {
 
 export interface WidgetDefinition {
   label: string;
+  /** The Windows taskbar button this stands for: clicking it opens Windows' own flyout (always
+   *  for `windowsOnly`, otherwise when "Windows' own panels" is on in Settings). */
+  native?: TrayButton;
+  /** Only ever opens Windows' flyout: no dock popup, so no hover preview either. */
+  windowsOnly?: boolean;
+  /** Belongs in the taskbar's corner (right of the apps); the rest go left of them when the
+   *  apps are in the middle, where Windows 11 has its Widgets button. */
+  corner?: boolean;
   /** One line for the widget picker. */
   description: string;
   /** The gallery section; "info" when left out. */
@@ -123,7 +133,39 @@ export const WIDGETS: Partial<Record<WidgetKind, WidgetDefinition>> = {
     Tile: SystemTile,
     Panel: SystemPanel,
   },
+  hiddenIcons: {
+    label: "Hidden icons",
+    category: "system",
+    description: "The taskbar's ^: your tray icons, in Windows' own flyout.",
+    native: "hiddenIcons",
+    windowsOnly: true,
+    corner: true,
+    Tile: HiddenIconsTile,
+    Panel: NoPanel,
+  },
+  language: {
+    label: "Input language",
+    category: "system",
+    description: "Your keyboard language (ENG IN). Click to switch, like the taskbar.",
+    native: "language",
+    windowsOnly: true,
+    corner: true,
+    Tile: LanguageTile,
+    Panel: NoPanel,
+  },
+  notifications: {
+    label: "Notifications",
+    category: "system",
+    description: "Windows' notification centre.",
+    native: "notifications",
+    windowsOnly: true,
+    corner: true,
+    Tile: NotificationsTile,
+    Panel: NoPanel,
+  },
   status: {
+    native: "quickSettings",
+    corner: true,
     label: "Status",
     category: "system",
     description: "Network, volume and battery, like the taskbar's corner.",
@@ -138,6 +180,8 @@ export const WIDGETS: Partial<Record<WidgetKind, WidgetDefinition>> = {
     Panel: WeatherPanel,
   },
   clock: {
+    native: "clock",
+    corner: true,
     label: "Clock",
     category: "info",
     description: "Time, date and a month calendar.",
@@ -236,6 +280,7 @@ export const WIDGETS: Partial<Record<WidgetKind, WidgetDefinition>> = {
     category: "system",
   },
   bluetooth: {
+    corner: true,
     label: "Bluetooth devices",
     description: "Your paired devices and their battery levels.",
     Tile: BluetoothTile,
@@ -250,6 +295,7 @@ export const WIDGETS: Partial<Record<WidgetKind, WidgetDefinition>> = {
     category: "system",
   },
   wifi: {
+    corner: true,
     label: "Wi-Fi details",
     description: "Network name, signal, and your local and public addresses.",
     Tile: WifiTile,

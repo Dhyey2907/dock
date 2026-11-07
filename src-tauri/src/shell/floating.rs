@@ -88,7 +88,16 @@ pub fn detach_popup(app: &AppHandle) -> AppResult<()> {
     panel::close(app)?;
     open(app, kind, position, true)?;
     let (x, y) = position.unwrap_or_default();
-    remember(app, kind, Some(FloatingWidget { kind, x, y, on_top: true }))
+    remember(
+        app,
+        kind,
+        Some(FloatingWidget {
+            kind,
+            x,
+            y,
+            on_top: true,
+        }),
+    )
 }
 
 /// Put `kind` on the desktop (behind other windows), or keep it on top.
@@ -101,7 +110,10 @@ pub fn show(app: &AppHandle, kind: WidgetKind, on_top: bool) -> AppResult<()> {
         .find(|f| f.kind == kind);
     let position = saved.map(|f| (f.x, f.y));
     open(app, kind, position, on_top)?;
-    let (x, y) = match app.get_webview_window(&label(kind)).and_then(|w| w.outer_position().ok()) {
+    let (x, y) = match app
+        .get_webview_window(&label(kind))
+        .and_then(|w| w.outer_position().ok())
+    {
         Some(p) => (p.x, p.y),
         None => position.unwrap_or_default(),
     };
@@ -145,14 +157,18 @@ pub fn open_dashboard(app: &AppHandle) -> AppResult<()> {
         window.set_focus()?;
         return Ok(());
     }
-    WebviewWindowBuilder::new(app, DASHBOARD_LABEL, WebviewUrl::App("index.html#dashboard".into()))
-        .title("Dock dashboard")
-        .inner_size(1080.0, 740.0)
-        .min_inner_size(520.0, 420.0)
-        .transparent(true)
-        .effects(super::mica())
-        .center()
-        .build()?;
+    WebviewWindowBuilder::new(
+        app,
+        DASHBOARD_LABEL,
+        WebviewUrl::App("index.html#dashboard".into()),
+    )
+    .title("Dock dashboard")
+    .inner_size(1080.0, 740.0)
+    .min_inner_size(520.0, 420.0)
+    .transparent(true)
+    .effects(super::mica())
+    .center()
+    .build()?;
     Ok(())
 }
 

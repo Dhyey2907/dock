@@ -9,9 +9,10 @@ pub mod placement;
 pub mod screens;
 pub mod shortcut;
 pub mod taskbar;
-pub mod winkeys;
+pub mod tray;
 #[cfg(windows)]
 mod watch;
+pub mod winkeys;
 
 use std::{
     collections::HashMap,

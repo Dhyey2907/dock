@@ -1109,6 +1109,7 @@ pub fn dock_menu_action(app: &AppHandle, action: DockMenuAction) -> AppResult<()
         #[cfg(windows)]
         DockMenuAction::TaskManager => super::win::open("taskmgr.exe"),
         DockMenuAction::Settings => shell::open_settings_window(app, Some("apps"))?,
+        DockMenuAction::WindowsTaskbar => shell::use_windows_taskbar(app, true),
         DockMenuAction::Reopen { key } if menu.recent.iter().any(|r| r.key == key) => {
             let launch = app
                 .state::<AppsState>()

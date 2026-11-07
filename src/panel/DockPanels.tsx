@@ -3,6 +3,7 @@ import {
   Minimize2,
   Monitor,
   Activity,
+  PanelBottom,
   Settings2,
   Terminal,
   X,
@@ -42,7 +43,7 @@ export function DockMenuPanel({ menu }: { menu: DockMenu }) {
       </button>
       <button className="jump-row" onClick={() => act({ type: "minimizeOthers" })}>
         <Minimize2 {...ICON} />
-        <span className="jump-label">Minimize all but the current window</span>
+        <span className="jump-label">Minimize other windows</span>
       </button>
       {menu.windows > 0 && (
         <ConfirmRow
@@ -59,6 +60,10 @@ export function DockMenuPanel({ menu }: { menu: DockMenu }) {
       <button className="jump-row" onClick={() => act({ type: "settings" })}>
         <Settings2 {...ICON} />
         <span className="jump-label">Dock settings</span>
+      </button>
+      <button className="jump-row" onClick={() => act({ type: "windowsTaskbar" })}>
+        <PanelBottom {...ICON} />
+        <span className="jump-label">Use the Windows taskbar</span>
       </button>
       {menu.recent.length > 0 && (
         <section className="jump-section">

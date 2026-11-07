@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSystemClock, useWindowsLook } from "../core/system";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { useSettings } from "../settings/store";
@@ -20,7 +21,22 @@ function useTimeFormat() {
   );
 }
 
+/** The Windows 11 clock: time over date, right-aligned, in Windows' own formats. */
+function WindowsClockTile() {
+  const clock = useSystemClock();
+  return (
+    <span className="tray-clock">
+      <span>{clock?.time ?? ""}</span>
+      <span>{clock?.date ?? ""}</span>
+    </span>
+  );
+}
+
 export function ClockTile() {
+  return useWindowsLook() ? <WindowsClockTile /> : <PlainClockTile />;
+}
+
+function PlainClockTile() {
   const now = useNow(60_000);
   const time = useTimeFormat();
   const date = new Date(now);

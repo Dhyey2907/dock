@@ -67,7 +67,9 @@ pub struct FloatingWidget {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub enum Theme {
+    /// Like Windows 11's own taskbar: acrylic, its icons, its accent colour.
     #[default]
+    Windows,
     Glass,
     IosGlass,
     Midnight,
@@ -124,6 +126,17 @@ pub enum PopupStyle {
     Compact,
 }
 
+/// The search button: an icon, a box like Windows 11's "Search" box, or none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum SearchStyle {
+    Icon,
+    #[default]
+    Box,
+    Hidden,
+}
+
 /// Fine control over the dock's size and look, on top of the size and theme choices.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase", default)]
@@ -146,6 +159,18 @@ pub struct DockLook {
     /// The dock rises into place when it starts.
     pub startup_animation: bool,
     pub popup_style: PopupStyle,
+    /// Hovering a widget shows its popup as a preview (like Windows 11's Widgets button);
+    /// a click keeps it open.
+    pub widget_hover: bool,
+    /// Start, search and the apps in the middle of a full-width dock (like Windows 11), rather
+    /// than at its left.
+    pub center_apps: bool,
+    pub search: SearchStyle,
+    /// The Task View button, next to search.
+    pub task_view: bool,
+    /// The clock, Status and tray buttons open Windows' own flyouts (calendar, Quick Settings)
+    /// rather than the dock's popups.
+    pub native_flyouts: bool,
 }
 
 impl Default for DockLook {
@@ -160,6 +185,11 @@ impl Default for DockLook {
             bounce: 40,
             startup_animation: true,
             popup_style: PopupStyle::default(),
+            widget_hover: true,
+            center_apps: true,
+            search: SearchStyle::default(),
+            task_view: true,
+            native_flyouts: true,
         }
     }
 }
@@ -263,6 +293,12 @@ pub enum WidgetKind {
     GoogleTasks,
     /// The latest GitHub Actions run of each repo you list.
     GithubActions,
+    /// The taskbar's ^: tray icons that don't fit, in Windows' own flyout.
+    HiddenIcons,
+    /// The input language (ENG IN); click to switch keyboards.
+    Language,
+    /// The notification bell: Windows' notification centre.
+    Notifications,
     /// A widget from a newer version of the dock; dropped on load.
     #[serde(other)]
     #[ts(skip)]
@@ -271,15 +307,18 @@ pub enum WidgetKind {
 
 impl WidgetKind {
     /// Every widget, in the default order (left to right).
-    pub const ALL: [WidgetKind; 38] = [
+    pub const ALL: [WidgetKind; 41] = [
         WidgetKind::Music,
         WidgetKind::Focus,
         WidgetKind::Claude,
         WidgetKind::Calendar,
         WidgetKind::System,
+        WidgetKind::HiddenIcons,
+        WidgetKind::Language,
         WidgetKind::Status,
         WidgetKind::Weather,
         WidgetKind::Clock,
+        WidgetKind::Notifications,
         WidgetKind::Notes,
         WidgetKind::Todos,
         WidgetKind::Kanban,
@@ -332,7 +371,12 @@ fn default_widgets() -> Vec<WidgetEntry> {
             // On by default: the ones that work with no setup.
             enabled: matches!(
                 kind,
-                WidgetKind::Music | WidgetKind::Status | WidgetKind::Weather | WidgetKind::Clock
+                WidgetKind::Music
+                    | WidgetKind::HiddenIcons
+                    | WidgetKind::Language
+                    | WidgetKind::Status
+                    | WidgetKind::Weather
+                    | WidgetKind::Clock
             ),
         })
         .collect()
@@ -569,6 +613,25 @@ impl Settings {
             seen.push(w.kind);
             keep
         });
+        // The taskbar corner's buttons arrived after most docks were set up: they go in on, just
+        // before Status (where the taskbar has them), the first time a dock without them loads.
+        for kind in [WidgetKind::HiddenIcons, WidgetKind::Language] {
+            if !self.widgets.iter().any(|w| w.kind == kind) {
+                let at = self
+                    .widgets
+                    .iter()
+                    .position(|w| w.kind == WidgetKind::Status)
+                    .unwrap_or(self.widgets.len());
+                self.widgets.insert(
+                    at,
+                    WidgetEntry {
+                        kind,
+                        enabled: true,
+                        size: WidgetSize::Normal,
+                    },
+                );
+            }
+        }
         for kind in WidgetKind::ALL {
             if !self.widgets.iter().any(|w| w.kind == kind) {
                 self.widgets.push(WidgetEntry {
@@ -1125,11 +1188,34 @@ mod tests {
                 size: WidgetSize::Normal,
             }
         );
-        // Missing kinds were added, switched off.
-        assert!(widgets[2..].iter().all(|w| !w.enabled));
+        // Missing kinds were added, switched off, except the taskbar corner's buttons.
+        let corner = [WidgetKind::HiddenIcons, WidgetKind::Language];
+        assert!(widgets[2..].iter().all(|w| w.enabled == corner.contains(&w.kind)));
         for kind in WidgetKind::ALL {
             assert_eq!(widgets.iter().filter(|w| w.kind == kind).count(), 1);
         }
+    }
+
+    #[test]
+    fn the_taskbar_corner_goes_in_before_status() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = r#"{"widgets":[
+            {"kind":"music","enabled":true},
+            {"kind":"status","enabled":true},
+            {"kind":"clock","enabled":true}]}"#;
+        std::fs::write(dir.path().join(FILE_NAME), file).unwrap();
+        let widgets = SettingsStore::open(dir.path()).get().widgets;
+        let kinds: Vec<_> = widgets.iter().take(5).map(|w| (w.kind, w.enabled)).collect();
+        assert_eq!(
+            kinds,
+            [
+                (WidgetKind::Music, true),
+                (WidgetKind::HiddenIcons, true),
+                (WidgetKind::Language, true),
+                (WidgetKind::Status, true),
+                (WidgetKind::Clock, true),
+            ]
+        );
     }
 
     #[test]

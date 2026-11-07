@@ -11,6 +11,7 @@ import type { TaskbarMode } from "../core/generated/TaskbarMode";
 import { ipc } from "../core/ipc";
 import type { DockLook } from "../core/generated/DockLook";
 import type { PopupStyle } from "../core/generated/PopupStyle";
+import type { SearchStyle } from "../core/generated/SearchStyle";
 import { Choice, Row, ShortcutField, Slider, StyleCards, Toggle } from "./controls";
 
 type Save = (patch: Partial<Settings>) => void;
@@ -197,6 +198,54 @@ function LookRows({ settings, save }: { settings: Settings; save: Save }) {
       </Row>
       <Row label="Magnify on hover" id="magnify" hint="App icons grow as the mouse passes over them.">
         <Toggle label="Magnify on hover" checked={look.magnify} onChange={(magnify) => set({ magnify })} />
+      </Row>
+      <Row
+        label="Apps in the middle"
+        id="centerApps"
+        hint="Start, search and your apps centred on a full-width dock, like Windows 11."
+      >
+        <Toggle
+          label="Apps in the middle"
+          checked={look.centerApps}
+          onChange={(centerApps) => set({ centerApps })}
+        />
+      </Row>
+      <Row label="Search" id="search" hint="A search box like Windows 11's, just the icon, or nothing.">
+        <Choice<SearchStyle>
+          label="Search"
+          value={look.search}
+          options={[
+            ["box", "Search box"],
+            ["icon", "Icon"],
+            ["hidden", "Hidden"],
+          ]}
+          onChange={(search) => set({ search })}
+        />
+      </Row>
+      <Row label="Task View button" id="taskView" hint="Your open windows and desktops (Windows + Tab).">
+        <Toggle label="Task View button" checked={look.taskView} onChange={(taskView) => set({ taskView })} />
+      </Row>
+      <Row
+        label="Windows' own panels"
+        id="nativeFlyouts"
+        hint="Clicking the clock or the network, volume and battery icons opens Windows' calendar and Quick Settings, exactly like the taskbar. Hovering still shows the dock's popup."
+      >
+        <Toggle
+          label="Windows' own panels"
+          checked={look.nativeFlyouts}
+          onChange={(nativeFlyouts) => set({ nativeFlyouts })}
+        />
+      </Row>
+      <Row
+        label="Preview widgets on hover"
+        id="widgetHover"
+        hint="Rest the mouse on a widget to see its popup, like Windows 11's Widgets button. Click to keep it open."
+      >
+        <Toggle
+          label="Preview widgets on hover"
+          checked={look.widgetHover}
+          onChange={(widgetHover) => set({ widgetHover })}
+        />
       </Row>
       <Row label="Startup animation" hint="The dock rises into place when it starts.">
         <Toggle

@@ -24,6 +24,12 @@ function FolderItem({ dock, app }: { dock: string; app: FolderView["apps"][numbe
         className="folder-app"
         title={app.name}
         onClick={() => ipc.folderAppClick(dock, app.key).catch(report)}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          // Screen pixels: the page's are scaled by the screen's DPI.
+          const anchor = event.screenX * window.devicePixelRatio;
+          ipc.folderAppMenu(dock, app.key, anchor).catch(report);
+        }}
       >
         {icon ? (
           <img src={icon} alt="" draggable={false} />

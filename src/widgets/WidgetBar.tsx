@@ -13,8 +13,21 @@ import { WIDGETS } from "./registry";
 
 /** How far the pointer must move before a press becomes a drag. */
 const DRAG_THRESHOLD = 6;
+/** How long the mouse rests on a widget before its preview opens, and moving between widgets
+ *  while one is showing (quicker, like the taskbar's window previews). */
+const PEEK_DELAY_MS = 450;
+const PEEK_SWITCH_DELAY_MS = 120;
 
 const visible = (w: WidgetEntry) => w.enabled && WIDGETS[w.kind] !== undefined;
+
+/** Which widgets a bar shows: all of them, the taskbar corner's (right of the apps), or the
+ *  others (left of them, where Windows 11 has its Widgets button). */
+export type WidgetSide = "all" | "left" | "right";
+
+function onSide(side: WidgetSide) {
+  return (w: WidgetEntry) =>
+    visible(w) && (side === "all" || (side === "right") === Boolean(WIDGETS[w.kind]?.corner));
+}
 
 interface Drag {
   kind: WidgetKind;
@@ -26,7 +39,7 @@ interface Drag {
 }
 
 /** The dock's widgets, in order. Click one for its popup; drag one sideways to move it. */
-export function WidgetBar() {
+export function WidgetBar({ side = "all" }: { side?: WidgetSide }) {
   const settings = useSettings((s) => s.settings);
   const update = useSettings((s) => s.update);
   const geometry = useGlass((s) => s.geometry);
@@ -35,17 +48,27 @@ export function WidgetBar() {
   const [drag, setDrag] = useState<Drag | null>(null);
   const tiles = useRef(new Map<WidgetKind, HTMLButtonElement>());
   const suppressClick = useRef(false);
+  const peekTimer = useRef<number | undefined>(undefined);
+  /** The widget whose popup is showing as a hover preview. */
+  const peeking = useRef<WidgetKind | null>(null);
+  useEffect(() => () => window.clearTimeout(peekTimer.current), []);
 
   useEffect(() => {
-    let unlisten: (() => void) | undefined;
+    const stops: (() => void)[] = [];
     let alive = true;
+    const keep = (fn: () => void) => (alive ? stops.push(fn) : fn());
     events
-      .onPanelClosed(() => setOpen(null))
-      .then((fn) => (alive ? (unlisten = fn) : fn()))
+      .onPanelClosed(() => {
+        peeking.current = null;
+        setOpen(null);
+      })
+      .then(keep)
+      .then(() => events.onPanelPinned(() => (peeking.current = null)))
+      .then(keep)
       .catch((error) => console.error("failed to listen for popups", error));
     return () => {
       alive = false;
-      unlisten?.();
+      stops.forEach((fn) => fn());
     };
   }, []);
 
@@ -68,17 +91,64 @@ export function WidgetBar() {
   );
 
   if (!settings) return null;
-  const shown = settings.widgets.filter(visible);
+  const shows = onSide(side);
+  const shown = settings.widgets.filter(shows);
   // While dragging, show the order the drop would give.
   const order = drag?.moved ? reorderVisible(shown, () => true, drag.from, drag.to) : shown;
 
-  const toggle = (kind: WidgetKind) => {
+  const anchorOf = (kind: WidgetKind) => {
     const tile = tiles.current.get(kind);
-    if (!tile || !geometry) return;
+    if (!tile || !geometry) return null;
     const rect = tile.getBoundingClientRect();
-    const anchor = geometry.x + (rect.left + rect.width / 2) * geometry.scale;
-    setOpen((current) => (current === kind ? null : kind));
+    return geometry.x + (rect.left + rect.width / 2) * geometry.scale;
+  };
+
+  // Windows' own flyout for this widget, when it stands for a taskbar button and that's chosen.
+  const nativeFor = (kind: WidgetKind) => {
+    const def = WIDGETS[kind];
+    if (!def?.native) return undefined;
+    return def.windowsOnly || settings.look.nativeFlyouts ? def.native : undefined;
+  };
+
+  const toggle = (kind: WidgetKind) => {
+    window.clearTimeout(peekTimer.current);
+    const native = nativeFor(kind);
+    if (native) {
+      // A preview of the dock's popup gives way to Windows' flyout.
+      if (peeking.current) ipc.panelClose().catch(() => {});
+      peeking.current = null;
+      ipc.trayPress(native).catch((error) => console.error("failed to open Windows' flyout", error));
+      return;
+    }
+    const anchor = anchorOf(kind);
+    if (anchor === null) return;
+    // A click on the widget being previewed keeps its popup open.
+    const wasPeek = peeking.current === kind;
+    peeking.current = null;
+    setOpen((current) => (wasPeek ? kind : current === kind ? null : kind));
     ipc.panelToggle(kind, anchor).catch((error) => console.error("failed to open the popup", error));
+  };
+
+  const hoverPreviews = settings.look.widgetHover && !drag;
+  const onEnter = (kind: WidgetKind) => () => {
+    if (!hoverPreviews || WIDGETS[kind]?.windowsOnly) return;
+    window.clearTimeout(peekTimer.current);
+    // Another popup (not a preview) is open: leave it.
+    if (open !== null && peeking.current === null) return;
+    peekTimer.current = window.setTimeout(
+      () => {
+        const anchor = anchorOf(kind);
+        if (anchor === null) return;
+        peeking.current = kind;
+        setOpen(kind);
+        ipc.widgetPeek(kind, anchor).catch((error) => console.error("failed to preview the widget", error));
+      },
+      peeking.current ? PEEK_SWITCH_DELAY_MS : PEEK_DELAY_MS,
+    );
+  };
+  const onLeave = () => {
+    window.clearTimeout(peekTimer.current);
+    if (peeking.current) ipc.widgetUnpeek(300).catch((error) => console.error(error));
   };
 
   const onWheel = (kind: WidgetKind) => (e: WheelEvent<HTMLButtonElement>) => {
@@ -111,6 +181,7 @@ export function WidgetBar() {
 
   const onPointerDown = (kind: WidgetKind, index: number) => (e: PointerEvent<HTMLButtonElement>) => {
     if (e.button !== 0) return;
+    window.clearTimeout(peekTimer.current);
     e.currentTarget.setPointerCapture(e.pointerId);
     const midpoints = shown.map((w) => {
       const r = tiles.current.get(w.kind)?.getBoundingClientRect();
@@ -133,7 +204,7 @@ export function WidgetBar() {
       // The click that follows a drag must not open the popup.
       suppressClick.current = true;
       if (drag.to !== drag.from) {
-        update({ widgets: reorderVisible(settings.widgets, visible, drag.from, drag.to) }).catch((error) =>
+        update({ widgets: reorderVisible(settings.widgets, shows, drag.from, drag.to) }).catch((error) =>
           console.error("failed to save the widget order", error),
         );
       }
@@ -144,6 +215,7 @@ export function WidgetBar() {
   return (
     <div
       className="dock-widgets"
+      data-side={side}
       data-dragging={Boolean(drag?.moved)}
       onWheel={(e) => {
         // The mouse wheel scrolls a crowded widget row sideways (the Status widget uses it
@@ -170,7 +242,9 @@ export function WidgetBar() {
             data-open={open === entry.kind}
             data-lifted={drag?.moved && drag.kind === entry.kind}
             aria-label={def.label}
-            title={def.label}
+            title={hoverPreviews && !def.windowsOnly ? undefined : def.label}
+            onMouseEnter={onEnter(entry.kind)}
+            onMouseLeave={onLeave}
             onPointerDown={onPointerDown(entry.kind, index)}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
@@ -188,16 +262,18 @@ export function WidgetBar() {
           </button>
         );
       })}
-      <button
-        ref={galleryButton}
-        className="dock-gallery-button"
-        data-open={open === "gallery"}
-        aria-label="Add widgets"
-        title="Add widgets"
-        onClick={toggleGallery}
-      >
-        <ChevronRight size={16} strokeWidth={2.2} />
-      </button>
+      {side !== "left" && (
+        <button
+          ref={galleryButton}
+          className="dock-gallery-button"
+          data-open={open === "gallery"}
+          aria-label="Add widgets"
+          title="Add widgets"
+          onClick={toggleGallery}
+        >
+          <ChevronRight size={16} strokeWidth={2.2} />
+        </button>
+      )}
     </div>
   );
 }

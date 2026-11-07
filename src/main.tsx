@@ -28,6 +28,15 @@ import "./command/command.css";
 import "./settings/features.css";
 import "./dock/screenshot.css";
 import "./widgets/accounts/accounts.css";
+import "./design/windows.css";
+
+// No browser menu (Back, Refresh, Save as, Print) anywhere: Dock's own menus open instead,
+// where there is one. Text fields keep theirs, for Cut, Copy and Paste.
+document.addEventListener("contextmenu", (event) => {
+  const target = event.target as HTMLElement | null;
+  const editable = target?.closest("input, textarea, [contenteditable=''], [contenteditable='true']");
+  if (!editable) event.preventDefault();
+});
 
 function report(what: string) {
   return (error: unknown) => console.error(`failed to load ${what}`, error);

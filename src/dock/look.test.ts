@@ -13,6 +13,11 @@ const look: Settings["look"] = {
   bounce: 40,
   startupAnimation: true,
   popupStyle: "glass",
+  widgetHover: true,
+  centerApps: true,
+  search: "box",
+  taskView: true,
+  nativeFlyouts: true,
 };
 
 describe("dock look", () => {

@@ -3,6 +3,10 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 import type { DockFolder } from "./generated/DockFolder";
+import type { InputLanguage } from "./generated/InputLanguage";
+import type { SystemClock } from "./generated/SystemClock";
+import type { SystemLook } from "./generated/SystemLook";
+import type { TrayButton } from "./generated/TrayButton";
 import type { ButtonRect } from "./generated/ButtonRect";
 import type { DockMenuAction } from "./generated/DockMenuAction";
 import type { MenuAction } from "./generated/MenuAction";
@@ -81,6 +85,8 @@ export const ipc = {
   /** Save the dock's folders without touching any other setting. */
   dockFoldersSet: (folders: DockFolder[]) => invoke<Settings>("dock_folders_set", { folders }),
   folderAppClick: (dock: string, key: string) => invoke<void>("folder_app_click", { dock, key }),
+  folderAppMenu: (dock: string, key: string, anchorX: number) =>
+    invoke<void>("folder_app_menu", { dock, key, anchorX: Math.round(anchorX) }),
   /** Open or close the widget gallery, centred on `anchorX` (screen pixels). */
   galleryToggle: (anchorX: number) => invoke<void>("gallery_toggle", { anchorX: Math.round(anchorX) }),
   dockSetContentWidth: (width: number) => invoke<void>("dock_set_content_width", { width }),
@@ -132,11 +138,24 @@ export const ipc = {
   appMenuAction: (action: MenuAction) => invoke<void>("app_menu_action", { action }),
   shellStart: () => invoke<void>("shell_start"),
   shellSearch: () => invoke<void>("shell_search"),
+  taskView: () => invoke<void>("shell_task_view"),
   dockGeometry: () => invoke<DockGeometry | null>("dock_geometry"),
   glassGet: () => invoke<GlassFrame | null>("glass_get"),
   panelToggle: (kind: WidgetKind, anchorX: number) =>
     invoke<void>("panel_toggle", { kind, anchorX: Math.round(anchorX) }),
   panelClose: () => invoke<void>("panel_close"),
+  widgetPeek: (kind: WidgetKind, anchorX: number) =>
+    invoke<void>("widget_peek", { kind, anchorX: Math.round(anchorX) }),
+  widgetUnpeek: (delayMs: number) => invoke<void>("widget_unpeek", { delayMs: Math.round(delayMs) }),
+  panelHover: (hovered: boolean) => invoke<void>("panel_hover", { hovered }),
+  panelPin: () => invoke<void>("panel_pin"),
+  panelFit: (height: number) => invoke<void>("panel_fit", { height: Math.ceil(height) }),
+  trayPress: (button: TrayButton) => invoke<void>("tray_press", { button }),
+  inputLanguage: () => invoke<InputLanguage>("input_language"),
+  systemLook: () => invoke<SystemLook>("system_look"),
+  systemClock: () => invoke<SystemClock>("system_clock"),
+  tooltipShow: (text: string, anchorX: number) =>
+    invoke<void>("tooltip_show", { text, anchorX: Math.round(anchorX) }),
   panelCurrent: () => invoke<PanelContent | null>("panel_current"),
   widgetsSnapshot: () => invoke<WidgetSnapshot>("widgets_snapshot"),
   volumeSet: (level: number) => invoke<void>("volume_set", { level }),
@@ -252,6 +271,7 @@ export const events = {
   onGlassChanged: onThisWindow<GlassFrame>("glass-changed"),
   onPanelOpen: on<PanelContent>("panel-open"),
   onPanelClosed: on<null>("panel-closed"),
+  onPanelPinned: on<null>("panel-pinned"),
   onWeather: on<Weather>("widget-weather"),
   onStats: on<SystemStats>("widget-stats"),
   onSound: on<SoundState>("widget-sound"),

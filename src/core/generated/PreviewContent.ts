@@ -4,4 +4,8 @@ import type { PreviewCard } from "./PreviewCard";
 /**
  * What the preview popup shows.
  */
-export type PreviewContent = { dock: string, key: string, name: string, icon: string, width: number, height: number, cards: Array<PreviewCard>, };
+export type PreviewContent = { dock: string, key: string, name: string, icon: string, width: number, height: number, cards: Array<PreviewCard>, 
+/**
+ * Just a label (a button's name, like the taskbar's tooltips), instead of window pictures.
+ */
+tooltip?: string, };

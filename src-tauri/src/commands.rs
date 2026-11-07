@@ -226,6 +226,17 @@ pub fn app_previews(app: AppHandle, window: WebviewWindow, key: String, anchor_x
     Ok(())
 }
 
+/// A label over a dock button, like the taskbar's tooltips. Async: the first time creates a
+/// window.
+#[tauri::command(async)]
+pub fn tooltip_show(app: AppHandle, window: WebviewWindow, text: String, anchor_x: i32) -> AppResult<()> {
+    #[cfg(windows)]
+    crate::apps::preview::show_tooltip(&app, window.label(), &text, anchor_x)?;
+    #[cfg(not(windows))]
+    let _ = (app, window, text, anchor_x);
+    Ok(())
+}
+
 /// Hide the window previews after `delay_ms`, unless the cursor reaches them.
 #[tauri::command]
 pub fn preview_hide(app: AppHandle, delay_ms: u64) {
@@ -376,6 +387,15 @@ pub fn folder_app_click(app: AppHandle, dock: String, key: String) -> AppResult<
     crate::apps::service::folder_click(&app, &dock, &key)
 }
 
+/// A right click on an app in a folder's popup: that app's menu, in the popup's place.
+#[tauri::command(async)]
+pub fn folder_app_menu(app: AppHandle, dock: String, key: String, anchor_x: i32) -> AppResult<()> {
+    if !crate::shell::is_dock_label(&dock) {
+        return Err(AppError::InvalidInput("unknown dock".into()));
+    }
+    crate::apps::service::show_menu(&app, &dock, &key, anchor_x)
+}
+
 /// A choice in the open app menu.
 #[tauri::command(async)]
 pub fn app_menu_action(app: AppHandle, action: crate::apps::jump::MenuAction) -> AppResult<()> {
@@ -387,6 +407,16 @@ pub fn app_menu_action(app: AppHandle, action: crate::apps::jump::MenuAction) ->
 pub fn shell_start() {
     #[cfg(windows)]
     crate::apps::win::press(&[windows::Win32::UI::Input::KeyboardAndMouse::VK_LWIN]);
+}
+
+/// Open Task View (as Windows + Tab does).
+#[tauri::command(async)]
+pub fn shell_task_view() {
+    #[cfg(windows)]
+    crate::apps::win::press(&[
+        windows::Win32::UI::Input::KeyboardAndMouse::VK_LWIN,
+        windows::Win32::UI::Input::KeyboardAndMouse::VK_TAB,
+    ]);
 }
 
 /// Open Windows search (Win+S).
@@ -416,6 +446,61 @@ pub fn glass_get(app: AppHandle, window: WebviewWindow) -> Option<crate::glass::
 #[tauri::command(async)]
 pub fn panel_toggle(app: AppHandle, kind: crate::settings::WidgetKind, anchor_x: i32) -> AppResult<()> {
     shell::panel::toggle(&app, kind, anchor_x)
+}
+
+/// Press one of the Windows taskbar corner's buttons (it opens Windows' own flyout).
+#[tauri::command]
+pub fn tray_press(button: shell::tray::TrayButton) {
+    shell::tray::press(button);
+}
+
+/// Windows' accent colour and taskbar mode, for the Windows 11 look.
+#[tauri::command]
+pub fn system_look() -> shell::tray::SystemLook {
+    shell::tray::system_look()
+}
+
+/// The time and date in Windows' own short formats, as the taskbar shows them.
+#[tauri::command]
+pub fn system_clock() -> shell::tray::SystemClock {
+    shell::tray::system_clock()
+}
+
+/// The input language of the window in front, as the taskbar shows it.
+#[tauri::command]
+pub fn input_language() -> shell::tray::InputLanguage {
+    shell::tray::input_language()
+}
+
+/// Hovering a widget: preview its popup without taking the focus. Async: the first open
+/// creates a window.
+#[tauri::command(async)]
+pub fn widget_peek(app: AppHandle, kind: crate::settings::WidgetKind, anchor_x: i32) -> AppResult<()> {
+    shell::panel::peek(&app, kind, anchor_x)
+}
+
+/// The cursor left a widget: close its preview soon, unless the cursor reaches it.
+#[tauri::command]
+pub fn widget_unpeek(app: AppHandle, delay_ms: u64) {
+    shell::panel::unpeek_later(&app, std::time::Duration::from_millis(delay_ms.min(5_000)));
+}
+
+/// The open menu's real height, measured by its page: the popup fits it.
+#[tauri::command(async)]
+pub fn panel_fit(app: AppHandle, height: f64) -> AppResult<()> {
+    shell::panel::fit_height(&app, height)
+}
+
+/// A click inside a widget preview keeps it open, with the focus.
+#[tauri::command(async)]
+pub fn panel_pin(app: AppHandle) -> AppResult<()> {
+    shell::panel::pin(&app)
+}
+
+/// The cursor arrived on (or left) the popup.
+#[tauri::command]
+pub fn panel_hover(app: AppHandle, hovered: bool) {
+    shell::panel::set_hovered(&app, hovered);
 }
 
 /// Which widget's popup is open (for the popup page when it first loads).

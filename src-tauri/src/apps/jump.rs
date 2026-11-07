@@ -433,8 +433,8 @@ impl DockMenu {
         const TITLE: f64 = 30.0;
         const DIVIDER: f64 = 9.0;
         const PADDING: f64 = 12.0;
-        // Show desktop, Minimize others, Close all, Task Manager, Dock settings.
-        let mut height = 2.0 * PADDING + ROW * (4 + usize::from(self.windows > 0)) as f64;
+        // Show desktop, Minimize others, Close all, Task Manager, Dock settings, Windows taskbar.
+        let mut height = 2.0 * PADDING + ROW * (5 + usize::from(self.windows > 0)) as f64;
         if !self.recent.is_empty() {
             height += DIVIDER + TITLE + ROW * self.recent.len() as f64;
         }
@@ -457,6 +457,8 @@ pub enum DockMenuAction {
     CloseAll,
     TaskManager,
     Settings,
+    /// Switch to the Windows taskbar (the tray icon or shortcut brings the dock back).
+    WindowsTaskbar,
     /// Start a recently closed app again.
     Reopen {
         key: String,

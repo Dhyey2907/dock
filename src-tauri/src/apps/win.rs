@@ -686,6 +686,34 @@ pub fn frame_rect(hwnd: isize) -> Option<crate::shell::placement::Rect> {
     Some(to_rect(r))
 }
 
+/// A window's size for its live picture: as it is on screen, or for a minimized window the size
+/// it restores to (Windows still draws minimized windows' pictures, at that size).
+pub fn picture_size(hwnd: isize) -> Option<(u32, u32)> {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowPlacement, WINDOWPLACEMENT, WPF_RESTORETOMAXIMIZED,
+    };
+    if !is_minimized(hwnd) {
+        return frame_rect(hwnd).map(|r| (r.width, r.height));
+    }
+    let handle = HWND(hwnd as *mut c_void);
+    let mut wp = WINDOWPLACEMENT {
+        length: std::mem::size_of::<WINDOWPLACEMENT>() as u32,
+        ..Default::default()
+    };
+    // SAFETY: a read-only query into a correctly sized local.
+    unsafe { GetWindowPlacement(handle, &mut wp) }.ok()?;
+    if wp.flags.0 & WPF_RESTORETOMAXIMIZED.0 != 0 {
+        // It comes back maximized: as big as its screen's work area.
+        // SAFETY: a plain query on a window handle.
+        let monitor = unsafe { MonitorFromWindow(handle, MONITOR_DEFAULTTONEAREST) };
+        if let Some(screen) = monitor_info(monitor) {
+            return Some((screen.work.width, screen.work.height));
+        }
+    }
+    let r = to_rect(wp.rcNormalPosition);
+    (r.width > 0 && r.height > 0).then_some((r.width, r.height))
+}
+
 pub fn is_minimized(hwnd: isize) -> bool {
     // SAFETY: a plain query on a window handle.
     unsafe { windows::Win32::UI::WindowsAndMessaging::IsIconic(HWND(hwnd as *mut c_void)) }.as_bool()
@@ -1036,6 +1064,71 @@ pub fn hide_quietly(hwnd: isize) {
     unsafe {
         let _ = ShowWindow(HWND(hwnd as *mut c_void), SW_HIDE);
     }
+}
+
+/// Show our own window on top, letting it take the focus (unlike `show_on_top_quietly`).
+pub fn show_on_top(hwnd: isize) {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        SetWindowPos, HWND_TOPMOST, SWP_NOMOVE, SWP_NOSIZE, SWP_SHOWWINDOW,
+    };
+    // SAFETY: z-order and visibility of our own live window.
+    unsafe {
+        let _ = SetWindowPos(
+            HWND(hwnd as *mut c_void),
+            Some(HWND_TOPMOST),
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW,
+        );
+    }
+}
+
+/// Let our own window take the focus again (undoing `show_on_top_quietly`'s no-activate).
+pub fn make_activatable(hwnd: isize) {
+    use windows::Win32::UI::WindowsAndMessaging::{GetWindowLongPtrW, SetWindowLongPtrW, WS_EX_NOACTIVATE};
+    let handle = HWND(hwnd as *mut c_void);
+    // SAFETY: style bits on our own live window.
+    unsafe {
+        let style = GetWindowLongPtrW(handle, GWL_EXSTYLE);
+        let active = style & !(WS_EX_NOACTIVATE.0 as isize);
+        if active != style {
+            SetWindowLongPtrW(handle, GWL_EXSTYLE, active);
+        }
+    }
+}
+
+/// Resize our own window to `width` × `height` physical pixels (its whole rectangle), now.
+pub fn resize(hwnd: isize, width: i32, height: i32) {
+    use windows::Win32::UI::WindowsAndMessaging::{SetWindowPos, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER};
+    // SAFETY: size of our own live window.
+    unsafe {
+        let _ = SetWindowPos(
+            HWND(hwnd as *mut c_void),
+            None,
+            0,
+            0,
+            width,
+            height,
+            SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE,
+        );
+    }
+}
+
+/// The size of a window's page area (its client area), physical pixels.
+pub fn client_size(hwnd: isize) -> Option<(i32, i32)> {
+    use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
+    let mut r = RECT::default();
+    // SAFETY: a read-only query into a local.
+    unsafe { GetClientRect(HWND(hwnd as *mut c_void), &mut r) }.ok()?;
+    Some((r.right - r.left, r.bottom - r.top))
+}
+
+/// Whether a window is shown.
+pub fn is_visible(hwnd: isize) -> bool {
+    // SAFETY: a read-only query; a window that's gone is just not visible.
+    unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(HWND(hwnd as *mut c_void)).as_bool() }
 }
 
 /// Send keys as if typed (for the switcher: a harmless key before Alt is let go, so the app

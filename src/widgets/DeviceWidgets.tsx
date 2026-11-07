@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { Fluent } from "../core/Fluent";
+import { useWindowsLook } from "../core/system";
 import {
   Bluetooth,
   BatteryLow,
@@ -35,7 +37,12 @@ function batteryIcon(level: number): LucideIcon {
 }
 
 export function BluetoothTile() {
-  return <Bluetooth size={18} strokeWidth={1.9} aria-hidden="true" />;
+  const windowsLook = useWindowsLook();
+  return windowsLook ? (
+    <Fluent glyph={0xe702} />
+  ) : (
+    <Bluetooth size={18} strokeWidth={1.9} aria-hidden="true" />
+  );
 }
 
 export function BluetoothPanel() {

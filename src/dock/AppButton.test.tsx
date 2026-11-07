@@ -11,6 +11,7 @@ const calls = {
   appIcon: vi.fn(async (_source: string) => "data:image/png;base64,AAAA"),
   appPreviews: vi.fn(async (_key: string, _anchorX: number) => {}),
   previewHide: vi.fn(async (_delay: number) => {}),
+  tooltipShow: vi.fn(async (_text: string, _anchorX: number) => {}),
   appDragOut: vi.fn(async (_key: string) => {}),
 };
 vi.mock("../core/ipc", () => ({ ipc: calls, events: {} }));
@@ -47,7 +48,7 @@ describe("AppButton", () => {
     expect(button).toHaveAttribute("data-running", "true");
     expect(button).toHaveAttribute("data-active", "true");
     expect(button).toHaveAttribute("data-many", "true");
-    expect(button).toHaveAttribute("title", "Docs");
+    expect(button).toHaveAttribute("data-title", "Docs");
     expect(button).toHaveAttribute("data-app-key", "pin:chrome");
   });
 
@@ -71,7 +72,7 @@ describe("AppButton", () => {
     const frozen = screen.getByRole("button", { name: "Google Chrome" });
     expect(frozen).toHaveAttribute("data-attention", "true");
     expect(frozen).toHaveAttribute("data-hung", "true");
-    expect(frozen.getAttribute("title")).toContain("Not responding");
+    expect(frozen.getAttribute("data-title")).toContain("Not responding");
   });
 
   it("draws a divider after it when asked", () => {

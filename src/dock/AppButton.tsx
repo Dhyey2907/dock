@@ -17,6 +17,9 @@ import {
 import { dropTargetAt, useFolderDrag } from "./folderDrag";
 import { dropIntoFolder } from "./folders";
 
+/** How long the mouse rests on an app that isn't running before its name shows. */
+const TOOLTIP_DELAY_MS = 600;
+
 /** Waits before asking again for an icon that didn't load. */
 const RETRY_DELAYS = [5_000, 15_000, 45_000];
 
@@ -41,6 +44,7 @@ export function AppButton({ app, inFolder = false }: { app: DockApp; inFolder?: 
   const hoverTimer = useRef<number | undefined>(undefined);
   const press = useRef<{ x: number; y: number; dragging: boolean } | null>(null);
   const dragged = useRef(false);
+  const tooltipShown = useRef(false);
 
   useEffect(() => {
     let alive = true;
@@ -86,9 +90,16 @@ export function AppButton({ app, inFolder = false }: { app: DockApp; inFolder?: 
     ipc.appClick(app.key, anchorOf(event.currentTarget, event.screenX)).catch(report);
   };
   const onMouseEnter = (event: MouseEvent<HTMLButtonElement>) => {
-    if (!running || apps?.previews === false) return;
     const element = event.currentTarget;
     window.clearTimeout(hoverTimer.current);
+    // Not running (or previews off): just its name, the way the taskbar labels its buttons.
+    if (!running || apps?.previews === false) {
+      hoverTimer.current = window.setTimeout(() => {
+        tooltipShown.current = true;
+        ipc.tooltipShow(title, anchorOf(element, 0)).catch(report);
+      }, TOOLTIP_DELAY_MS);
+      return;
+    }
     hoverTimer.current = window.setTimeout(
       () => ipc.appPreviews(app.key, anchorOf(element, 0)).catch(report),
       previewOpen ? PREVIEW_SWITCH_DELAY_MS : PREVIEW_DELAY_MS,
@@ -97,6 +108,8 @@ export function AppButton({ app, inFolder = false }: { app: DockApp; inFolder?: 
   const onMouseLeave = () => {
     window.clearTimeout(hoverTimer.current);
     if (running) ipc.previewHide(300).catch(report);
+    else if (tooltipShown.current) ipc.previewHide(0).catch(report);
+    tooltipShown.current = false;
   };
   const folderDrag = useFolderDrag();
   const onPointerDown = (event: PointerEvent<HTMLButtonElement>) => {
@@ -158,7 +171,7 @@ export function AppButton({ app, inFolder = false }: { app: DockApp; inFolder?: 
         data-drop-target={isDropTarget}
         data-in-folder={inFolder}
         aria-label={app.name}
-        title={title}
+        data-title={title}
         onClick={onClick}
         onAuxClick={onAuxClick}
         onContextMenu={onContextMenu}

@@ -48,6 +48,10 @@ pub struct PreviewContent {
     pub width: f64,
     pub height: f64,
     pub cards: Vec<layout::PreviewCard>,
+    /// Just a label (a button's name, like the taskbar's tooltips), instead of window pictures.
+    #[ts(optional)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tooltip: Option<String>,
 }
 
 struct State {
@@ -86,6 +90,9 @@ fn window(app: &AppHandle) -> AppResult<tauri::WebviewWindow> {
         })
         .build()?;
     shell::panel::round_corners(&window);
+    // A quiet tool window from the start, so its size is measured with the style it shows with.
+    super::win::show_on_top_quietly(window.hwnd()?.0 as isize);
+    super::win::hide_quietly(window.hwnd()?.0 as isize);
     Ok(window)
 }
 
@@ -152,13 +159,11 @@ pub fn show(app: &AppHandle, label: &str, dock_app: &DockApp, anchor_x: i32) -> 
         .windows
         .iter()
         .map(|w| {
-            let size = if w.minimized {
-                None
-            } else {
-                super::win::frame_rect(w.hwnd)
-            };
-            let (sw, sh) = size.map_or((0, 0), |r| (r.width, r.height));
-            (w.hwnd, w.title.clone(), w.active, w.minimized, w.hung, sw, sh)
+            // Minimized windows get their live picture too (at the size they restore to); only
+            // a window Windows can't size shows its icon instead.
+            let size = super::win::picture_size(w.hwnd);
+            let (sw, sh) = size.unwrap_or((0, 0));
+            (w.hwnd, w.title.clone(), w.active, size.is_none(), w.hung, sw, sh)
         })
         .collect();
     let max_width = f64::from(geometry.screen_width) / geometry.scale - 48.0;
@@ -171,7 +176,51 @@ pub fn show(app: &AppHandle, label: &str, dock_app: &DockApp, anchor_x: i32) -> 
         width,
         height,
         cards,
+        tooltip: None,
     };
+    present(app, label, anchor_x, content, geometry.scale)
+}
+
+/// Height of a tooltip, logical pixels.
+const TOOLTIP_HEIGHT: f64 = 32.0;
+
+/// A tooltip's width for `text`, logical pixels: roughly its text at 12 px, plus padding.
+fn tooltip_width(text: &str) -> f64 {
+    let chars = text.chars().count() as f64;
+    (chars * 7.4 + 26.0).clamp(40.0, 420.0).round()
+}
+
+/// Show `text` as a tooltip over dock `label`, centred on `anchor_x` (screen pixels), the way the
+/// taskbar labels its buttons.
+pub fn show_tooltip(app: &AppHandle, label: &str, text: &str, anchor_x: i32) -> AppResult<()> {
+    let text: String = text.chars().take(120).collect();
+    if text.trim().is_empty() || shell::panel::is_open(app) {
+        return Ok(());
+    }
+    let geometry =
+        shell::geometry_of(app, label).ok_or_else(|| AppError::InvalidInput("unknown dock".into()))?;
+    let content = PreviewContent {
+        dock: label.to_string(),
+        key: String::new(),
+        name: String::new(),
+        icon: String::new(),
+        width: tooltip_width(&text),
+        height: TOOLTIP_HEIGHT,
+        cards: Vec::new(),
+        tooltip: Some(text),
+    };
+    present(app, label, anchor_x, content, geometry.scale)
+}
+
+/// Put `content` in the popup above dock `label` at `anchor_x`, and its live pictures in it.
+fn present(
+    app: &AppHandle,
+    label: &str,
+    anchor_x: i32,
+    content: PreviewContent,
+    scale: f64,
+) -> AppResult<()> {
+    let (width, height) = (content.width, content.height);
     STATE.generation.fetch_add(1, Ordering::SeqCst);
     let unchanged = STATE.open.lock().unwrap_or_else(|e| e.into_inner()).as_ref() == Some(&content);
     let popup = window(app)?;
@@ -180,7 +229,7 @@ pub fn show(app: &AppHandle, label: &str, dock_app: &DockApp, anchor_x: i32) -> 
     }
     *STATE.open.lock().unwrap_or_else(|e| e.into_inner()) = Some(content.clone());
     app.emit(PREVIEW_OPEN, &content)?;
-    popup.set_size(tauri::LogicalSize::new(width, height))?;
+    shell::panel::set_page_size(&popup, width, height)?;
     let outer = popup.outer_size()?;
     let Some(rect) = shell::panel::popup_rect(app, label, anchor_x, (outer.width, outer.height)) else {
         return Ok(());
@@ -188,7 +237,7 @@ pub fn show(app: &AppHandle, label: &str, dock_app: &DockApp, anchor_x: i32) -> 
     popup.set_position(PhysicalPosition::new(rect.x, rect.y))?;
     let hwnd = popup.hwnd()?.0 as isize;
     super::win::show_on_top_quietly(hwnd);
-    register(hwnd, &content.cards, geometry.scale);
+    register(hwnd, &content.cards, scale);
     Ok(())
 }
 

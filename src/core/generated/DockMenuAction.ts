@@ -3,4 +3,4 @@
 /**
  * A choice in the dock's own menu.
  */
-export type DockMenuAction = { "type": "showDesktop" } | { "type": "minimizeOthers" } | { "type": "closeAll" } | { "type": "taskManager" } | { "type": "settings" } | { "type": "reopen", key: string, } | { "type": "quick", id: string, };
+export type DockMenuAction = { "type": "showDesktop" } | { "type": "minimizeOthers" } | { "type": "closeAll" } | { "type": "taskManager" } | { "type": "settings" } | { "type": "windowsTaskbar" } | { "type": "reopen", key: string, } | { "type": "quick", id: string, };

@@ -126,6 +126,7 @@ export function Toggle({
 }
 
 const STYLES: [Theme, string][] = [
+  ["windows", "Windows 11"],
   ["glass", "Glass"],
   ["iosGlass", "iOS Glass"],
   ["midnight", "Midnight"],

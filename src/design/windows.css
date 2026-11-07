@@ -1,0 +1,351 @@
+/* The Windows 11 look: the dock drawn like Windows' own taskbar (its acrylic, sizes, 4px
+   corners, running marks and accent), with Windows' icon font, and popups, menus, previews
+   and tooltips like its flyouts. Loaded last, so it wins over the other styles. */
+
+/* ---------- Windows' icon font ---------- */
+.fluent {
+  display: inline-block;
+  font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets";
+  font-style: normal;
+  font-weight: normal;
+  line-height: 1;
+  speak: never;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- The bar ---------- */
+.dock[data-theme="windows"] {
+  --glass-filter: blur(calc(36px * var(--blur-scale, 1))) saturate(1.3) brightness(0.62);
+  --glass-tint: rgba(28, 28, 28, 0.74);
+  --glass-fallback: rgba(28, 28, 28, 0.96);
+  --glass-rim: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --glass-sheen: transparent;
+  --dock-fg: #ffffff;
+  --dock-hover: rgba(255, 255, 255, 0.0605);
+  --dock-pressed: rgba(255, 255, 255, 0.0419);
+  --dock-active-bg: rgba(255, 255, 255, 0.0605);
+  --dock-running: rgba(255, 255, 255, 0.55);
+  --dock-accent: color-mix(in srgb, var(--system-accent, #0078d4) 52%, white);
+  --dock-border: rgba(255, 255, 255, 0.0837);
+  --dock-search-bg: rgba(255, 255, 255, 0.0605);
+  --dock-search-fg: rgba(255, 255, 255, 0.786);
+  font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+}
+.dock[data-theme="windows"][data-system-light="true"] {
+  --glass-filter: blur(calc(36px * var(--blur-scale, 1))) saturate(1.3) brightness(1.35);
+  --glass-tint: rgba(238, 238, 238, 0.74);
+  --glass-fallback: rgba(238, 238, 238, 0.96);
+  --glass-rim: inset 0 1px 0 rgba(0, 0, 0, 0.06);
+  --dock-fg: #1b1b1b;
+  --dock-hover: rgba(0, 0, 0, 0.0373);
+  --dock-pressed: rgba(0, 0, 0, 0.0241);
+  --dock-active-bg: rgba(255, 255, 255, 0.7);
+  --dock-running: rgba(0, 0, 0, 0.45);
+  --dock-accent: color-mix(in srgb, var(--system-accent, #0078d4) 88%, black);
+  --dock-border: rgba(0, 0, 0, 0.0578);
+  --dock-search-bg: rgba(255, 255, 255, 0.7);
+  --dock-search-fg: rgba(0, 0, 0, 0.62);
+}
+
+/* Windows' sizes: on a 48 px bar (Small), 40 px buttons and 24 px icons, like the taskbar. */
+.dock[data-theme="windows"],
+.dock[data-theme="windows"][data-size="medium"] {
+  --base-button: 44px;
+  --base-app-width: 46px;
+  --base-icon: 26px;
+}
+.dock[data-theme="windows"][data-size="small"] {
+  --base-button: 40px;
+  --base-app-width: 44px;
+  --base-icon: 24px;
+}
+.dock[data-theme="windows"][data-size="large"] {
+  --base-button: 50px;
+  --base-app-width: 52px;
+  --base-icon: 30px;
+}
+
+.dock[data-theme="windows"]
+  :is(.dock-icon-button, .dock-app, .dock-widget, .dock-gallery-button, .dock-folder) {
+  border-radius: 4px;
+  transition: background 83ms linear;
+}
+.dock[data-theme="windows"] :is(.dock-icon-button, .dock-app, .dock-widget, .dock-gallery-button):hover {
+  background: var(--dock-hover);
+}
+.dock[data-theme="windows"] :is(.dock-icon-button, .dock-app, .dock-widget, .dock-gallery-button):active {
+  background: var(--dock-pressed);
+  transform: none;
+}
+/* Pressing an app shrinks its icon a little, as the taskbar does. */
+.dock[data-theme="windows"] .dock-app-icon {
+  transition: transform 100ms ease-out;
+}
+.dock[data-theme="windows"] .dock-app:active .dock-app-icon {
+  transform: scale(0.86);
+}
+.dock[data-theme="windows"] .dock-app[data-active="true"] {
+  background: var(--dock-active-bg);
+}
+.dock[data-theme="windows"] .dock-app[data-active="true"]:hover {
+  background: color-mix(in srgb, var(--dock-active-bg) 100%, var(--dock-hover));
+}
+.dock[data-theme="windows"] .dock-widget[data-open="true"] {
+  background: var(--dock-hover);
+}
+
+/* Running: a short grey mark under the icon; in front: a longer one in the accent colour. */
+.dock[data-theme="windows"] .dock-app-indicator {
+  bottom: 1px;
+  height: 3px;
+  border-radius: 1.5px;
+  background: var(--dock-running);
+  transition:
+    width 167ms cubic-bezier(0, 0, 0, 1),
+    background 83ms linear;
+}
+.dock[data-theme="windows"][data-edge="top"] .dock-app-indicator {
+  top: 1px;
+}
+.dock[data-theme="windows"] .dock-app[data-running="true"] .dock-app-indicator {
+  width: 6px;
+  opacity: 1;
+}
+.dock[data-theme="windows"] .dock-app[data-running="true"]:hover .dock-app-indicator {
+  width: 10px;
+}
+.dock[data-theme="windows"] .dock-app[data-many="true"] .dock-app-indicator {
+  width: 6px;
+}
+.dock[data-theme="windows"] .dock-app[data-active="true"] .dock-app-indicator {
+  width: 16px;
+  background: var(--dock-accent);
+}
+
+.dock[data-theme="windows"] .dock-start {
+  width: var(--app-width);
+}
+.dock[data-theme="windows"] .dock-start svg {
+  width: calc(22px * var(--scale, 1));
+  height: calc(22px * var(--scale, 1));
+  transition: transform 100ms ease-out;
+}
+.dock[data-theme="windows"] .dock-start:active svg {
+  transform: scale(0.86);
+}
+.dock[data-theme="windows"] .dock-icon-button .fluent {
+  font-size: calc(18px * var(--scale, 1)) !important;
+}
+
+/* ---------- Search box ---------- */
+.dock-search-box {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: calc(10px * var(--scale, 1));
+  width: calc(196px * var(--scale, 1));
+  height: calc(32px * var(--scale, 1));
+  margin: 0 calc(4px * var(--scale, 1));
+  padding: 0 calc(14px * var(--scale, 1));
+  border: 1px solid var(--dock-border);
+  border-radius: 999px;
+  background: var(--dock-search-bg, var(--dock-hover));
+  color: var(--dock-search-fg, inherit);
+  font: inherit;
+  font-size: calc(14px * var(--scale, 1));
+  cursor: default;
+  transition: background 83ms linear;
+}
+.dock-search-box:hover {
+  background: color-mix(in srgb, var(--dock-search-bg, var(--dock-hover)) 70%, var(--dock-fg) 6%);
+}
+.dock-search-box svg {
+  flex: none;
+}
+
+/* ---------- Apps in the middle (full-width docks) ---------- */
+.dock[data-style="full"][data-center="true"] .dock-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+}
+.dock[data-style="full"][data-center="true"] .dock-group-apps {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+}
+.dock[data-style="full"][data-center="true"] .dock-spacer {
+  display: none;
+}
+.dock[data-style="full"][data-center="true"] .dock-group-tray {
+  grid-column: 3;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  height: 100%;
+}
+
+/* ---------- The taskbar's corner ---------- */
+.tray-status {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(9px * var(--scale, 1));
+  padding: 0 2px;
+}
+.tray-status .fluent {
+  font-size: calc(16px * var(--scale, 1)) !important;
+}
+.tray-percent {
+  margin-left: calc(-4px * var(--scale, 1));
+  font-size: calc(12px * var(--scale, 1));
+}
+.tray-clock {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: calc(12px * var(--scale, 1));
+  line-height: calc(16px * var(--scale, 1));
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.tray-language {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: calc(12px * var(--scale, 1));
+  line-height: calc(16px * var(--scale, 1));
+}
+.tray-glyph {
+  display: grid;
+  place-items: center;
+  min-width: calc(16px * var(--scale, 1));
+}
+.tray-glyph .fluent {
+  font-size: calc(14px * var(--scale, 1)) !important;
+}
+.dock[data-theme="windows"] .dock-widget:is([data-kind="hiddenIcons"], [data-kind="notifications"]) {
+  min-width: calc(32px * var(--scale, 1));
+  padding: 0;
+}
+
+/* ---------- Popups, menus, previews and tooltips like Windows 11's flyouts ---------- */
+:is(.panel, .preview, .switcher)[data-theme="windows"] {
+  --panel-fg: #ffffff;
+  --panel-faint: rgba(255, 255, 255, 0.786);
+  --panel-line: rgba(255, 255, 255, 0.0837);
+  --panel-hover: rgba(255, 255, 255, 0.0605);
+  --panel-accent: color-mix(in srgb, var(--system-accent, #0078d4) 52%, white);
+  font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  background: rgba(36, 36, 36, 0.72);
+}
+:is(.panel, .preview, .switcher)[data-theme="windows"][data-system-light="true"] {
+  --panel-fg: #1b1b1b;
+  --panel-faint: rgba(0, 0, 0, 0.62);
+  --panel-line: rgba(0, 0, 0, 0.0578);
+  --panel-hover: rgba(0, 0, 0, 0.0373);
+  --panel-accent: color-mix(in srgb, var(--system-accent, #0078d4) 88%, black);
+  background: rgba(243, 243, 243, 0.72);
+}
+.panel[data-theme="windows"] .jump {
+  padding: 4px;
+}
+.panel[data-theme="windows"] .jump-row {
+  height: 36px;
+  padding: 0 11px;
+  gap: 12px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+.panel[data-theme="windows"] .jump-icon {
+  width: 16px;
+  height: 16px;
+}
+.panel[data-theme="windows"] .jump-title {
+  height: 32px;
+  padding: 10px 11px 0;
+  font-size: 12px;
+  font-weight: 600;
+}
+.panel[data-theme="windows"] .jump-divider {
+  width: calc(100% + 8px);
+  margin: 2px -4px;
+}
+.panel[data-theme="windows"] .panel-button {
+  border-radius: 4px;
+  color: #000;
+}
+
+/* Window previews: a title row (icon, name, close) over each live picture. */
+.preview[data-theme="windows"] .preview-card {
+  border-radius: 6px;
+}
+.preview[data-theme="windows"] .preview-card[data-active="true"] {
+  box-shadow: none;
+  background: var(--panel-hover);
+}
+.preview[data-theme="windows"] .preview-title {
+  font-size: 12px;
+}
+.preview[data-theme="windows"] .preview-close {
+  border-radius: 4px;
+}
+
+/* A button's label: a small dark card, like the taskbar's tooltips. */
+.preview-tooltip {
+  display: grid;
+  place-items: center;
+  padding: 0 10px;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.preview-tooltip[data-theme="windows"] {
+  background: rgba(44, 44, 44, 0.9);
+}
+.preview-tooltip[data-theme="windows"][data-system-light="true"] {
+  background: rgba(249, 249, 249, 0.92);
+}
+
+/* The Alt+Tab switcher, in the accent-free Windows style. */
+.switcher[data-theme="windows"] {
+  background: rgba(32, 32, 32, 0.82);
+}
+.switcher[data-theme="windows"][data-system-light="true"] {
+  background: rgba(243, 243, 243, 0.86);
+}
+
+/* Widgets left of the centred apps (the taskbar corner's stay right). */
+.dock[data-style="full"][data-center="true"] .dock-group-left {
+  grid-column: 1;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+}
+.dock[data-style="full"][data-center="true"] .dock-group-apps {
+  grid-row: 1;
+}
+.dock[data-style="full"][data-center="true"] .dock-group-left,
+.dock[data-style="full"][data-center="true"] .dock-group-tray {
+  grid-row: 1;
+}
+
+/* Show desktop: a thin strip at the far edge, as on Windows 11. */
+.dock[data-theme="windows"] .dock-show-desktop {
+  width: calc(10px * var(--scale, 1));
+  height: 100%;
+  margin-left: calc(4px * var(--scale, 1));
+  border-left: 1px solid var(--dock-border);
+  border-radius: 0;
+}
+
+.dock[data-theme="windows"][data-style="full"] .dock-content {
+  padding-right: 0;
+}

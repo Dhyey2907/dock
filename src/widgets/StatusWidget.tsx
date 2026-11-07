@@ -26,6 +26,9 @@ import {
 } from "lucide-react";
 
 import { ipc } from "../core/ipc";
+import { Fluent } from "../core/Fluent";
+import { batteryGlyph, type GlyphName } from "../core/fluentGlyphs";
+import { useWindowsLook } from "../core/system";
 import type { NetworkState } from "../core/generated/NetworkState";
 import type { QuickState } from "../core/generated/QuickState";
 import type { RadioKind } from "../core/generated/RadioKind";
@@ -71,8 +74,46 @@ function batteryKey(percent: number, charging: boolean) {
   return percent >= 15 ? "low" : "empty";
 }
 
+const FLUENT_VOLUME: Record<string, GlyphName> = {
+  off: "mute",
+  low: "volume1",
+  mid: "volume2",
+  high: "volume3",
+};
+const FLUENT_NETWORK: Record<string, GlyphName> = {
+  off: "offline",
+  wired: "ethernet",
+  wifi0: "wifi1",
+  wifi1: "wifi1",
+  wifi2: "wifi2",
+  wifi3: "wifi",
+};
+
+/** The Windows 11 taskbar's corner: network, volume and battery in Windows' own icons, with the
+ *  battery percentage, as one button. */
+function WindowsStatusTile() {
+  const { sound, network, stats } = useWidgets();
+  const battery = stats?.battery;
+  return (
+    <span className="tray-status">
+      <Fluent glyph={FLUENT_NETWORK[networkKey(network)]} />
+      <Fluent glyph={FLUENT_VOLUME[volumeKey(sound)]} />
+      {battery != null && (
+        <>
+          <Fluent glyph={batteryGlyph(battery, stats?.charging ?? false)} />
+          <span className="tray-percent">{battery}%</span>
+        </>
+      )}
+    </span>
+  );
+}
+
 /** The taskbar's tray area at a glance: network, volume, battery. */
 export function StatusTile() {
+  return useWindowsLook() ? <WindowsStatusTile /> : <PlainStatusTile />;
+}
+
+function PlainStatusTile() {
   const { sound, network, stats } = useWidgets();
   const NetIcon = NETWORK[networkKey(network)];
   const VolIcon = VOLUME[volumeKey(sound)];

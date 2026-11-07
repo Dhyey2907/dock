@@ -34,7 +34,7 @@ pub struct SwitchItem {
     pub app_name: String,
     /// Icon source for `app_icon`.
     pub icon: String,
-    /// Minimized: no live picture, so the page shows the app's icon instead.
+    /// No live picture (Windows couldn't size the window), so the page shows its icon instead.
     pub minimized: bool,
     /// The card, and the live picture inside it, in logical pixels within the switcher.
     pub card: Area,
@@ -86,7 +86,11 @@ pub fn layout(shapes: &[(u32, u32)], max_width: f64, max_height: f64) -> ((f64, 
         let mut rows: Vec<Vec<(usize, f64)>> = vec![Vec::new()];
         let mut used = 0.0;
         for (i, &(w, h)) in shapes.iter().enumerate() {
-            let aspect = if w > 0 && h > 0 { f64::from(w) / f64::from(h) } else { 1.6 };
+            let aspect = if w > 0 && h > 0 {
+                f64::from(w) / f64::from(h)
+            } else {
+                1.6
+            };
             let width = (thumb_h * aspect).clamp(thumb_h * 0.75, thumb_h * 2.2) + 2.0 * INSET;
             let row = rows.last_mut().expect("a row");
             if !row.is_empty() && used + GAP + width > room {
@@ -103,13 +107,12 @@ pub fn layout(shapes: &[(u32, u32)], max_width: f64, max_height: f64) -> ((f64, 
     let mut thumb_h = THUMB_H;
     let mut rows = fit(thumb_h);
     let card_h = |t: f64| TITLE + t + INSET;
-    while thumb_h > 70.0
-        && rows.len() as f64 * (card_h(thumb_h) + GAP) - GAP + 2.0 * PADDING > max_height
-    {
+    while thumb_h > 70.0 && rows.len() as f64 * (card_h(thumb_h) + GAP) - GAP + 2.0 * PADDING > max_height {
         thumb_h -= 10.0;
         rows = fit(thumb_h);
     }
-    let row_width = |row: &Vec<(usize, f64)>| row.iter().map(|r| r.1).sum::<f64>() + GAP * (row.len().max(1) - 1) as f64;
+    let row_width =
+        |row: &Vec<(usize, f64)>| row.iter().map(|r| r.1).sum::<f64>() + GAP * (row.len().max(1) - 1) as f64;
     let width = rows.iter().map(row_width).fold(0.0, f64::max) + 2.0 * PADDING;
     let height = rows.len() as f64 * (card_h(thumb_h) + GAP) - GAP + 2.0 * PADDING;
     let mut areas = vec![(Area::default(), Area::default()); shapes.len()];
@@ -117,7 +120,12 @@ pub fn layout(shapes: &[(u32, u32)], max_width: f64, max_height: f64) -> ((f64, 
         let mut x = (width - row_width(row)) / 2.0;
         let y = PADDING + r as f64 * (card_h(thumb_h) + GAP);
         for &(i, w) in row {
-            let card = Area { x, y, width: w, height: card_h(thumb_h) };
+            let card = Area {
+                x,
+                y,
+                width: w,
+                height: card_h(thumb_h),
+            };
             let (sw, sh) = shapes[i];
             let inner_w = w - 2.0 * INSET;
             let (tw, th) = if sw > 0 && sh > 0 {
@@ -143,18 +151,11 @@ pub fn layout(shapes: &[(u32, u32)], max_width: f64, max_height: f64) -> ((f64, 
 /// pixels; also returns the switcher's size.
 fn items(max_width: f64, max_height: f64) -> ((f64, f64), Vec<SwitchItem>) {
     let windows: Vec<_> = super::win::windows().into_iter().take(MAX_ITEMS).collect();
-    let minimized: Vec<bool> = windows.iter().map(|w| super::win::is_minimized(w.hwnd)).collect();
-    let shapes: Vec<(u32, u32)> = windows
-        .iter()
-        .zip(&minimized)
-        .map(|(w, &min)| {
-            if min {
-                (0, 0)
-            } else {
-                super::win::frame_rect(w.hwnd).map_or((0, 0), |r| (r.width, r.height))
-            }
-        })
-        .collect();
+    // Minimized windows get their live picture too, at the size they restore to; only a window
+    // Windows can't size shows its icon instead.
+    let sizes: Vec<Option<(u32, u32)>> = windows.iter().map(|w| super::win::picture_size(w.hwnd)).collect();
+    let minimized: Vec<bool> = sizes.iter().map(Option::is_none).collect();
+    let shapes: Vec<(u32, u32)> = sizes.iter().map(|s| s.unwrap_or((0, 0))).collect();
     let (size, areas) = layout(&shapes, max_width, max_height);
     let items = windows
         .into_iter()
@@ -208,7 +209,10 @@ fn register_thumbnails(dest: isize, items: &[SwitchItem], scale: f64) {
                 continue;
             };
             let props = DWM_THUMBNAIL_PROPERTIES {
-                dwFlags: DWM_TNP_RECTDESTINATION | DWM_TNP_VISIBLE | DWM_TNP_OPACITY | DWM_TNP_SOURCECLIENTAREAONLY,
+                dwFlags: DWM_TNP_RECTDESTINATION
+                    | DWM_TNP_VISIBLE
+                    | DWM_TNP_OPACITY
+                    | DWM_TNP_SOURCECLIENTAREAONLY,
                 rcDestination: RECT {
                     left: px(item.thumb.x),
                     top: px(item.thumb.y),
@@ -311,7 +315,9 @@ pub fn handle(app: &AppHandle, key: SwitchKey) {
             let opening = state.is_none();
             let mut placed = None;
             if opening {
-                let Some((screen, scale)) = target_screen(app) else { return };
+                let Some((screen, scale)) = target_screen(app) else {
+                    return;
+                };
                 let max_w = f64::from(screen.work.width) / scale * 0.92;
                 let max_h = f64::from(screen.work.height) / scale * 0.85;
                 let (size, items) = items(max_w, max_h);

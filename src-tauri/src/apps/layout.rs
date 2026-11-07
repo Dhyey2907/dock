@@ -217,6 +217,7 @@ pub struct PreviewCard {
     pub hwnd: isize,
     pub title: String,
     pub active: bool,
+    /// No live picture (Windows couldn't size the window): the page shows the app icon.
     pub minimized: bool,
     pub hung: bool,
     pub x: f64,

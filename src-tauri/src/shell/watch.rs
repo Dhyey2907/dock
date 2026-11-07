@@ -23,11 +23,11 @@ use windows::{
             Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK},
             Shell::{DefSubclassProc, SetWindowSubclass, ABN_FULLSCREENAPP, ABN_POSCHANGED},
             WindowsAndMessaging::{
-                FindWindowW, GetClassNameW, GetForegroundWindow, GetWindowLongW, GetWindowRect, GetWindowThreadProcessId,
-                IsZoomed, RegisterWindowMessageW, EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_SHOW, EVENT_SYSTEM_FOREGROUND,
-                GWL_STYLE, OBJID_WINDOW, SPI_SETDESKWALLPAPER, SPI_SETWORKAREA, WINEVENT_OUTOFCONTEXT,
-                WINEVENT_SKIPOWNPROCESS, WM_DISPLAYCHANGE, WM_ENDSESSION, WM_EXITSIZEMOVE, WM_NCDESTROY,
-                WM_SETTINGCHANGE, WS_CAPTION,
+                FindWindowW, GetClassNameW, GetForegroundWindow, GetWindowLongW, GetWindowRect,
+                GetWindowThreadProcessId, IsZoomed, RegisterWindowMessageW, EVENT_OBJECT_LOCATIONCHANGE,
+                EVENT_OBJECT_SHOW, EVENT_SYSTEM_FOREGROUND, GWL_STYLE, OBJID_WINDOW, SPI_SETDESKWALLPAPER,
+                SPI_SETWORKAREA, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS, WM_DISPLAYCHANGE,
+                WM_ENDSESSION, WM_EXITSIZEMOVE, WM_NCDESTROY, WM_SETTINGCHANGE, WS_CAPTION,
             },
         },
     },
@@ -176,7 +176,15 @@ fn watch_taskbar() {
     // SAFETY: an out-of-context hook with a `'static` callback, on the UI thread (the window
     // procedure or `install`), limited to Explorer's process.
     let hook = unsafe {
-        SetWinEventHook(EVENT_OBJECT_SHOW, EVENT_OBJECT_SHOW, None, Some(on_show), explorer, 0, WINEVENT_OUTOFCONTEXT)
+        SetWinEventHook(
+            EVENT_OBJECT_SHOW,
+            EVENT_OBJECT_SHOW,
+            None,
+            Some(on_show),
+            explorer,
+            0,
+            WINEVENT_OUTOFCONTEXT,
+        )
     };
     if hook.is_invalid() {
         tracing::warn!("could not watch the Windows taskbar; it may peek out in Dock only mode");
