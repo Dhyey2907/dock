@@ -9,3 +9,13 @@ dist
 .DS_Store
 src-tauri/target
 src-tauri/gen/schemas
+
+# Local secrets and settings
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+settings.json
+!src-tauri/**/settings.json
+coverage
