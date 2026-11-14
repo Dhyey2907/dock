@@ -46,6 +46,24 @@ const answers: Record<string, unknown> = {
   windowsTheme: "dark",
   quickGet: { wifi: true, bluetooth: false, brightness: 70 },
   inputLanguage: { language: "ENG", region: "IN", several: true },
+  serviceConnected: ["stripe"],
+  serviceRevenue: {
+    service: "stripe",
+    currency: "USD",
+    daily: Array.from({ length: 30 }, (_, i) => i * 10),
+    total: 4350,
+  },
+  serviceRevenueAll: [{ service: "stripe", currency: "USD", daily: [], total: 4350 }],
+  serviceTraffic: {
+    service: "plausible",
+    week: 1200,
+    previous: 1000,
+    daily: Array.from({ length: 14 }, (_, i) => i * 20),
+  },
+  serviceCount: { service: "linear", value: 7, second: 2, note: "Healthy", items: ["ENG-1 Fix it"] },
+  githubOverview: { notifications: 3, pullRequests: 2, stars: 140, login: "me" },
+  gmailUnread: 12,
+  fxRate: 1,
 };
 
 const ipc = new Proxy({}, { get: (_t, name: string) => vi.fn(async () => answers[name] ?? null) });

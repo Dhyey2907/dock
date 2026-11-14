@@ -19,4 +19,28 @@ metric: string, currencyFrom: string, currencyTo: string, githubUser: string, le
 /**
  * The Timer card's countdown, in minutes.
  */
-timerMinutes: number, };
+timerMinutes: number, 
+/**
+ * Account cards: the Shopify store ("name.myshopify.com").
+ */
+shopifyStore: string, 
+/**
+ * The Plausible site ("example.com").
+ */
+plausibleSite: string, 
+/**
+ * The Supabase project's reference ID.
+ */
+supabaseProject: string, 
+/**
+ * The YouTube channel ID ("UC…").
+ */
+youtubeChannel: string, xUsername: string, 
+/**
+ * Total Revenue's monthly goal, in `revenue_currency`; 0 for none.
+ */
+revenueGoal: number, 
+/**
+ * The currency Total Revenue adds everything up in.
+ */
+revenueCurrency: string, };

@@ -5,6 +5,11 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import type { DockFolder } from "./generated/DockFolder";
 import type { InputLanguage } from "./generated/InputLanguage";
 import type { CodexUsage } from "./generated/CodexUsage";
+import type { Count } from "./generated/Count";
+import type { GithubOverview } from "./generated/GithubOverview";
+import type { Revenue } from "./generated/Revenue";
+import type { Service } from "./generated/Service";
+import type { Traffic } from "./generated/Traffic";
 import type { CoinPrice } from "./generated/CoinPrice";
 import type { Contributions } from "./generated/Contributions";
 import type { Drive } from "./generated/Drive";
@@ -163,6 +168,16 @@ export const ipc = {
   panelPin: () => invoke<void>("panel_pin"),
   panelFit: (height: number) => invoke<void>("panel_fit", { height: Math.ceil(height) }),
   trayPress: (button: TrayButton) => invoke<void>("tray_press", { button }),
+  // Account card widgets
+  serviceConnected: () => invoke<Service[]>("service_connected"),
+  serviceKeySet: (service: Service, key: string) => invoke<void>("service_key_set", { service, key }),
+  serviceRevenue: (service: Service) => invoke<Revenue>("service_revenue", { service }),
+  serviceRevenueAll: () => invoke<Revenue[]>("service_revenue_all"),
+  serviceTraffic: (service: Service) => invoke<Traffic>("service_traffic", { service }),
+  serviceCount: (service: Service) => invoke<Count>("service_count", { service }),
+  githubOverview: () => invoke<GithubOverview>("github_overview"),
+  gmailUnread: () => invoke<number>("gmail_unread"),
+  fxRate: (from: string, to: string) => invoke<number>("fx_rate", { from, to }),
   // Card widgets
   screenTime: () => invoke<ScreenTime>("screen_time"),
   codexUsage: () => invoke<CodexUsage | null>("codex_usage"),

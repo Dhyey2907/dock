@@ -10,6 +10,7 @@ pub mod github;
 pub mod google;
 pub mod notion;
 pub mod oauth;
+pub mod services;
 pub mod spotify;
 
 use std::time::Duration;

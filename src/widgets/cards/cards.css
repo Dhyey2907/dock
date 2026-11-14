@@ -942,3 +942,15 @@
   place-items: center;
   opacity: 0.6;
 }
+
+/* Account cards: a service's letter on its colour, and a colour dot. */
+.card-mark {
+  font-size: calc(24 * var(--cu));
+  font-weight: 800;
+  line-height: 1;
+}
+.card-dot {
+  width: calc(10 * var(--cu));
+  height: calc(10 * var(--cu));
+  border-radius: 50%;
+}

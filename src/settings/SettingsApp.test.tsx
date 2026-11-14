@@ -64,6 +64,13 @@ const defaults: Settings = {
     githubUser: "",
     leetcodeUser: "",
     timerMinutes: 10,
+    shopifyStore: "",
+    plausibleSite: "",
+    supabaseProject: "",
+    youtubeChannel: "",
+    xUsername: "",
+    revenueGoal: 0,
+    revenueCurrency: "USD",
   },
 };
 

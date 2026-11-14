@@ -54,6 +54,10 @@ export const CATEGORY_ORDER: WidgetCategory[] = [
   "clocks",
   "online",
   "files",
+  "finance",
+  "analytics",
+  "developer",
+  "social",
   "accounts",
 ];
 
@@ -67,6 +71,10 @@ export const CATEGORY_LABELS: Record<WidgetCategory, string> = {
   clocks: "Clocks",
   online: "Stocks & Online",
   files: "Apps & Files",
+  finance: "Finance",
+  analytics: "Analytics",
+  developer: "Developer",
+  social: "Social",
   accounts: "Accounts",
 };
 import {

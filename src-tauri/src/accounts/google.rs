@@ -16,7 +16,11 @@ use crate::{
 };
 
 const API: &str = "https://tasks.googleapis.com/tasks/v1";
-const SCOPES: &[&str] = &["https://www.googleapis.com/auth/tasks"];
+/// Tasks, and Gmail's labels (for the unread count on the Gmail card; no mail is read).
+const SCOPES: &[&str] = &[
+    "https://www.googleapis.com/auth/tasks",
+    "https://www.googleapis.com/auth/gmail.labels",
+];
 const MAX_LISTS: usize = 5;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
@@ -53,6 +57,12 @@ fn client_for(app: &AppHandle) -> AppResult<oauth::Client> {
         ));
     }
     Ok(client(&id, key(KeyAccount::GoogleSecret)))
+}
+
+/// A fresh access token for the signed-in Google account.
+pub async fn token(app: &AppHandle) -> AppResult<String> {
+    let client = client_for(app)?;
+    oauth::access_token(OAuthProvider::Google, &client).await
 }
 
 pub async fn sign_in(app: &AppHandle) -> AppResult<()> {

@@ -1,6 +1,18 @@
-import type { ComponentType } from "react";
+import { createElement, type ComponentType } from "react";
 
+import type { Service } from "../../core/generated/Service";
 import type { WidgetKind } from "../../core/generated/WidgetKind";
+import {
+  CountCard,
+  GithubNotificationsCard,
+  GithubOverviewCard,
+  GmailCard,
+  RevenueCard,
+  RevenueChartCard,
+  TotalRevenueCard,
+  TrafficCard,
+} from "./accountCards";
+import { AccountsHintPanel, ServicePanel, TotalRevenuePanel } from "./accountPanels";
 import { ClaudePanel } from "../ClaudeWidget";
 import { CalendarPanel } from "../CalendarWidget";
 import { ClockPanel } from "../ClockWidget";
@@ -112,7 +124,18 @@ export const CARD_OF: Partial<Record<WidgetKind, ComponentType>> = {
 };
 
 export type CardCategory =
-  "ai" | "productivity" | "system" | "media" | "weather" | "clocks" | "online" | "files";
+  | "ai"
+  | "productivity"
+  | "system"
+  | "media"
+  | "weather"
+  | "clocks"
+  | "online"
+  | "files"
+  | "finance"
+  | "analytics"
+  | "developer"
+  | "social";
 
 /** A widget that only comes as a card. */
 export interface CardWidget {
@@ -496,4 +519,124 @@ export const CARD_WIDGETS: Partial<Record<WidgetKind, CardWidget>> = {
     Card: ClockWeatherCard,
     Panel: WeatherPanel,
   },
+};
+
+// ---------- Account cards (each needs the user's own key) ----------
+
+/** A component that draws `Card` with fixed props (one card per service). */
+function bound<P extends object>(Card: ComponentType<P>, props: P, name: string): ComponentType {
+  const Bound = () => createElement(Card, props);
+  Bound.displayName = name;
+  return Bound;
+}
+
+const setup = (service: Service, details = false) =>
+  bound(ServicePanel, { service, details }, `${service}Setup`);
+
+const REVENUE: [WidgetKind, Service, string, boolean, string][] = [
+  ["stripe", "stripe", "Stripe", false, "Net revenue over the last 30 days from Stripe."],
+  ["stripeChart", "stripe", "Stripe", true, "Your Stripe revenue as a 14-day line."],
+  ["polar", "polar", "Polar", false, "Net revenue over the last 30 days from Polar."],
+  ["polarChart", "polar", "Polar", true, "Your Polar revenue as a 14-day line."],
+  ["shopify", "shopify", "Shopify", false, "Your store's sales over the last 30 days."],
+  ["shopifyChart", "shopify", "Shopify", true, "This week's Shopify sales over a 14-day line."],
+  ["gumroad", "gumroad", "Gumroad", false, "What you kept from Gumroad sales, after the fee."],
+  ["gumroadChart", "gumroad", "Gumroad", true, "This week's Gumroad sales over a 14-day line."],
+  ["paddle", "paddle", "Paddle", false, "What you earned from Paddle transactions over 30 days."],
+  ["paddleChart", "paddle", "Paddle", true, "This week's Paddle revenue over a 14-day line."],
+  ["lemonSqueezy", "lemonSqueezy", "Lemon Squeezy", false, "Revenue after tax over 30 days."],
+  [
+    "lemonSqueezyChart",
+    "lemonSqueezy",
+    "Lemon Squeezy",
+    true,
+    "This week's Lemon Squeezy revenue over a 14-day line.",
+  ],
+  ["dodo", "dodo", "Dodo Payments", false, "Net revenue from Dodo Payments."],
+  ["dodoChart", "dodo", "Dodo Payments", true, "Your Dodo Payments revenue as a line."],
+];
+for (const [kind, service, label, chart, description] of REVENUE) {
+  CARD_WIDGETS[kind] = {
+    label: chart ? `${label} Chart` : label,
+    category: "finance",
+    description,
+    Card: bound(chart ? RevenueChartCard : RevenueCard, { service }, `${service}${chart ? "Chart" : ""}Card`),
+    Panel: setup(service),
+  };
+}
+
+CARD_WIDGETS.totalRevenue = {
+  label: "Total Revenue",
+  category: "finance",
+  description: "Every connected store's last 30 days added up, with a monthly goal and its pace.",
+  Card: TotalRevenueCard,
+  Panel: TotalRevenuePanel,
+};
+
+const TRAFFIC: [WidgetKind, Service, string, string, string][] = [
+  ["plausible", "plausible", "Plausible", "Visitors", "Visitors this week from Plausible, with the trend."],
+  [
+    "datafast",
+    "datafast",
+    "DataFast Chart",
+    "Visitors",
+    "Your site's daily visitors over 14 days, with the week's total and its change.",
+  ],
+  ["dub", "dub", "Dub", "Clicks", "Clicks on your Dub links this week."],
+];
+for (const [kind, service, label, unit, description] of TRAFFIC) {
+  CARD_WIDGETS[kind] = {
+    label,
+    category: "analytics",
+    description,
+    Card: bound(TrafficCard, { service, unit }, `${service}Card`),
+    Panel: setup(service),
+  };
+}
+
+const COUNTS: [WidgetKind, Service, string, CardCategory, string][] = [
+  ["resend", "resend", "Resend", "developer", "Emails sent this week and how many were delivered."],
+  ["linear", "linear", "Linear", "developer", "Issues assigned to you and what's in progress."],
+  ["supabase", "supabase", "Supabase", "developer", "API requests on your project, and its health."],
+  ["youtube", "youtube", "YouTube", "social", "Subscribers on your YouTube channel, via your own API key."],
+  [
+    "instagram",
+    "instagram",
+    "Instagram",
+    "social",
+    "Followers on your Instagram account, with an official token.",
+  ],
+  ["xProfile", "x", "X Profile", "social", "Followers on your X account (needs an X API plan)."],
+  ["deepseek", "deepseek", "DeepSeek Balance", "ai", "Your DeepSeek balance."],
+];
+for (const [kind, service, label, category, description] of COUNTS) {
+  CARD_WIDGETS[kind] = {
+    label,
+    category,
+    description,
+    Card: bound(CountCard, { service }, `${service}Card`),
+    Panel: setup(service, kind === "linear"),
+  };
+}
+
+CARD_WIDGETS.gmail = {
+  label: "Gmail",
+  category: "online",
+  description: "Unread mail in your inbox (through your Google sign-in).",
+  Card: GmailCard,
+  Panel: bound(AccountsHintPanel, { which: "gmail" }, "GmailSetup"),
+};
+CARD_WIDGETS.githubNotifications = {
+  label: "GitHub",
+  category: "online",
+  description: "Unread GitHub notifications.",
+  Card: GithubNotificationsCard,
+  Panel: bound(AccountsHintPanel, { which: "github" }, "GithubSetup"),
+};
+CARD_WIDGETS.githubOverview = {
+  label: "GitHub Overview",
+  category: "online",
+  description: "Notifications, open pull requests and stars.",
+  Card: GithubOverviewCard,
+  Panel: bound(AccountsHintPanel, { which: "github" }, "GithubSetup"),
 };

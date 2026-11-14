@@ -154,6 +154,19 @@ pub struct CardSettings {
     pub leetcode_user: String,
     /// The Timer card's countdown, in minutes.
     pub timer_minutes: u32,
+    /// Account cards: the Shopify store ("name.myshopify.com").
+    pub shopify_store: String,
+    /// The Plausible site ("example.com").
+    pub plausible_site: String,
+    /// The Supabase project's reference ID.
+    pub supabase_project: String,
+    /// The YouTube channel ID ("UC…").
+    pub youtube_channel: String,
+    pub x_username: String,
+    /// Total Revenue's monthly goal, in `revenue_currency`; 0 for none.
+    pub revenue_goal: u32,
+    /// The currency Total Revenue adds everything up in.
+    pub revenue_currency: String,
 }
 
 impl Default for CardSettings {
@@ -171,6 +184,13 @@ impl Default for CardSettings {
             github_user: String::new(),
             leetcode_user: String::new(),
             timer_minutes: 10,
+            shopify_store: String::new(),
+            plausible_site: String::new(),
+            supabase_project: String::new(),
+            youtube_channel: String::new(),
+            x_username: String::new(),
+            revenue_goal: 0,
+            revenue_currency: "USD".into(),
         }
     }
 }
@@ -194,6 +214,15 @@ impl CardSettings {
         self.github_user = short(&self.github_user, 39);
         self.leetcode_user = short(&self.leetcode_user, 40);
         self.timer_minutes = self.timer_minutes.clamp(1, 600);
+        self.shopify_store = short(&self.shopify_store, 120);
+        self.plausible_site = short(&self.plausible_site, 120);
+        self.supabase_project = short(&self.supabase_project, 40);
+        self.youtube_channel = short(&self.youtube_channel, 60);
+        self.x_username = short(&self.x_username, 30);
+        self.revenue_currency = short(&self.revenue_currency, 3).to_uppercase();
+        if self.revenue_currency.len() != 3 {
+            self.revenue_currency = "USD".into();
+        }
         self
     }
 }
@@ -481,6 +510,62 @@ pub enum WidgetKind {
     SegmentClock,
     /// Time, date and temperature as three colour blocks.
     ClockWeather,
+    /// Net revenue over the last 30 days from Stripe.
+    Stripe,
+    /// Your Stripe revenue as a 14-day line.
+    StripeChart,
+    /// Net revenue over the last 30 days from Polar.
+    Polar,
+    /// Your Polar revenue as a 14-day line.
+    PolarChart,
+    /// Your store's sales over the last 30 days.
+    Shopify,
+    /// This week's Shopify sales over a 14-day line.
+    ShopifyChart,
+    /// What you kept from Gumroad sales, after the fee.
+    Gumroad,
+    /// This week's Gumroad sales over a 14-day line.
+    GumroadChart,
+    /// What you earned from Paddle over 30 days.
+    Paddle,
+    /// This week's Paddle revenue over a 14-day line.
+    PaddleChart,
+    /// Lemon Squeezy revenue after tax over 30 days.
+    LemonSqueezy,
+    /// This week's Lemon Squeezy revenue over a 14-day line.
+    LemonSqueezyChart,
+    /// Net revenue from Dodo Payments.
+    Dodo,
+    /// Your Dodo Payments revenue as a line.
+    DodoChart,
+    /// Every connected store's last 30 days added up, with a monthly goal.
+    TotalRevenue,
+    /// Visitors this week from Plausible, with the trend.
+    Plausible,
+    /// Your site's daily visitors over 14 days from DataFast.
+    Datafast,
+    /// Clicks on your Dub links this week.
+    Dub,
+    /// Emails sent this week and how many were delivered.
+    Resend,
+    /// Issues assigned to you and what's in progress.
+    Linear,
+    /// API requests on your project, and its health.
+    Supabase,
+    /// Unread mail in your inbox.
+    Gmail,
+    /// Unread GitHub notifications.
+    GithubNotifications,
+    /// GitHub notifications, open pull requests and stars.
+    GithubOverview,
+    /// Followers on your X account.
+    XProfile,
+    /// Subscribers on your YouTube channel.
+    Youtube,
+    /// Followers on your Instagram account.
+    Instagram,
+    /// Your DeepSeek balance.
+    Deepseek,
     /// A widget from a newer version of the dock; dropped on load.
     #[serde(other)]
     #[ts(skip)]
@@ -489,7 +574,7 @@ pub enum WidgetKind {
 
 impl WidgetKind {
     /// Every widget, in the default order (left to right).
-    pub const ALL: [WidgetKind; 95] = [
+    pub const ALL: [WidgetKind; 123] = [
         WidgetKind::Music,
         WidgetKind::Focus,
         WidgetKind::Claude,
@@ -585,6 +670,34 @@ impl WidgetKind {
         WidgetKind::AnalogMinimal,
         WidgetKind::SegmentClock,
         WidgetKind::ClockWeather,
+        WidgetKind::Stripe,
+        WidgetKind::StripeChart,
+        WidgetKind::Polar,
+        WidgetKind::PolarChart,
+        WidgetKind::Shopify,
+        WidgetKind::ShopifyChart,
+        WidgetKind::Gumroad,
+        WidgetKind::GumroadChart,
+        WidgetKind::Paddle,
+        WidgetKind::PaddleChart,
+        WidgetKind::LemonSqueezy,
+        WidgetKind::LemonSqueezyChart,
+        WidgetKind::Dodo,
+        WidgetKind::DodoChart,
+        WidgetKind::TotalRevenue,
+        WidgetKind::Plausible,
+        WidgetKind::Datafast,
+        WidgetKind::Dub,
+        WidgetKind::Resend,
+        WidgetKind::Linear,
+        WidgetKind::Supabase,
+        WidgetKind::Gmail,
+        WidgetKind::GithubNotifications,
+        WidgetKind::GithubOverview,
+        WidgetKind::XProfile,
+        WidgetKind::Youtube,
+        WidgetKind::Instagram,
+        WidgetKind::Deepseek,
     ];
 }
 

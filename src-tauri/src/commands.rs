@@ -448,6 +448,67 @@ pub fn panel_toggle(app: AppHandle, kind: crate::settings::WidgetKind, anchor_x:
     shell::panel::toggle(&app, kind, anchor_x)
 }
 
+// ---------- Account card widgets ----------
+
+/// Which account services have a key saved (never the keys).
+#[tauri::command(async)]
+pub fn service_connected() -> Vec<crate::accounts::services::Service> {
+    crate::accounts::services::connected()
+}
+
+/// Save (or, empty, remove) a service's key, in Windows Credential Manager.
+#[tauri::command(async)]
+pub fn service_key_set(service: crate::accounts::services::Service, key: String) -> AppResult<()> {
+    crate::accounts::services::set_key(service, &key)
+}
+
+#[tauri::command]
+pub async fn service_revenue(
+    app: AppHandle,
+    service: crate::accounts::services::Service,
+) -> Result<crate::accounts::services::Revenue, AppError> {
+    crate::accounts::services::revenue(&app, service).await
+}
+
+#[tauri::command]
+pub async fn service_revenue_all(
+    app: AppHandle,
+) -> Result<Vec<crate::accounts::services::Revenue>, AppError> {
+    Ok(crate::accounts::services::all_revenue(&app).await)
+}
+
+#[tauri::command]
+pub async fn service_traffic(
+    app: AppHandle,
+    service: crate::accounts::services::Service,
+) -> Result<crate::accounts::services::Traffic, AppError> {
+    crate::accounts::services::traffic(&app, service).await
+}
+
+#[tauri::command]
+pub async fn service_count(
+    app: AppHandle,
+    service: crate::accounts::services::Service,
+) -> Result<crate::accounts::services::Count, AppError> {
+    crate::accounts::services::counts(&app, service).await
+}
+
+/// An exchange rate (for Total Revenue across stores in different currencies).
+#[tauri::command]
+pub async fn fx_rate(from: String, to: String) -> Result<f64, AppError> {
+    Ok(crate::cards::online::rate(&from, &to).await?.rate)
+}
+
+#[tauri::command]
+pub async fn github_overview() -> Result<crate::accounts::services::GithubOverview, AppError> {
+    crate::accounts::services::github_overview().await
+}
+
+#[tauri::command]
+pub async fn gmail_unread(app: AppHandle) -> Result<u32, AppError> {
+    crate::accounts::services::gmail_unread(&app).await
+}
+
 // ---------- Card widgets ----------
 
 /// Today's screen time, per hour and per app.
