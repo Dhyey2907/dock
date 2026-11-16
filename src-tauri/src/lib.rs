@@ -155,6 +155,7 @@ pub fn run() {
             commands::settings_undo_layout,
             commands::settings_can_undo,
             commands::gallery_toggle,
+            commands::overflow_toggle,
             commands::folder_open,
             commands::switcher_debug,
             commands::dock_folders_set,

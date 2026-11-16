@@ -105,6 +105,8 @@ export const ipc = {
   folderAppMenu: (dock: string, key: string, anchorX: number) =>
     invoke<void>("folder_app_menu", { dock, key, anchorX: Math.round(anchorX) }),
   /** Open or close the widget gallery, centred on `anchorX` (screen pixels). */
+  overflowToggle: (kinds: WidgetKind[], anchorX: number) =>
+    invoke<void>("overflow_toggle", { kinds, anchorX: Math.round(anchorX) }),
   galleryToggle: (anchorX: number) => invoke<void>("gallery_toggle", { anchorX: Math.round(anchorX) }),
   dockSetContentWidth: (width: number) => invoke<void>("dock_set_content_width", { width }),
   dockReveal: (revealed: boolean) => invoke<void>("dock_reveal", { revealed }),

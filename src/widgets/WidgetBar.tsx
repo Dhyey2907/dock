@@ -361,13 +361,14 @@ export function WidgetBar({ side = "all" }: { side?: WidgetSide }) {
         <button
           className="dock-more"
           aria-label={`${shown.length - overflowFrom} more widgets`}
-          title="More widgets don't fit here: open the gallery to choose"
+          title="Show the widgets that don't fit"
           onClick={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
             if (!geometry) return;
+            const hidden = shown.slice(overflowFrom).map((w) => w.kind);
             ipc
-              .galleryToggle(geometry.x + (rect.left + rect.width / 2) * geometry.scale)
-              .catch((error) => console.error("failed to open the widget gallery", error));
+              .overflowToggle(hidden, geometry.x + (rect.left + rect.width / 2) * geometry.scale)
+              .catch((error) => console.error("failed to show the hidden widgets", error));
           }}
         >
           +{shown.length - overflowFrom}

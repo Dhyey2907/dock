@@ -8,6 +8,7 @@ import { CapturePanel } from "../widgets/productivity/CapturePanel";
 import { WIDGETS } from "../widgets/registry";
 import { AppMenuPanel } from "./AppMenuPanel";
 import { GalleryPanel } from "./GalleryPanel";
+import { OverflowPanel } from "./OverflowPanel";
 import { FolderPanel } from "./FolderPanel";
 import { PictureInPicture2 } from "lucide-react";
 import { DockMenuPanel, StackPanel } from "./DockPanels";
@@ -49,9 +50,9 @@ export function PanelApp() {
 
   // Menus are sized from an estimate; measure the real content and fit the popup to it.
   const root = useRef<HTMLDivElement>(null);
-  const isMenu = content?.type === "app" || content?.type === "dock";
+  const isMenu = content?.type === "app" || content?.type === "dock" || content?.type === "overflow";
   useLayoutEffect(() => {
-    const menu = root.current?.querySelector<HTMLElement>(".jump");
+    const menu = root.current?.querySelector<HTMLElement>(".jump, .overflow-panel");
     if (!isMenu || !menu) return;
     const fit = () => {
       // The extent of everything in the menu (its groups have no box of their own), from the
@@ -105,6 +106,7 @@ export function PanelApp() {
         </button>
       )}
       {content?.type === "gallery" && <GalleryPanel />}
+      {content?.type === "overflow" && <OverflowPanel kinds={content.kinds} />}
       {content?.type === "folder" && <FolderPanel key={content.folder.id} folder={content.folder} />}
       {content?.type === "capture" && <CapturePanel />}
       {content?.type === "app" && <AppMenuPanel key={content.menu.key} menu={content.menu} />}

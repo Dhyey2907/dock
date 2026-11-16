@@ -8,4 +8,4 @@ import type { WidgetKind } from "./WidgetKind";
 /**
  * What the popup shows.
  */
-export type PanelContent = { "type": "widget", kind: WidgetKind, } | { "type": "app", menu: AppMenu, } | { "type": "gallery" } | { "type": "folder", folder: FolderView, } | { "type": "capture" } | { "type": "stack", stack: StackView, } | { "type": "dock", menu: DockMenu, };
+export type PanelContent = { "type": "widget", kind: WidgetKind, } | { "type": "app", menu: AppMenu, } | { "type": "gallery" } | { "type": "overflow", kinds: Array<WidgetKind>, } | { "type": "folder", folder: FolderView, } | { "type": "capture" } | { "type": "stack", stack: StackView, } | { "type": "dock", menu: DockMenu, };

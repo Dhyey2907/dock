@@ -1001,3 +1001,33 @@
   width: calc(22 * var(--cu));
   height: calc(22 * var(--cu));
 }
+
+/* ---------- The "+N" flyout: hidden widgets as cards ---------- */
+.overflow-panel {
+  --cu: 1px;
+  padding: 16px;
+}
+.overflow-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.overflow-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  overflow-y: auto;
+}
+.overflow-item {
+  border-radius: 18px;
+  cursor: default;
+  outline: none;
+}
+.overflow-item:hover .card,
+.overflow-item:focus-visible .card {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+.overflow-tile {
+  gap: 10px;
+  padding: 0 16px;
+}

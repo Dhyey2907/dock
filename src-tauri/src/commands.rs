@@ -38,6 +38,17 @@ pub fn settings_undo_layout(app: AppHandle) -> AppResult<Settings> {
 
 /// Open or close the widget gallery, centred on `anchor_x` (screen pixels).
 #[tauri::command]
+pub async fn overflow_toggle(
+    app: AppHandle,
+    kinds: Vec<crate::settings::WidgetKind>,
+    anchor_x: i32,
+) -> AppResult<()> {
+    let kinds = kinds.into_iter().take(60).collect();
+    shell::panel::toggle_overflow(&app, kinds, anchor_x)
+}
+
+/// Open or close the widget gallery above the dock's › button.
+#[tauri::command]
 pub async fn gallery_toggle(app: AppHandle, anchor_x: i32) -> AppResult<()> {
     shell::panel::toggle_gallery(&app, anchor_x)
 }

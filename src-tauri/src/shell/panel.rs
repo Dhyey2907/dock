@@ -42,6 +42,8 @@ pub enum PanelContent {
     App { menu: AppMenu },
     /// The widget gallery: add, remove and size widgets.
     Gallery,
+    /// The widgets that don't fit on the dock, as live cards.
+    Overflow { kinds: Vec<WidgetKind> },
     /// A folder of apps on the dock.
     Folder {
         folder: crate::apps::service::FolderView,
@@ -253,6 +255,29 @@ pub fn toggle_folder(
         app,
         &dock,
         PanelContent::Folder { folder: view },
+        size,
+        anchor_x,
+        false,
+    )
+}
+
+/// The overflow flyout's size: cards in rows of up to three.
+pub fn overflow_size(count: usize) -> (f64, f64) {
+    const ROW: f64 = 78.0;
+    let rows = count.div_ceil(3).max(1) as f64;
+    (700.0, (rows * ROW + 64.0).min(560.0))
+}
+
+/// Open the widgets that don't fit on the dock above its "+N" chip (or close them).
+pub fn toggle_overflow(app: &AppHandle, kinds: Vec<WidgetKind>, anchor_x: i32) -> AppResult<()> {
+    if is_showing(app, |open| matches!(open, PanelContent::Overflow { .. }))? {
+        return close(app);
+    }
+    let size = overflow_size(kinds.len());
+    show(
+        app,
+        super::DOCK_LABEL,
+        PanelContent::Overflow { kinds },
         size,
         anchor_x,
         false,
