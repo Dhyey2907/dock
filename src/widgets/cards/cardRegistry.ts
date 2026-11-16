@@ -13,6 +13,20 @@ import {
   TrafficCard,
 } from "./accountCards";
 import { AccountsHintPanel, ServicePanel, TotalRevenuePanel } from "./accountPanels";
+import { Activity, ArrowDown, Asterisk, Bot, Hourglass, NotebookPen, Timer } from "lucide-react";
+import {
+  CalendarCompact,
+  ClaudeCompact,
+  CodexCompact,
+  Glyph,
+  MusicCompact,
+  RamCompact,
+  ScreenTimeCompact,
+  SystemCompact,
+  TodosCompact,
+  WeatherCompact,
+  YearCompact,
+} from "./compactCards";
 import { ClaudePanel } from "../ClaudeWidget";
 import { CalendarPanel } from "../CalendarWidget";
 import { ClockPanel } from "../ClockWidget";
@@ -639,4 +653,42 @@ CARD_WIDGETS.githubOverview = {
   description: "Notifications, open pull requests and stars.",
   Card: GithubOverviewCard,
   Panel: bound(AccountsHintPanel, { which: "github" }, "GithubSetup"),
+};
+
+/** The compact square for each card that has one; others keep their own (already small) look. */
+const glyph = (icon: ComponentType<{ className?: string; color?: string }>, color: string, name: string) =>
+  bound(Glyph, { icon, color }, name);
+
+export const COMPACT_OF: Partial<Record<WidgetKind, ComponentType>> = {
+  music: MusicCompact,
+  nowPlayingCompact: MusicCompact,
+  nowPlayingBar: MusicCompact,
+  claude: ClaudeCompact,
+  claudePlan: ClaudeCompact,
+  codexUsage: CodexCompact,
+  system: SystemCompact,
+  cpu: SystemCompact,
+  ram: RamCompact,
+  temperature: SystemCompact,
+  todos: TodosCompact,
+  calendar: CalendarCompact,
+  today: CalendarCompact,
+  date: CalendarCompact,
+  weather: WeatherCompact,
+  weatherDetails: WeatherCompact,
+  weatherForecast: WeatherCompact,
+  todayForecast: WeatherCompact,
+  weatherStatus: WeatherCompact,
+  hourly: WeatherCompact,
+  yearProgress: YearCompact,
+  screenTime: ScreenTimeCompact,
+  dayTimeline: ScreenTimeCompact,
+  notes: glyph(NotebookPen, "#ffd60a", "NotesCompact"),
+  netSpeed: glyph(ArrowDown, "#64d2ff", "NetCompact"),
+  focus: glyph(Timer, "#ff453a", "FocusCompact"),
+  timer: glyph(Hourglass, "#ff9f0a", "TimerCompact"),
+  stopwatch: glyph(Activity, "#30d158", "StopwatchCompact"),
+  deepseek: glyph(Bot, "#4d6bfe", "DeepseekCompact"),
+  bigClock: CalendarCompact,
+  githubActivity: glyph(Asterisk, "#39d353", "GithubCompact"),
 };

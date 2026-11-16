@@ -1031,3 +1031,59 @@
   gap: 10px;
   padding: 0 16px;
 }
+
+/* Rows either side of centred apps shrink their cards together to fit (--fit, set by the
+   page) before hiding any. */
+.dock-widgets[data-side="left"],
+.dock-widgets[data-side="right"] {
+  --cu: calc((var(--dock-h, 56px) - 14px) / 64 * var(--fit, 1));
+}
+
+/* Compact squares: the one thing a card is about, when its row is full. */
+.card-compact {
+  overflow: hidden;
+}
+.compact-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.compact-glyph {
+  width: calc(28 * var(--cu)) !important;
+  height: calc(28 * var(--cu)) !important;
+}
+.compact-small-glyph {
+  width: calc(18 * var(--cu)) !important;
+  height: calc(18 * var(--cu)) !important;
+}
+.compact-number {
+  font-size: calc(15 * var(--cu));
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.compact-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(2 * var(--cu));
+}
+.compact-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+}
+.compact-page span {
+  color: #ff453a;
+  font-size: calc(10 * var(--cu));
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.compact-page strong {
+  font-size: calc(24 * var(--cu));
+}
+
+/* A row of compact squares sits a little closer together. */
+.dock-widgets:has(.card-compact) {
+  gap: calc(4 * var(--cu));
+}
