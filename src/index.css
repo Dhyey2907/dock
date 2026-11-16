@@ -873,3 +873,8 @@ button {
   font-size: calc(8px * var(--scale, 1));
   font-weight: 700;
 }
+
+/* A full-width bar runs edge to edge: only floating styles are kept off the screen's sides. */
+.dock[data-style="full"] .dock-content {
+  max-width: none;
+}

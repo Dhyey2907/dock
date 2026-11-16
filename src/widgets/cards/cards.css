@@ -2,7 +2,8 @@
    tall and fills the dock's height less a small margin, so cards look the same at any size. */
 
 .dock {
-  --cu: calc((var(--dock-h, 56px) - 8px) / 64);
+  /* Cards leave a little air above and below them in the bar. */
+  --cu: calc((var(--dock-h, 56px) - 14px) / 64);
 }
 
 /* The widget button around a card: no tile background of its own. */
@@ -953,4 +954,50 @@
   width: calc(10 * var(--cu));
   height: calc(10 * var(--cu));
   border-radius: 50%;
+}
+
+/* ---------- Tidy rows of cards ---------- */
+/* Either side of centred apps, a row takes its column's room; what doesn't fit whole is
+   hidden behind a "+N" chip instead of being cut in half. */
+.dock-widgets[data-side="left"],
+.dock-widgets[data-side="right"] {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+.dock-widgets[data-side="right"] {
+  justify-content: flex-end;
+}
+.dock-widget[data-overflow="true"] {
+  display: none;
+}
+.dock-widgets:has(.dock-card) {
+  gap: calc(6 * var(--cu));
+}
+.dock-more {
+  flex: none;
+  height: calc(34 * var(--cu));
+  min-width: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--card-line, rgba(255, 255, 255, 0.12));
+  border-radius: 999px;
+  background: rgba(28, 30, 36, 0.7);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: default;
+}
+.dock-more:hover {
+  background: rgba(60, 62, 70, 0.8);
+}
+
+/* A widget with no card of its own, framed to match its neighbours. */
+.card-tile {
+  justify-content: center;
+  min-width: calc(64 * var(--cu));
+  padding: 0 calc(14 * var(--cu));
+}
+.card-tile svg {
+  width: calc(22 * var(--cu));
+  height: calc(22 * var(--cu));
 }

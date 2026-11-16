@@ -1,4 +1,12 @@
-import { useEffect, useRef, useState, type PointerEvent, type WheelEvent } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+  type RefObject,
+  type WheelEvent,
+} from "react";
 import { ChevronRight } from "lucide-react";
 import { useWidgets } from "./store";
 
@@ -20,6 +28,64 @@ const PEEK_DELAY_MS = 450;
 const PEEK_SWITCH_DELAY_MS = 120;
 
 const visible = (w: WidgetEntry) => w.enabled && WIDGETS[w.kind] !== undefined;
+
+/** Room kept for the "+N" chip, in CSS pixels. */
+const MORE_CHIP = 64;
+
+/**
+ * The first widget that doesn't fit the row (the rest are hidden and a "+N" chip shows),
+ * or null when all fit. Widths are remembered while shown, so hiding them doesn't make
+ * them seem to fit again. Only for the rows either side of centred apps (`active`).
+ */
+function useFit(row: RefObject<HTMLDivElement | null>, keys: string[], active: boolean): number | null {
+  const [from, setFrom] = useState<number | null>(null);
+  const widths = useRef(new Map<string, number>());
+  const signature = keys.join(",");
+  useLayoutEffect(() => {
+    const el = row.current;
+    if (!el || !active) return;
+    const order = signature ? signature.split(",") : [];
+    const measure = () => {
+      for (const child of Array.from(el.querySelectorAll<HTMLElement>(":scope > [data-kind]"))) {
+        if (child.dataset.overflow !== "true") {
+          widths.current.set(child.dataset.kind ?? "", child.getBoundingClientRect().width);
+        }
+      }
+      const gap = parseFloat(getComputedStyle(el).columnGap) || 0;
+      const room = el.clientWidth;
+      let used = 0;
+      let fit: number | null = null;
+      for (let i = 0; i < order.length; i++) {
+        const next = used + (i ? gap : 0) + (widths.current.get(order[i]) ?? 0);
+        const reserve = i < order.length - 1 ? MORE_CHIP + gap : 0;
+        if (next + reserve > room + 0.5) {
+          fit = i;
+          break;
+        }
+        used = next;
+      }
+      setFrom((current) => (current === fit ? current : fit));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    el.querySelectorAll(":scope > [data-kind]").forEach((child) => observer.observe(child));
+    return () => observer.disconnect();
+  }, [row, signature, active]);
+  // After drawing: if the row still spills over (a card grew, rounding), hide one more.
+  useLayoutEffect(() => {
+    const el = row.current;
+    if (!el || !active || el.scrollWidth <= el.clientWidth + 1) return;
+    const frame = requestAnimationFrame(() =>
+      setFrom((current) => {
+        const visible = current ?? keys.length;
+        return visible > 0 ? visible - 1 : current;
+      }),
+    );
+    return () => cancelAnimationFrame(frame);
+  });
+  return active ? from : null;
+}
 
 /** Which widgets a bar shows: all of them, the taskbar corner's (right of the apps), or the
  *  others (left of them, where Windows 11 has its Widgets button). */
@@ -53,6 +119,9 @@ export function WidgetBar({ side = "all" }: { side?: WidgetSide }) {
   /** The widget whose popup is showing as a hover preview. */
   const peeking = useRef<WidgetKind | null>(null);
   useEffect(() => () => window.clearTimeout(peekTimer.current), []);
+  const row = useRef<HTMLDivElement>(null);
+  const fitKeys = (settings?.widgets ?? []).filter(onSide(side)).map((w) => w.kind);
+  const overflowFrom = useFit(row, fitKeys, side !== "all");
 
   useEffect(() => {
     const stops: (() => void)[] = [];
@@ -132,9 +201,12 @@ export function WidgetBar({ side = "all" }: { side?: WidgetSide }) {
     ipc.panelToggle(kind, anchor).catch((error) => console.error("failed to open the popup", error));
   };
 
-  // Cards for card-only widgets, and for every widget with a card when the style is Cards.
-  const asCard = (def: { Card?: unknown; cardOnly?: boolean }) =>
-    Boolean(def.Card) && (def.cardOnly || settings.look.widgetStyle === "cards");
+  // Cards for card-only widgets, and, when the style is Cards, for every widget outside the
+  // taskbar's corner (the corner keeps the taskbar's own plain look). A widget with no card
+  // of its own gets a plain card frame, so the row matches.
+  const cardsMode = settings.look.widgetStyle === "cards";
+  const asCard = (def: { Card?: unknown; cardOnly?: boolean; corner?: boolean }) =>
+    Boolean(def.cardOnly) || (cardsMode && !def.corner);
 
   const hoverPreviews = settings.look.widgetHover && !drag;
   const onEnter = (kind: WidgetKind) => () => {
@@ -221,6 +293,7 @@ export function WidgetBar({ side = "all" }: { side?: WidgetSide }) {
 
   return (
     <div
+      ref={row}
       className="dock-widgets"
       data-side={side}
       data-dragging={Boolean(drag?.moved)}
@@ -245,6 +318,7 @@ export function WidgetBar({ side = "all" }: { side?: WidgetSide }) {
             }}
             className={asCard(def) ? "dock-widget dock-card" : "dock-widget"}
             data-kind={entry.kind}
+            data-overflow={overflowFrom !== null && index >= overflowFrom}
             data-size={entry.size}
             data-open={open === entry.kind}
             data-lifted={drag?.moved && drag.kind === entry.kind}
@@ -268,11 +342,37 @@ export function WidgetBar({ side = "all" }: { side?: WidgetSide }) {
             }}
           >
             <WidgetBoundary name={def.label}>
-              {asCard(def) && def.Card ? <def.Card /> : <def.Tile />}
+              {asCard(def) ? (
+                def.Card ? (
+                  <def.Card />
+                ) : (
+                  <span className="card card-tile">
+                    <def.Tile />
+                  </span>
+                )
+              ) : (
+                <def.Tile />
+              )}
             </WidgetBoundary>
           </button>
         );
       })}
+      {overflowFrom !== null && (
+        <button
+          className="dock-more"
+          aria-label={`${shown.length - overflowFrom} more widgets`}
+          title="More widgets don't fit here: open the gallery to choose"
+          onClick={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            if (!geometry) return;
+            ipc
+              .galleryToggle(geometry.x + (rect.left + rect.width / 2) * geometry.scale)
+              .catch((error) => console.error("failed to open the widget gallery", error));
+          }}
+        >
+          +{shown.length - overflowFrom}
+        </button>
+      )}
       {side !== "left" && (
         <button
           ref={galleryButton}
