@@ -33,7 +33,7 @@ struct Saved {
 pub trait TaskbarApi {
     fn state(&self) -> u32;
     fn set_state(&self, state: u32);
-    /// Show or hide every taskbar (primary and secondary screens).
+    /// Show every taskbar, or hide the ones on the dock's screens (all of them, or just one).
     fn set_visible(&self, visible: bool);
 }
 
@@ -88,6 +88,22 @@ static ACTIVE: AtomicBool = AtomicBool::new(false);
 /// The dock is showing the hidden taskbar for a moment on purpose (to press one of its buttons);
 /// the re-hide hook leaves it alone meanwhile.
 static REVEALING: AtomicBool = AtomicBool::new(false);
+/// The one screen whose taskbar the dock hides (its device name, "" for the main screen), when
+/// the dock is on one screen only; `None` hides the taskbar on every screen.
+static ONLY_SCREEN: Mutex<Option<String>> = Mutex::new(None);
+
+/// Which taskbars to hide: with one dock, only the one on its screen, so other screens keep
+/// the Windows taskbar; with a dock on every screen, all of them.
+pub fn set_dock_screen(settings: &crate::settings::Settings) {
+    let only = (settings.docks_on == crate::settings::DocksOn::One).then(|| settings.screen.clone());
+    *ONLY_SCREEN.lock().unwrap_or_else(|e| e.into_inner()) = only;
+}
+
+/// The screen chosen by `set_dock_screen` (`None`: every screen).
+#[cfg_attr(not(windows), allow(dead_code))]
+fn only_screen() -> Option<String> {
+    ONLY_SCREEN.lock().unwrap_or_else(|e| e.into_inner()).clone()
+}
 
 /// Run `work` with the Windows taskbar shown, if the dock is hiding it, then hide it again.
 /// For pressing one of its buttons when no remembered one works; the taskbar shows briefly.
@@ -166,6 +182,7 @@ mod win {
         core::{w, BOOL},
         Win32::{
             Foundation::{HWND, LPARAM},
+            Graphics::Gdi::{GetMonitorInfoW, MonitorFromWindow, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST},
             UI::{
                 Shell::{SHAppBarMessage, ABM_GETSTATE, ABM_SETSTATE, APPBARDATA},
                 WindowsAndMessaging::{
@@ -202,6 +219,25 @@ mod win {
         list
     }
 
+    /// The device name of the screen a window is on (like `\.\DISPLAY1`).
+    fn screen_of(hwnd: HWND) -> String {
+        // SAFETY: plain queries; the info struct is sized for the extended form.
+        unsafe {
+            let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            let mut info = MONITORINFOEXW::default();
+            info.monitorInfo.cbSize = std::mem::size_of::<MONITORINFOEXW>() as u32;
+            if !GetMonitorInfoW(monitor, &mut info.monitorInfo).as_bool() {
+                return String::new();
+            }
+            let len = info
+                .szDevice
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(info.szDevice.len());
+            String::from_utf16_lossy(&info.szDevice[..len])
+        }
+    }
+
     fn data(hwnd: HWND) -> APPBARDATA {
         APPBARDATA {
             cbSize: std::mem::size_of::<APPBARDATA>() as u32,
@@ -233,9 +269,20 @@ mod win {
             if !visible && primary().is_some_and(|tray| unsafe { IsWindowVisible(tray) }.as_bool()) {
                 crate::shell::tray::remember();
             }
-            for tray in all() {
+            let trays = all();
+            let main = primary();
+            // With one dock: the taskbar on its screen ("" or a screen that's gone: the main one).
+            let only = super::only_screen().map(|name| {
+                trays
+                    .iter()
+                    .copied()
+                    .find(|t| !name.is_empty() && screen_of(*t) == name)
+                    .or(main)
+            });
+            for tray in trays {
+                let hide = !visible && only.is_none_or(|one| one == Some(tray));
                 // SAFETY: showing or hiding Explorer's own top-level taskbar windows.
-                let _ = unsafe { ShowWindow(tray, if visible { SW_SHOWNA } else { SW_HIDE }) };
+                let _ = unsafe { ShowWindow(tray, if hide { SW_HIDE } else { SW_SHOWNA }) };
             }
         }
     }

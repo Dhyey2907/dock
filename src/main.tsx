@@ -10,7 +10,7 @@ import { isMainDock } from "./core/ipc";
 import { DashboardApp } from "./panel/DashboardApp";
 import { FloatApp } from "./panel/FloatApp";
 import { PanelApp } from "./panel/PanelApp";
-import { PreviewApp, SwitcherApp } from "./preview/PreviewApp";
+import { PreviewApp } from "./preview/PreviewApp";
 import { initAppFeatures, useLaunching } from "./dock/appFeatures";
 import { SettingsApp } from "./settings/SettingsApp";
 import { WelcomeApp } from "./settings/WelcomeApp";
@@ -46,8 +46,8 @@ function report(what: string) {
 // One bundle serves every window: the dock (default), the widget popup (#panel), the reminder
 // cards (#bubble), settings (#settings), the first-run welcome (#welcome), the screen-area
 // picker (#snip), pinned pictures (#pin-<n>), floating widgets (#float/<kind>), the dashboard
-// (#dashboard), window previews (#preview), the Alt+Tab switcher (#switcher) and the command
-// bar (#command).
+// (#dashboard), window previews (#preview) and the command bar
+// (#command).
 const hash = window.location.hash;
 const page = hash.startsWith("#settings")
   ? "settings"
@@ -67,11 +67,9 @@ const page = hash.startsWith("#settings")
                 ? "pin"
                 : hash.startsWith("#preview")
                   ? "preview"
-                  : hash.startsWith("#switcher")
-                    ? "switcher"
-                    : hash.startsWith("#command")
-                      ? "command"
-                      : "dock";
+                  : hash.startsWith("#command")
+                    ? "command"
+                    : "dock";
 document.documentElement.classList.add(`${page}-window`);
 
 useSettings.getState().load().catch(report("settings"));
@@ -111,8 +109,6 @@ ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
       <PinApp id={Number(hash.slice("#pin-".length))} />
     ) : page === "preview" ? (
       <PreviewApp />
-    ) : page === "switcher" ? (
-      <SwitcherApp />
     ) : page === "command" ? (
       <CommandApp />
     ) : (

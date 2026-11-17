@@ -15,7 +15,6 @@ export const defaultApps: AppsSettings = {
   launchBounce: true,
   attentionFlash: true,
   previews: true,
-  altTab: false,
   edgeSnap: true,
   minimizeAnimation: true,
   showDesktopButton: true,

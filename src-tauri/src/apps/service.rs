@@ -114,18 +114,12 @@ pub fn init(app: &AppHandle) {
     settings_changed(app);
 }
 
-/// Settings changed: re-read the icon pack, switch the shortcuts and Alt+Tab, re-list.
+/// Settings changed: re-read the icon pack, switch the shortcuts, re-list.
 pub fn settings_changed(app: &AppHandle) {
     let settings = app.state::<SettingsStore>().get();
     *app.state::<AppsState>().pack.lock().expect("apps lock") = None;
     #[cfg(windows)]
-    {
-        let handle = app.clone();
-        super::hooks::set_alt_tab(settings.apps.alt_tab, move |key| {
-            super::switcher::handle(&handle, key)
-        });
-        rescan_soon(app);
-    }
+    rescan_soon(app);
     if let Err(error) = shell::shortcut::set_numbers(app, settings.apps.number_shortcuts) {
         tracing::warn!(%error, "Win+number keys not set");
     }

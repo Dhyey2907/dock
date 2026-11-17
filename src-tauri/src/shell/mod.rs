@@ -788,7 +788,9 @@ fn setup_tray(app: &AppHandle) -> AppResult<()> {
 pub fn init(app: &AppHandle) -> AppResult<()> {
     setup_tray(app)?;
     // The taskbar goes first: once it auto-hides, its strip is free for the dock to claim.
-    taskbar::apply_system(app.state::<SettingsStore>().get().taskbar_mode);
+    let settings = app.state::<SettingsStore>().get();
+    taskbar::set_dock_screen(&settings);
+    taskbar::apply_system(settings.taskbar_mode);
     let Some(window) = dock_window(app) else {
         return Ok(());
     };

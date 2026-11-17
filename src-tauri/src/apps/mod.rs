@@ -16,7 +16,6 @@ pub mod layout;
 pub mod preview;
 pub mod service;
 #[cfg(windows)]
-pub mod switcher;
 #[cfg(windows)]
 pub mod win;
 

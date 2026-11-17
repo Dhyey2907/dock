@@ -223,11 +223,6 @@ export function AppSettings({ settings, save }: { settings: Settings; save: Save
         "numberShortcuts",
         "Open the apps on the dock in order, like the Windows taskbar.",
       )}
-      {toggle(
-        "Dock's own Alt+Tab",
-        "altTab",
-        "Replaces the Windows switcher with one in the dock's style. Off unless you turn it on.",
-      )}
       {toggle("Drag an icon to an edge to snap", "edgeSnap", "Halves, quarters, or the top to maximize.")}
       {toggle("Show desktop button", "showDesktopButton")}
       {toggle("Peek at the desktop", "peek", "Hover the show desktop button.")}

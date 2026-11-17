@@ -34,8 +34,11 @@ const visible = (w: WidgetEntry) => w.enabled && WIDGETS[w.kind] !== undefined;
 /** Room kept for the "+N" chip, in CSS pixels. */
 const MORE_CHIP = 64;
 
+/** Whether a full row turns its later cards into compact squares (off: cards stay expanded). */
+const COMPACT_SQUARES = false;
+
 /** The smallest a row's cards shrink to (still readable) before any are hidden. */
-const MIN_FIT = 0.75;
+const MIN_FIT = 0.9;
 
 interface Fit {
   /** Widgets from here on show as compact squares (the row's length when none do). */
@@ -185,7 +188,14 @@ export function WidgetBar({ side = "all" }: { side?: WidgetSide }) {
   useEffect(() => () => window.clearTimeout(peekTimer.current), []);
   const row = useRef<HTMLDivElement>(null);
   const fitKeys = (settings?.widgets ?? []).filter(onSide(side)).map((w) => w.kind);
-  const fit = useFit(row, fitKeys, (kind) => Boolean(COMPACT_OF[kind as WidgetKind]), side !== "all");
+  // Widgets always keep their full cards (compact squares looked cramped); a full row shrinks
+  // a little, then the rest go behind the "+N" chip.
+  const fit = useFit(
+    row,
+    fitKeys,
+    (kind) => COMPACT_SQUARES && Boolean(COMPACT_OF[kind as WidgetKind]),
+    side !== "all",
+  );
   const overflowFrom = fit.from;
   // Whether a widget draws as a card (only cards have compact squares).
   const asCardFor = (kind: WidgetKind) => {
@@ -194,7 +204,7 @@ export function WidgetBar({ side = "all" }: { side?: WidgetSide }) {
   };
   // The compact square a widget shows as, when its row is full and it's past the full ones.
   const compactNow = (kind: WidgetKind, index: number) =>
-    index >= fit.compactFrom && asCardFor(kind) ? COMPACT_OF[kind] : undefined;
+    COMPACT_SQUARES && index >= fit.compactFrom && asCardFor(kind) ? COMPACT_OF[kind] : undefined;
 
   useEffect(() => {
     const stops: (() => void)[] = [];

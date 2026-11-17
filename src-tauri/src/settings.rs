@@ -1169,8 +1169,6 @@ pub struct AppsSettings {
     pub attention_flash: bool,
     /// Hovering an app shows its windows.
     pub previews: bool,
-    /// Dock's own Alt+Tab switcher instead of Windows'. Off unless chosen.
-    pub alt_tab: bool,
     /// Dragging an app's icon to a screen edge snaps its window there.
     pub edge_snap: bool,
     /// Windows shrink into their icon on the dock when minimized.
@@ -1201,7 +1199,6 @@ impl Default for AppsSettings {
             launch_bounce: true,
             attention_flash: true,
             previews: true,
-            alt_tab: false,
             edge_snap: true,
             minimize_animation: true,
             show_desktop_button: true,
@@ -1593,12 +1590,11 @@ mod tests {
     }
 
     #[test]
-    fn apps_settings_default_when_missing_and_alt_tab_starts_off() {
+    fn apps_settings_default_when_missing() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join(FILE_NAME), r#"{"edge":"top"}"#).unwrap();
         let apps = SettingsStore::open(dir.path()).get().apps;
         assert_eq!(apps, AppsSettings::default());
-        assert!(!apps.alt_tab);
         assert!(apps.previews && apps.number_shortcuts);
     }
 

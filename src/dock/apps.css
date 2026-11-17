@@ -1,5 +1,5 @@
 /* App and window features: launch bounce, attention glow, dividers, menus, stacks,
-   window previews and the switcher. Kept apart from index.css. */
+   window previews. Kept apart from index.css. */
 
 /* ---------- Dock buttons ---------- */
 
@@ -229,19 +229,16 @@
   margin-top: 6px;
 }
 
-/* ---------- Window previews and the switcher ---------- */
+/* ---------- Window previews ---------- */
 
 .preview-window,
-.preview-window body,
-.switcher-window,
-.switcher-window body {
+.preview-window body {
   margin: 0;
   background: transparent;
   overflow: hidden;
   user-select: none;
 }
-.preview,
-.switcher {
+.preview {
   --panel-fg: #f4f5f8;
   --panel-faint: rgba(244, 245, 248, 0.62);
   --panel-hover: rgba(255, 255, 255, 0.1);
@@ -253,8 +250,7 @@
   font-size: 12.5px;
   background: rgba(20, 22, 28, 0.42);
 }
-.preview[data-light="true"],
-.switcher[data-light="true"] {
+.preview[data-light="true"] {
   --panel-fg: #16171d;
   --panel-faint: rgba(22, 23, 29, 0.6);
   --panel-hover: rgba(0, 0, 0, 0.06);
@@ -319,59 +315,4 @@
   height: 16px;
   border-radius: 4px;
   background: var(--panel-faint);
-}
-
-/* ---------- Alt+Tab switcher, like Windows' ---------- */
-.switcher {
-  background: rgba(28, 28, 30, 0.82);
-}
-.switcher[data-light="true"] {
-  background: rgba(243, 243, 245, 0.86);
-}
-.switcher-card {
-  position: absolute;
-  box-sizing: border-box;
-  padding: 0;
-  border: 3px solid transparent;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.04);
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: default;
-}
-.switcher-card:hover {
-  background: rgba(255, 255, 255, 0.08);
-}
-.switcher-card[data-selected="true"] {
-  border-color: rgba(255, 255, 255, 0.92);
-  background: rgba(255, 255, 255, 0.1);
-}
-.switcher[data-light="true"] .switcher-card[data-selected="true"] {
-  border-color: rgba(0, 0, 0, 0.75);
-}
-.switcher-title {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  height: 43px;
-  padding: 0 12px;
-  font-size: 15px;
-  font-weight: 500;
-}
-.switcher-title span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.switcher-minimized {
-  position: absolute;
-  display: grid;
-  place-items: center;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.06);
 }

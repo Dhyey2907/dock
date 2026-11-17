@@ -93,7 +93,13 @@ fn applied(app: &AppHandle, before: Settings, settings: Settings) -> AppResult<S
     if before.launch_at_startup != settings.launch_at_startup {
         sync_autostart(&app, settings.launch_at_startup);
     }
-    if before.taskbar_mode != settings.taskbar_mode && !shell::using_windows_taskbar(&app) {
+    let screens_changed = before.docks_on != settings.docks_on || before.screen != settings.screen;
+    if screens_changed {
+        shell::taskbar::set_dock_screen(&settings);
+    }
+    if (before.taskbar_mode != settings.taskbar_mode || screens_changed)
+        && !shell::using_windows_taskbar(&app)
+    {
         shell::taskbar::apply_system(settings.taskbar_mode);
     }
     if before.auto_hide != settings.auto_hide {
@@ -283,18 +289,6 @@ pub fn preview_close_window(app: AppHandle, hwnd: isize) -> AppResult<()> {
     crate::apps::preview::close_window(&app, hwnd)
 }
 
-#[cfg(windows)]
-#[tauri::command]
-pub fn switcher_current() -> Option<crate::apps::switcher::SwitcherState> {
-    crate::apps::switcher::current()
-}
-
-#[cfg(windows)]
-#[tauri::command(async)]
-pub fn switcher_pick(app: AppHandle, hwnd: isize) {
-    crate::apps::switcher::pick(&app, hwnd);
-}
-
 /// Open a file (or the folder) from the open stack.
 #[tauri::command(async)]
 pub fn stack_open(app: AppHandle, path: String) -> AppResult<()> {
@@ -362,23 +356,6 @@ pub fn app_menu(app: AppHandle, window: WebviewWindow, key: String, anchor_x: i3
 #[tauri::command(async)]
 pub fn folder_open(app: AppHandle, window: WebviewWindow, id: String, anchor_x: i32) -> AppResult<()> {
     crate::apps::service::show_folder(&app, window.label(), &id, anchor_x)
-}
-
-/// Dev builds only: step the Alt+Tab switcher (Some(forward)) or close it (None), for testing
-/// its look (the real keys come from a hook that ignores simulated presses).
-#[tauri::command]
-pub fn switcher_debug(app: AppHandle, forward: Option<bool>) {
-    #[cfg(all(windows, debug_assertions))]
-    {
-        use crate::apps::{hooks::SwitchKey, switcher};
-        match forward {
-            Some(true) => switcher::handle(&app, SwitchKey::Next),
-            Some(false) => switcher::handle(&app, SwitchKey::Previous),
-            None => switcher::handle(&app, SwitchKey::Cancel),
-        }
-    }
-    #[cfg(not(all(windows, debug_assertions)))]
-    let _ = (app, forward);
 }
 
 /// Save the dock's folders, leaving every other setting as it is now.

@@ -234,7 +234,7 @@
 }
 
 /* ---------- Popups, menus, previews and tooltips like Windows 11's flyouts ---------- */
-:is(.panel, .preview, .switcher)[data-theme="windows"] {
+:is(.panel, .preview)[data-theme="windows"] {
   --panel-fg: #ffffff;
   --panel-faint: rgba(255, 255, 255, 0.786);
   --panel-line: rgba(255, 255, 255, 0.0837);
@@ -243,7 +243,7 @@
   font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
   background: rgba(36, 36, 36, 0.72);
 }
-:is(.panel, .preview, .switcher)[data-theme="windows"][data-system-light="true"] {
+:is(.panel, .preview)[data-theme="windows"][data-system-light="true"] {
   --panel-fg: #1b1b1b;
   --panel-faint: rgba(0, 0, 0, 0.62);
   --panel-line: rgba(0, 0, 0, 0.0578);
@@ -310,14 +310,6 @@
 }
 .preview-tooltip[data-theme="windows"][data-system-light="true"] {
   background: rgba(249, 249, 249, 0.92);
-}
-
-/* The Alt+Tab switcher, in the accent-free Windows style. */
-.switcher[data-theme="windows"] {
-  background: rgba(32, 32, 32, 0.82);
-}
-.switcher[data-theme="windows"][data-system-light="true"] {
-  background: rgba(243, 243, 243, 0.86);
 }
 
 /* Widgets left of the centred apps (the taskbar corner's stay right). */

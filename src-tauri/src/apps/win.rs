@@ -1053,7 +1053,7 @@ pub fn pick(folder: bool) -> Option<String> {
 }
 
 /// Our own window shown on top without taking the focus from the app in front, with no
-/// taskbar or Alt+Tab entry (window previews and the switcher).
+/// taskbar or Alt+Tab entry (window previews).
 pub fn show_on_top_quietly(hwnd: isize) {
     use windows::Win32::UI::WindowsAndMessaging::{
         GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE,
@@ -1153,15 +1153,6 @@ pub fn client_size(hwnd: isize) -> Option<(i32, i32)> {
 pub fn is_visible(hwnd: isize) -> bool {
     // SAFETY: a read-only query; a window that's gone is just not visible.
     unsafe { windows::Win32::UI::WindowsAndMessaging::IsWindowVisible(HWND(hwnd as *mut c_void)).as_bool() }
-}
-
-/// Send keys as if typed (for the switcher: a harmless key before Alt is let go, so the app
-/// in front doesn't open its menu bar).
-pub fn release_alt_quietly(alt: VIRTUAL_KEY) {
-    const UNASSIGNED: VIRTUAL_KEY = VIRTUAL_KEY(0xE8);
-    let inputs = [key(UNASSIGNED, false), key(UNASSIGNED, true), key(alt, true)];
-    // SAFETY: sends a fully initialised sequence of key events.
-    unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
 }
 
 // ---------- Watching ----------

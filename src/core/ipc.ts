@@ -28,7 +28,6 @@ import type { ButtonRect } from "./generated/ButtonRect";
 import type { DockMenuAction } from "./generated/DockMenuAction";
 import type { MenuAction } from "./generated/MenuAction";
 import type { PreviewContent } from "./generated/PreviewContent";
-import type { SwitcherState } from "./generated/SwitcherState";
 import type { PanelContent } from "./generated/PanelContent";
 import type { QuickState } from "./generated/QuickState";
 import type { RadioKind } from "./generated/RadioKind";
@@ -140,8 +139,6 @@ export const ipc = {
   previewCurrent: () => invoke<PreviewContent | null>("preview_current"),
   previewActivate: (hwnd: number) => invoke<void>("preview_activate", { hwnd }),
   previewCloseWindow: (hwnd: number) => invoke<void>("preview_close_window", { hwnd }),
-  switcherCurrent: () => invoke<SwitcherState | null>("switcher_current"),
-  switcherPick: (hwnd: number) => invoke<void>("switcher_pick", { hwnd }),
   stackOpen: (path: string) => invoke<void>("stack_open", { path }),
   dockMenu: (anchorX: number) => invoke<void>("dock_menu", { anchorX: Math.round(anchorX) }),
   dockMenuAction: (action: DockMenuAction) => invoke<void>("dock_menu_action", { action }),
@@ -346,5 +343,4 @@ export const events = {
   onAppLaunching: on<string>("app-launching"),
   onPreviewOpen: on<PreviewContent>("preview-open"),
   onPreviewClosed: on<null>("preview-closed"),
-  onSwitcherState: on<SwitcherState>("switcher-state"),
 };

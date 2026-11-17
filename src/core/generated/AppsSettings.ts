@@ -49,10 +49,6 @@ attentionFlash: boolean,
  */
 previews: boolean, 
 /**
- * Dock's own Alt+Tab switcher instead of Windows'. Off unless chosen.
- */
-altTab: boolean, 
-/**
  * Dragging an app's icon to a screen edge snaps its window there.
  */
 edgeSnap: boolean, 

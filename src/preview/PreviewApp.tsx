@@ -1,14 +1,12 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 
-import type { SwitcherState } from "../core/generated/SwitcherState";
-import type { SwitchItem } from "../core/generated/SwitchItem";
 import { events, ipc } from "../core/ipc";
 import { useIcon } from "../core/useIcon";
 import { useSettings } from "../settings/store";
 import { useSystemLook, useWatchSystemLook } from "../core/system";
 
-/** The theme attributes shared by the preview, tooltip and switcher pages. */
+/** The theme attributes shared by the preview and tooltip pages. */
 function useThemeAttrs() {
   const theme = useSettings((s) => s.settings?.theme);
   useWatchSystemLook();
@@ -129,55 +127,6 @@ export function PreviewApp() {
             </div>
           )}
         </div>
-      ))}
-    </div>
-  );
-}
-
-const listenSwitcher = events.onSwitcherState;
-const switcherNow = () => ipc.switcherCurrent();
-
-function SwitchCell({ item, selected }: { item: SwitchItem; selected: boolean }) {
-  const { card, thumb } = item;
-  return (
-    <button
-      className="switcher-card"
-      data-selected={selected}
-      title={item.title}
-      style={{ left: card.x, top: card.y, width: card.width, height: card.height }}
-      onClick={() => ipc.switcherPick(item.hwnd).catch(report)}
-    >
-      <span className="switcher-title">
-        <AppIcon source={item.icon} size={22} />
-        <span>{item.title || item.appName}</span>
-      </span>
-      {item.minimized && (
-        <span
-          className="switcher-minimized"
-          style={{
-            left: thumb.x - card.x,
-            top: thumb.y - card.y,
-            width: thumb.width,
-            height: thumb.height,
-          }}
-        >
-          <AppIcon source={item.icon} size={48} />
-        </span>
-      )}
-    </button>
-  );
-}
-
-/** The dock's own Alt+Tab switcher, laid out like Windows': each window's live picture under
- *  its icon and title, the chosen one outlined. Windows draws the pictures into the gaps. */
-export function SwitcherApp() {
-  const state = useContent<SwitcherState>(listenSwitcher, switcherNow);
-  const attrs = useThemeAttrs();
-  if (!state) return null;
-  return (
-    <div className="switcher" {...attrs}>
-      {state.items.map((item, i) => (
-        <SwitchCell key={item.hwnd} item={item} selected={i === state.selected} />
       ))}
     </div>
   );
