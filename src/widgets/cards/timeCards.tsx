@@ -1,4 +1,14 @@
-import { ArrowRightLeft, Hourglass, NotebookPen, Pause, Play, RotateCcw, Timer, Watch } from "lucide-react";
+import {
+  ArrowRightLeft,
+  CalendarDays,
+  Hourglass,
+  NotebookPen,
+  Pause,
+  Play,
+  RotateCcw,
+  Timer,
+  Watch,
+} from "lucide-react";
 
 import { ipc } from "../../core/ipc";
 import { useSettings } from "../../settings/store";
@@ -239,6 +249,7 @@ export function CalendarCard() {
           {next ? (started ? "now" : `in ${until(Date.parse(next.start), now)}`) : "Enjoy the day"}
         </span>
       </span>
+      {!next && <CalendarDays className="card-faint" />}
     </Card>
   );
 }
