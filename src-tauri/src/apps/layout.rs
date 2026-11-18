@@ -231,15 +231,21 @@ pub struct PreviewCard {
     pub thumb_height: f64,
 }
 
-pub const PREVIEW_PADDING: f64 = 10.0;
-pub const PREVIEW_GAP: f64 = 8.0;
-pub const PREVIEW_TITLE: f64 = 30.0;
-pub const PREVIEW_INSET: f64 = 6.0;
+/// Space between the popup's edge and its cards.
+pub const PREVIEW_PADDING: f64 = 8.0;
+pub const PREVIEW_GAP: f64 = 6.0;
+/// A card's title row (the page's `.preview-title` is this tall).
+pub const PREVIEW_TITLE: f64 = 34.0;
+/// Space around a card's picture: left, right and bottom alike, so it sits evenly in the card.
+pub const PREVIEW_INSET: f64 = 10.0;
+/// Narrowest and widest a card's picture gets before shrinking to fit the screen.
+pub const PREVIEW_THUMB_MIN: f64 = 150.0;
+pub const PREVIEW_THUMB_MAX: f64 = 340.0;
 /// Most cards in one popup.
 pub const PREVIEW_MAX: usize = 6;
 
 /// Cards in a row, each as tall as `thumb_height` plus a title, as wide as its window's shape
-/// allows (between 120 and 300), shrunk together when the row is wider than `max_width`.
+/// allows (between `PREVIEW_THUMB_MIN` and `PREVIEW_THUMB_MAX`), shrunk together when the row is wider than `max_width`.
 /// `windows` gives each window's size; a zero size (minimized) gets a square-ish card.
 /// Returns the popup's logical size and the cards.
 pub fn preview_layout(
@@ -257,7 +263,7 @@ pub fn preview_layout(
             } else {
                 thumb_height * 1.4
             };
-            thumb.clamp(120.0, 300.0) + 2.0 * PREVIEW_INSET
+            thumb.clamp(PREVIEW_THUMB_MIN, PREVIEW_THUMB_MAX) + 2.0 * PREVIEW_INSET
         })
         .collect();
     let gaps = PREVIEW_GAP * windows.len().saturating_sub(1) as f64;

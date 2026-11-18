@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { X } from "lucide-react";
+import { AppWindow, X } from "lucide-react";
 
 import { events, ipc } from "../core/ipc";
 import { useIcon } from "../core/useIcon";
@@ -62,7 +62,8 @@ function AppIcon({ source, size }: { source: string; size: number }) {
   return icon ? (
     <img src={icon} alt="" width={size} height={size} draggable={false} />
   ) : (
-    <span className="preview-fallback" />
+    // No icon yet (or none at all): a plain window glyph, never an empty block.
+    <AppWindow className="preview-fallback" size={size} strokeWidth={size > 24 ? 1.5 : 1.75} aria-hidden />
   );
 }
 
@@ -98,7 +99,7 @@ export function PreviewApp() {
         >
           <div className="preview-title">
             <AppIcon source={content.icon} size={16} />
-            <span>
+            <span className="preview-name">
               {card.title || content.name}
               {card.hung ? " (Not responding)" : ""}
             </span>

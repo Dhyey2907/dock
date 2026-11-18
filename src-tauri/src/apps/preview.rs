@@ -19,7 +19,8 @@ use windows::Win32::{
     Foundation::{HWND, RECT},
     Graphics::Dwm::{
         DwmRegisterThumbnail, DwmUnregisterThumbnail, DwmUpdateThumbnailProperties, DWM_THUMBNAIL_PROPERTIES,
-        DWM_TNP_OPACITY, DWM_TNP_RECTDESTINATION, DWM_TNP_SOURCECLIENTAREAONLY, DWM_TNP_VISIBLE,
+        DWM_TNP_OPACITY, DWM_TNP_RECTDESTINATION, DWM_TNP_RECTSOURCE, DWM_TNP_SOURCECLIENTAREAONLY,
+        DWM_TNP_VISIBLE,
     },
 };
 
@@ -34,7 +35,7 @@ pub const PREVIEW_LABEL: &str = "preview";
 pub const PREVIEW_OPEN: &str = "preview-open";
 pub const PREVIEW_CLOSED: &str = "preview-closed";
 /// Height of a card's picture, in logical pixels.
-const THUMB_HEIGHT: f64 = 132.0;
+const THUMB_HEIGHT: f64 = 150.0;
 
 /// What the preview popup shows.
 #[derive(Debug, Clone, PartialEq, Serialize, TS)]
@@ -108,7 +109,28 @@ fn unregister_all() {
     }
 }
 
+/// The part of `hwnd` its picture should show, relative to its window rectangle: the visible
+/// frame, without the invisible resize borders Windows 10 and 11 put around it (and that hang
+/// off the screen when it's maximized). Drawn whole, those borders leave a see-through margin
+/// around the picture and squash it. `None` for a minimized window, which is drawn whole.
+fn visible_part(hwnd: isize) -> Option<RECT> {
+    if super::win::is_minimized(hwnd) {
+        return None;
+    }
+    let outer = super::win::window_rect(hwnd)?;
+    let frame = super::win::frame_rect(hwnd)?;
+    let left = frame.x - outer.x;
+    let top = frame.y - outer.y;
+    (left >= 0 && top >= 0 && frame.width > 0 && frame.height > 0).then(|| RECT {
+        left,
+        top,
+        right: left + frame.width as i32,
+        bottom: top + frame.height as i32,
+    })
+}
+
 /// Draw each (not minimized) window's live picture into the popup, at its card's picture area.
+/// `scale` is the popup's own (its screen's), since the areas are in its page's pixels.
 fn register(dest: isize, cards: &[layout::PreviewCard], scale: f64) {
     unregister_all();
     let px = |v: f64| (v * scale).round() as i32;
@@ -121,17 +143,21 @@ fn register(dest: isize, cards: &[layout::PreviewCard], scale: f64) {
             else {
                 continue;
             };
+            let source = visible_part(card.hwnd);
+            let mut flags =
+                DWM_TNP_RECTDESTINATION | DWM_TNP_VISIBLE | DWM_TNP_OPACITY | DWM_TNP_SOURCECLIENTAREAONLY;
+            if source.is_some() {
+                flags |= DWM_TNP_RECTSOURCE;
+            }
             let props = DWM_THUMBNAIL_PROPERTIES {
-                dwFlags: DWM_TNP_RECTDESTINATION
-                    | DWM_TNP_VISIBLE
-                    | DWM_TNP_OPACITY
-                    | DWM_TNP_SOURCECLIENTAREAONLY,
+                dwFlags: flags,
                 rcDestination: RECT {
                     left: px(card.thumb_x),
                     top: px(card.thumb_y),
                     right: px(card.thumb_x + card.thumb_width),
                     bottom: px(card.thumb_y + card.thumb_height),
                 },
+                rcSource: source.unwrap_or_default(),
                 opacity: 255,
                 fVisible: true.into(),
                 fSourceClientAreaOnly: false.into(),
@@ -229,14 +255,26 @@ fn present(
     }
     *STATE.open.lock().unwrap_or_else(|e| e.into_inner()) = Some(content.clone());
     app.emit(PREVIEW_OPEN, &content)?;
-    shell::panel::set_page_size(&popup, width, height)?;
-    let outer = popup.outer_size()?;
-    let Some(rect) = shell::panel::popup_rect(app, label, anchor_x, (outer.width, outer.height)) else {
-        return Ok(());
-    };
-    popup.set_position(PhysicalPosition::new(rect.x, rect.y))?;
+    // Sized for the screen it was last on; when it lands on a screen with another scale,
+    // Windows rescales it, so size and place it again for the new one.
+    let mut sized_for = popup.scale_factor()?;
+    for _ in 0..2 {
+        shell::panel::set_page_size(&popup, width, height)?;
+        let outer = popup.outer_size()?;
+        let Some(rect) = shell::panel::popup_rect(app, label, anchor_x, (outer.width, outer.height)) else {
+            return Ok(());
+        };
+        popup.set_position(PhysicalPosition::new(rect.x, rect.y))?;
+        let now = popup.scale_factor()?;
+        if (now - sized_for).abs() < 0.001 {
+            break;
+        }
+        sized_for = now;
+    }
     let hwnd = popup.hwnd()?.0 as isize;
     super::win::show_on_top_quietly(hwnd);
+    // The pictures go in the popup's page pixels, so they use its scale (the dock's may differ).
+    let scale = if sized_for > 0.0 { sized_for } else { scale };
     register(hwnd, &content.cards, scale);
     Ok(())
 }

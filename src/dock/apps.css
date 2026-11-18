@@ -274,10 +274,15 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 30px;
-  padding: 0 4px 0 8px;
+  /* Matches PREVIEW_TITLE in layout.rs; the sides line up with the picture below (PREVIEW_INSET). */
+  height: 34px;
+  padding: 0 4px 0 10px;
 }
-.preview-title span {
+.preview-title > img,
+.preview-title > .preview-fallback {
+  flex: none;
+}
+.preview-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -285,6 +290,7 @@
   white-space: nowrap;
 }
 .preview-close {
+  flex: none;
   display: grid;
   place-items: center;
   width: 24px;
@@ -310,9 +316,5 @@
   background: var(--panel-hover);
 }
 .preview-fallback {
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  background: var(--panel-faint);
+  color: var(--panel-faint);
 }
