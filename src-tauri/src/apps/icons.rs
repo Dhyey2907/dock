@@ -46,6 +46,36 @@ pub fn without_windows(chain: &str) -> String {
     self::chain(sources(chain).into_iter().filter(|s| !s.starts_with("hwnd:")))
 }
 
+/// A "<file>,<index>" icon reference split into the file and the index (0 when it has none).
+pub fn split_resource(resource: &str) -> (&str, i32) {
+    let resource = resource.trim().trim_matches('"');
+    match resource.rsplit_once(',') {
+        Some((path, index)) => match index.trim().parse() {
+            Ok(index) => (path.trim().trim_matches('"'), index),
+            Err(_) => (resource, 0),
+        },
+        None => (resource, 0),
+    }
+}
+
+/// `%NAME%` parts of a path replaced by `lookup(NAME)`; unknown ones are left as they are.
+pub fn expand_env(path: &str, lookup: impl Fn(&str) -> Option<String>) -> String {
+    let mut out = String::new();
+    let mut rest = path;
+    while let Some(start) = rest.find('%') {
+        let after = &rest[start + 1..];
+        let Some(end) = after.find('%') else { break };
+        out.push_str(&rest[..start]);
+        match lookup(&after[..end]).filter(|_| end > 0) {
+            Some(value) => out.push_str(&value),
+            None => out.push_str(&rest[start..start + end + 2]),
+        }
+        rest = &after[end + 1..];
+    }
+    out.push_str(rest);
+    out
+}
+
 /// Whether a program runs from a Store package, where its own file often has no icon and the
 /// dock can't read it anyway.
 pub fn is_packaged(exe: &str) -> bool {
@@ -120,6 +150,28 @@ mod tests {
             without_windows("favicon:https://a.example/"),
             "favicon:https://a.example/"
         );
+    }
+
+    #[test]
+    fn icon_resources_split_into_file_and_index() {
+        assert_eq!(
+            split_resource(r"C:\Users\me\Chrome\Profile 1\Google Profile.ico,0"),
+            (r"C:\Users\me\Chrome\Profile 1\Google Profile.ico", 0)
+        );
+        assert_eq!(split_resource(r"C:\app.exe,-101"), (r"C:\app.exe", -101));
+        assert_eq!(split_resource(r"C:\a,b\x.ico"), (r"C:\a,b\x.ico", 0));
+        assert_eq!(split_resource(r"C:\x.ico"), (r"C:\x.ico", 0));
+    }
+
+    #[test]
+    fn environment_names_in_paths_are_expanded() {
+        let lookup = |name: &str| (name == "LOCALAPPDATA").then(|| r"C:\Users\me\AppData\Local".to_string());
+        assert_eq!(
+            expand_env(r"%LOCALAPPDATA%\Chrome\x.ico", lookup),
+            r"C:\Users\me\AppData\Local\Chrome\x.ico"
+        );
+        assert_eq!(expand_env(r"%NOPE%\x.ico", lookup), r"%NOPE%\x.ico");
+        assert_eq!(expand_env("100% done", lookup), "100% done");
     }
 
     #[test]

@@ -78,6 +78,12 @@ const APP_USER_MODEL_ID: PROPERTYKEY = PROPERTYKEY {
     pid: 5,
 };
 
+/// System.AppUserModel.RelaunchIconResource
+const RELAUNCH_ICON: PROPERTYKEY = PROPERTYKEY {
+    fmtid: windows::core::GUID::from_u128(0x9F4C2855_9F79_4B39_A8D0_E1D42DE1D5F3),
+    pid: 3,
+};
+
 /// Shell objects need COM on the calling thread; repeat calls are harmless. Multithreaded,
 /// because these run on worker threads that never pump messages (a single-threaded apartment
 /// there could hang anything that calls back into it).
@@ -341,16 +347,19 @@ fn hosted_app_pid(hwnd: HWND) -> Option<u32> {
 
 /// The window's own app id (set by apps like Chrome profiles), else its package's.
 fn window_app_id(hwnd: HWND, pid: u32) -> Option<String> {
+    window_property(hwnd, &APP_USER_MODEL_ID).or_else(|| process_app_id(pid))
+}
+
+/// A text property a window set for the taskbar, if it set one.
+fn window_property(hwnd: HWND, key: &PROPERTYKEY) -> Option<String> {
     // SAFETY: COM calls on a live window's property store, released when dropped.
-    let explicit = unsafe {
+    let value = unsafe {
         SHGetPropertyStoreForWindow::<IPropertyStore>(hwnd)
             .ok()
-            .and_then(|store| store.GetValue(&APP_USER_MODEL_ID).ok())
+            .and_then(|store| store.GetValue(key).ok())
             .map(|value| value.to_string().trim().to_string())
     };
-    explicit
-        .filter(|id| !id.is_empty())
-        .or_else(|| process_app_id(pid))
+    value.filter(|v| !v.is_empty())
 }
 
 /// Friendly names, cached by app id or program: they don't change while the dock runs.
@@ -438,6 +447,7 @@ pub fn windows() -> Vec<WinInfo> {
                 title: String::from_utf16_lossy(&title[..len]),
                 exe,
                 app_id,
+                relaunch_icon: window_property(hwnd, &RELAUNCH_ICON),
                 minimized,
                 app_name,
                 screen,
@@ -504,13 +514,17 @@ pub fn foreground() -> isize {
 
 // ---------- Icons ----------
 
-/// The icon for one `source` ("lnk:<path>", "exe:<path>", "path:<path>", "aumid:<app id>" or
-/// "hwnd:<window>") as a `size`-pixel PNG.
+/// The icon for one `source` ("lnk:<path>", "exe:<path>", "path:<path>", "aumid:<app id>",
+/// "res:<file>,<index>" or "hwnd:<window>") as a `size`-pixel PNG.
 pub fn icon_png(source: &str, size: i32) -> Option<Vec<u8>> {
     com_init();
     match source.split_once(':')? {
         ("lnk" | "exe" | "path", path) => shell_item_png(path, size).or_else(|| file_icon_png(path, size)),
         ("aumid", id) => shell_item_png(&format!("shell:AppsFolder\\{id}"), size),
+        ("res", resource) => {
+            let (path, index) = super::icons::split_resource(resource);
+            resource_icon_png(path, index, size)
+        }
         ("hwnd", hwnd) => window_icon_png(hwnd.parse().ok()?, size),
         _ => None,
     }
@@ -555,6 +569,24 @@ fn file_icon_png(path: &str, size: i32) -> Option<Vec<u8>> {
                 return None;
             }
             icon = info.hIcon;
+        }
+        let png = hicon_png(icon, size);
+        let _ = DestroyIcon(icon);
+        png
+    }
+}
+
+/// One icon out of a file ("<file>,<index>", as a shortcut or a window names it): an .ico file,
+/// or the icon at that index (or, when negative, with that resource id) in a program or DLL.
+fn resource_icon_png(path: &str, index: i32, size: i32) -> Option<Vec<u8>> {
+    let path = HSTRING::from(super::icons::expand_env(path, |name| std::env::var(name).ok()));
+    // SAFETY: the icon is written into a local by the call and destroyed after drawing.
+    unsafe {
+        let mut icon = HICON::default();
+        if SHDefExtractIconW(&path, index, 0, Some(&mut icon), None, size as u32).is_err()
+            || icon.is_invalid()
+        {
+            return None;
         }
         let png = hicon_png(icon, size);
         let _ = DestroyIcon(icon);
