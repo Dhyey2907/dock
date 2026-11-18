@@ -10,6 +10,7 @@ pub mod favicon;
 pub mod history;
 #[cfg(windows)]
 pub mod hooks;
+pub mod icons;
 pub mod jump;
 pub mod layout;
 #[cfg(windows)]
@@ -62,6 +63,9 @@ pub struct WinInfo {
     /// The window's program, lowercased.
     pub exe: Option<String>,
     pub app_id: Option<String>,
+    /// The icon the window asks the taskbar to show ("<file>,<index>"), which apps like
+    /// Chrome set per profile alongside their own app id.
+    pub relaunch_icon: Option<String>,
     pub minimized: bool,
     /// A friendly name for its app, for apps that aren't pinned.
     pub app_name: String,
@@ -292,6 +296,24 @@ fn belongs(pin: &Pin, window: &WinInfo) -> bool {
     }
 }
 
+/// A window's icon sources, best first: its app id's icon (missing when the app sets an id the
+/// Start menu doesn't know, like a second Chrome profile), the icon the window asks the taskbar
+/// to show for it (that profile's own icon), its program's, and — when the program can't be
+/// read or is a Store package — the icon the window itself shows.
+fn window_icon(window: &WinInfo) -> String {
+    let own_icon = window.exe.as_deref().is_none_or(self::icons::is_packaged);
+    self::icons::chain(
+        [
+            window.app_id.as_ref().map(|id| format!("aumid:{id}")),
+            window.relaunch_icon.as_ref().map(|icon| format!("res:{icon}")),
+            window.exe.as_ref().map(|exe| format!("exe:{exe}")),
+            own_icon.then(|| format!("hwnd:{}", window.hwnd)),
+        ]
+        .into_iter()
+        .flatten(),
+    )
+}
+
 fn pin_key(pin: &Pin) -> String {
     match &pin.launch {
         Launch::Shortcut(path) | Launch::Program(path) => format!("pin:{}", path.to_lowercase()),
@@ -341,19 +363,15 @@ pub fn build(pins: &[Pin], windows: &[WinInfo], foreground: isize) -> (Vec<DockA
         if claimed[i] {
             continue;
         }
-        let (key, icon, launch) = match (&window.app_id, &window.exe) {
+        let (key, launch) = match (&window.app_id, &window.exe) {
             (Some(id), _) => (
                 format!("app:{}", id.to_lowercase()),
-                format!("aumid:{id}"),
                 Some(Launch::AppId(id.clone())),
             ),
-            (None, Some(exe)) => (
-                format!("exe:{exe}"),
-                format!("exe:{exe}"),
-                Some(Launch::Program(exe.clone())),
-            ),
-            (None, None) => (format!("win:{}", window.hwnd), String::new(), None),
+            (None, Some(exe)) => (format!("exe:{exe}"), Some(Launch::Program(exe.clone()))),
+            (None, None) => (format!("win:{}", window.hwnd), None),
         };
+        let icon = window_icon(window);
         if let Some(app) = apps.iter_mut().find(|a| a.key == key) {
             app.windows.push(dock_window(window));
             app.summarise();
@@ -569,6 +587,7 @@ mod tests {
             title: format!("window {hwnd}"),
             exe: exe.map(Into::into),
             app_id: app_id.map(Into::into),
+            relaunch_icon: None,
             minimized: false,
             app_name: format!("app of {hwnd}"),
             screen: None,
@@ -691,7 +710,8 @@ mod tests {
         assert!(apps[0].windows[1].active);
         assert!(!apps[2].pinned);
         assert_eq!(apps[2].key, "app:chrome.profile2");
-        assert_eq!(apps[2].icon, "aumid:Chrome.Profile2");
+        // Its app id's icon first, then its program's in case the Start menu doesn't know the id.
+        assert_eq!(apps[2].icon, r"aumid:Chrome.Profile2|exe:c:\chrome.exe");
     }
 
     #[test]
@@ -766,5 +786,45 @@ mod tests {
             click_action(&app_with(&[false, false, true])),
             ClickAction::Activate(10)
         );
+    }
+
+    #[test]
+    fn a_chrome_profile_window_shows_its_profile_icon_then_chrome_s() {
+        let profile = WinInfo {
+            relaunch_icon: Some(r"c:\chrome\profile 1\google profile.ico,0".into()),
+            ..window(
+                1,
+                Some("Chrome.UserData.Profile 1"),
+                Some(r"c:\chrome\chrome.exe"),
+            )
+        };
+        let (apps, _) = build(&[], &[profile], 0);
+        assert_eq!(
+            apps[0].icon,
+            r"aumid:Chrome.UserData.Profile 1|res:c:\chrome\profile 1\google profile.ico,0|exe:c:\chrome\chrome.exe"
+        );
+    }
+
+    #[test]
+    fn window_icons_fall_back_to_the_window_when_the_program_is_unreadable() {
+        let (apps, _) = build(
+            &[],
+            &[
+                window(1, None, None),
+                window(
+                    2,
+                    Some("Microsoft.Todos_8wekyb3d8bbwe!App"),
+                    Some(r"c:\program files\windowsapps\todo\todo.exe"),
+                ),
+                window(3, None, Some(r"c:\tools\tool.exe")),
+            ],
+            0,
+        );
+        assert_eq!(apps[0].icon, "hwnd:1");
+        assert_eq!(
+            apps[1].icon,
+            r"aumid:Microsoft.Todos_8wekyb3d8bbwe!App|exe:c:\program files\windowsapps\todo\todo.exe|hwnd:2"
+        );
+        assert_eq!(apps[2].icon, r"exe:c:\tools\tool.exe");
     }
 }
