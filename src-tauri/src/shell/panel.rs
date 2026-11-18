@@ -1,4 +1,5 @@
-//! Widget popups: one small window, made the first time a popup opens and reused after that.
+//! Widget popups: one small window, made when a popup opens and reused until it has sat unused
+//! for a while (see `idle_window`).
 //! It opens above the dock (below it when the dock is on top), centred on the widget that was
 //! clicked, with Windows' acrylic blur behind it. Clicking elsewhere closes it; clicking the
 //! same widget again toggles it.
@@ -12,7 +13,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder};
 use ts_rs::TS;
 
-use super::placement::Rect;
+use super::{idle_window::IdleWindow, placement::Rect};
 use crate::{
     apps::jump::{AppMenu, DockMenu, StackView},
     error::AppResult,
@@ -148,6 +149,9 @@ pub fn panel_rect(screen: Rect, dock: Rect, edge: Edge, anchor_x: i32, size: (u3
         height: height as u32,
     }
 }
+
+/// The popup window, which exists only while it's in use.
+static POPUP: IdleWindow = IdleWindow::new(PANEL_LABEL);
 
 /// Open `kind`'s popup at `anchor_x` (the widget's centre, screen pixels), or close it if it is
 /// already open. Async-safe: creating the window off the main thread avoids a WebView2 deadlock.
@@ -441,10 +445,7 @@ fn show(
     peek: bool,
 ) -> AppResult<()> {
     let state = app.state::<PanelState>();
-    let window = match app.get_webview_window(PANEL_LABEL) {
-        Some(window) => window,
-        None => create(app)?,
-    };
+    let window = POPUP.get_or_create(app, create)?;
     if super::geometry_of(app, dock_label).is_none() || app.get_webview_window(dock_label).is_none() {
         return Ok(());
     }
@@ -478,6 +479,7 @@ fn show(
     // Shown (and later hidden) straight through Windows, in order: going through Tauri's queue
     // could let an earlier close hide the popup after this show, or the other way round, which
     // left an empty popup on screen.
+    POPUP.wait_for_page();
     // Closed (or opened again) while this was being placed: leave it to the newer one.
     let current = || state.epoch.load(Ordering::SeqCst) == epoch;
     if !current() {
@@ -626,15 +628,15 @@ pub fn close(app: &AppHandle) -> AppResult<()> {
     if was_open.is_some() {
         app.emit(PANEL_CLOSED, ())?;
     }
+    POPUP.close_when_idle(app, |app| {
+        app.state::<PanelState>().open.lock().expect("panel lock").is_some()
+    });
     Ok(())
 }
 
-/// Make the popup window ahead of time (at startup), so the first popup opens at once.
-pub fn prepare(app: &AppHandle) -> AppResult<()> {
-    if app.get_webview_window(PANEL_LABEL).is_none() {
-        create(app)?;
-    }
-    Ok(())
+/// The popup's page has loaded.
+pub fn page_loaded() {
+    POPUP.page_loaded();
 }
 
 fn create(app: &AppHandle) -> AppResult<tauri::WebviewWindow> {
@@ -646,6 +648,8 @@ fn create(app: &AppHandle) -> AppResult<tauri::WebviewWindow> {
         .always_on_top(true)
         .skip_taskbar(true)
         .resizable(false)
+        // It's often made by just hovering: never take the focus from the app you're using.
+        .focused(false)
         .visible(false)
         .effects(tauri::utils::config::WindowEffectsConfig {
             effects: vec![tauri::window::Effect::Acrylic],
@@ -657,8 +661,7 @@ fn create(app: &AppHandle) -> AppResult<tauri::WebviewWindow> {
         round_corners(&window);
         // A tool window: never on the taskbar or in Alt+Tab. It's shown and hidden straight
         // through Windows after this, which keeps the style.
-        super::make_tool_window(&window, false)?;
-        crate::apps::win::hide_quietly(window.hwnd()?.0 as isize);
+        super::make_hidden_tool_window(&window)?;
     }
     Ok(window)
 }

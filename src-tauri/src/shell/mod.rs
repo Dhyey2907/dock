@@ -4,6 +4,7 @@
 mod appbar;
 pub mod bubble;
 pub mod floating;
+pub mod idle_window;
 pub mod panel;
 pub mod placement;
 pub mod screens;
@@ -602,6 +603,26 @@ pub fn show_dock(window: &WebviewWindow) -> AppResult<()> {
     window.show()?;
     #[cfg(windows)]
     make_tool_window(window, true)?;
+    Ok(())
+}
+
+/// `make_tool_window` for a window that hasn't been shown yet: it stays hidden and keeps the
+/// focus where it is.
+#[cfg(windows)]
+pub(crate) fn make_hidden_tool_window(window: &WebviewWindow) -> AppResult<()> {
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetWindowLongPtrW, SetWindowLongPtrW, GWL_EXSTYLE, WS_EX_APPWINDOW, WS_EX_TOOLWINDOW,
+    };
+    let hwnd = windows::Win32::Foundation::HWND(window.hwnd()?.0);
+    // SAFETY: `hwnd` is a live top-level window owned by this process; only its style changes.
+    unsafe {
+        let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        SetWindowLongPtrW(
+            hwnd,
+            GWL_EXSTYLE,
+            (style | WS_EX_TOOLWINDOW.0 as isize) & !(WS_EX_APPWINDOW.0 as isize),
+        );
+    }
     Ok(())
 }
 

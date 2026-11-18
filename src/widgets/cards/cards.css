@@ -212,7 +212,6 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  transition: width 400ms ease;
 }
 .card-limit {
   display: flex;
@@ -239,9 +238,6 @@
 .card-ring-track {
   fill: none;
   stroke: var(--card-track);
-}
-.card-ring circle {
-  transition: stroke-dasharray 500ms ease;
 }
 .card-ring-label {
   position: relative;
@@ -492,7 +488,6 @@
   bottom: 0;
   height: calc(3 * var(--cu));
   background: #0a84ff;
-  transition: width 900ms linear;
 }
 .card-wide .card-text {
   min-width: calc(110 * var(--cu));

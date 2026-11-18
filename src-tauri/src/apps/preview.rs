@@ -27,7 +27,7 @@ use windows::Win32::{
 use super::{layout, DockApp};
 use crate::{
     error::{AppError, AppResult},
-    shell,
+    shell::{self, idle_window::IdleWindow},
 };
 
 pub const PREVIEW_LABEL: &str = "preview";
@@ -71,10 +71,10 @@ static STATE: State = State {
     hovered: AtomicBool::new(false),
 };
 
-fn window(app: &AppHandle) -> AppResult<tauri::WebviewWindow> {
-    if let Some(window) = app.get_webview_window(PREVIEW_LABEL) {
-        return Ok(window);
-    }
+/// The popup window, which exists only while it's in use.
+static POPUP: IdleWindow = IdleWindow::new(PREVIEW_LABEL);
+
+fn create(app: &AppHandle) -> AppResult<tauri::WebviewWindow> {
     let window = WebviewWindowBuilder::new(app, PREVIEW_LABEL, WebviewUrl::App("index.html#preview".into()))
         .title("Dock window previews")
         .decorations(false)
@@ -85,6 +85,8 @@ fn window(app: &AppHandle) -> AppResult<tauri::WebviewWindow> {
         .resizable(false)
         .focused(false)
         .visible(false)
+        // Off screen, since it's briefly shown below.
+        .position(-32000.0, -32000.0)
         .effects(tauri::utils::config::WindowEffectsConfig {
             effects: vec![tauri::window::Effect::Acrylic],
             ..Default::default()
@@ -249,7 +251,7 @@ fn present(
     let (width, height) = (content.width, content.height);
     STATE.generation.fetch_add(1, Ordering::SeqCst);
     let unchanged = STATE.open.lock().unwrap_or_else(|e| e.into_inner()).as_ref() == Some(&content);
-    let popup = window(app)?;
+    let popup = POPUP.get_or_create(app, create)?;
     if unchanged && popup.is_visible()? {
         return Ok(());
     }
@@ -271,6 +273,11 @@ fn present(
         }
         sized_for = now;
     }
+    POPUP.wait_for_page();
+    // Hidden, or showing something else, by the time its page was ready.
+    if STATE.open.lock().unwrap_or_else(|e| e.into_inner()).as_ref() != Some(&content) {
+        return Ok(());
+    }
     let hwnd = popup.hwnd()?.0 as isize;
     super::win::show_on_top_quietly(hwnd);
     // The pictures go in the popup's page pixels, so they use its scale (the dock's may differ).
@@ -281,6 +288,7 @@ fn present(
 
 /// What the popup shows (for its page when it first loads).
 pub fn current() -> Option<PreviewContent> {
+    POPUP.page_loaded();
     STATE.open.lock().unwrap_or_else(|e| e.into_inner()).clone()
 }
 
@@ -298,6 +306,9 @@ pub fn hide(app: &AppHandle) -> AppResult<()> {
     if was_open.is_some() {
         app.emit(PREVIEW_CLOSED, ())?;
     }
+    POPUP.close_when_idle(app, |_| {
+        STATE.open.lock().unwrap_or_else(|e| e.into_inner()).is_some()
+    });
     Ok(())
 }
 

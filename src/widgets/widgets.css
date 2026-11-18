@@ -84,7 +84,6 @@
   fill: none;
   stroke: var(--dock-accent, #7dd3fc);
   stroke-linecap: round;
-  transition: stroke-dashoffset 900ms linear;
 }
 [data-phase="break"] .ring-fill {
   stroke: #4ade80;

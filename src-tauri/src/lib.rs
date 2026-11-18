@@ -111,15 +111,6 @@ pub fn run() {
                     }
                 });
             }
-            // The popup window is ready before the first click (made off the main thread:
-            // making a window there would wait on the main thread, which is busy right here).
-            let handle = app.handle().clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_secs(2));
-                if let Err(error) = shell::panel::prepare(&handle) {
-                    tracing::warn!(%error, "failed to prepare the popup");
-                }
-            });
             tracing::info!(version = env!("CARGO_PKG_VERSION"), "dock started");
             Ok(())
         })

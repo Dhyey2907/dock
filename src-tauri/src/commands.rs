@@ -725,6 +725,7 @@ pub fn panel_hover(app: AppHandle, hovered: bool) {
 /// Which widget's popup is open (for the popup page when it first loads).
 #[tauri::command]
 pub fn panel_current(app: AppHandle) -> Option<shell::panel::PanelContent> {
+    shell::panel::page_loaded();
     shell::panel::current(&app)
 }
 

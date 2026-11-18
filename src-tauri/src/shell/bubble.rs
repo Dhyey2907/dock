@@ -4,7 +4,7 @@
 
 use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
 
-use super::placement::Rect;
+use super::{idle_window::IdleWindow, placement::Rect};
 use crate::{
     automations::Bubble,
     error::AppResult,
@@ -43,6 +43,9 @@ pub fn bubble_rect(screen: Rect, dock: Rect, edge: Edge, count: usize, scale: f6
     }
 }
 
+/// The cards window, which exists only while it's in use.
+static CARDS: IdleWindow = IdleWindow::new(BUBBLE_LABEL);
+
 fn create(app: &AppHandle) -> AppResult<tauri::WebviewWindow> {
     Ok(
         WebviewWindowBuilder::new(app, BUBBLE_LABEL, WebviewUrl::App("index.html#bubble".into()))
@@ -62,14 +65,17 @@ fn create(app: &AppHandle) -> AppResult<tauri::WebviewWindow> {
 /// Show `bubbles` (or hide the window when there are none) and tell the page.
 pub fn sync(app: &AppHandle, bubbles: &[Bubble]) -> AppResult<()> {
     let shown: Vec<Bubble> = bubbles.iter().rev().take(MAX_CARDS).rev().cloned().collect();
-    let window = match app.get_webview_window(BUBBLE_LABEL) {
-        Some(window) => window,
-        None if shown.is_empty() => return Ok(()),
-        None => create(app)?,
-    };
+    if shown.is_empty() && app.get_webview_window(BUBBLE_LABEL).is_none() {
+        return Ok(());
+    }
+    let window = CARDS.get_or_create(app, create)?;
     app.emit_to(BUBBLE_LABEL, BUBBLES_CHANGED, &shown)?;
     if shown.is_empty() {
         window.hide()?;
+        CARDS.close_when_idle(app, |app| {
+            app.get_webview_window(BUBBLE_LABEL)
+                .is_some_and(|window| window.is_visible().unwrap_or(false))
+        });
         return Ok(());
     }
     let (Some(geometry), Some(dock)) = (super::geometry(app), super::dock_window(app)) else {
