@@ -258,17 +258,21 @@ const readRate = () => ipc.currencyRate();
 
 /** Currency: what one unit is worth in the other. */
 export function CurrencyCard() {
-  const { data, failed } = useLoaded(readRate, 3_600_000);
+  const from = useSettings((s) => s.settings?.cards.currencyFrom ?? "");
+  const to = useSettings((s) => s.settings?.cards.currencyTo ?? "");
+  const { data, failed } = useLoaded(readRate, 3_600_000, `${from}${to}`);
   return (
     <Card>
       <IconTile color="#30d158">
         <ArrowRightLeft strokeWidth={2.4} />
       </IconTile>
       <span className="card-col">
-        <span className="card-label card-dim">{data ? `${data.from} → ${data.to}` : "…"}</span>
-        <span className="card-big card-tabular">
-          {failed ? "—" : data ? data.rate.toFixed(data.rate >= 100 ? 1 : 3) : "…"}
-        </span>
+        <span className="card-label card-dim">{data ? `${data.from} → ${data.to}` : `${from} → ${to}`}</span>
+        {data ? (
+          <span className="card-big card-tabular">{data.rate.toFixed(data.rate >= 100 ? 1 : 3)}</span>
+        ) : (
+          <span className="card-faint">{failed ? "Couldn't get the rate" : "Loading…"}</span>
+        )}
       </span>
     </Card>
   );

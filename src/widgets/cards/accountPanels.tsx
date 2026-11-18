@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { Check, KeyRound } from "lucide-react";
 
-import { ipc } from "../../core/ipc";
+import { announceServicesChanged, ipc } from "../../core/ipc";
 import { errorText, featuresIpc } from "../../core/ipcFeatures";
-import type { CardSettings } from "../../core/generated/CardSettings";
 import type { Count } from "../../core/generated/Count";
+import type { Revenue } from "../../core/generated/Revenue";
+import type { Traffic } from "../../core/generated/Traffic";
 import type { Service } from "../../core/generated/Service";
 import { useSettings } from "../../settings/store";
-import { SERVICE_NAMES } from "./accountMeta";
+import { Spark } from "./parts";
+import { EXTRA, SERVICE_NAMES } from "./accountMeta";
 
 function report(error: unknown) {
   console.error("account card action failed", error);
@@ -39,17 +41,8 @@ const HELP: Record<Service, string> = {
   deepseek: "platform.deepseek.com/api_keys → Create new API key (sk-…).",
 };
 
-/** The extra, non-secret choice some services need. */
-const EXTRA: Partial<Record<Service, { field: keyof CardSettings; label: string; placeholder: string }>> = {
-  shopify: { field: "shopifyStore", label: "Store address", placeholder: "your-store.myshopify.com" },
-  plausible: { field: "plausibleSite", label: "Site domain", placeholder: "example.com" },
-  supabase: { field: "supabaseProject", label: "Project reference ID", placeholder: "abcdefghijklmnop" },
-  youtube: { field: "youtubeChannel", label: "Channel ID", placeholder: "UC…" },
-  x: { field: "xUsername", label: "Username", placeholder: "@you" },
-};
-
 /** Paste (or remove) a service's key, and its extra choice. */
-export function ServicePanel({ service, details }: { service: Service; details?: boolean }) {
+export function ServicePanel({ service }: { service: Service; details?: boolean }) {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [key, setKey] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -73,6 +66,7 @@ export function ServicePanel({ service, details }: { service: Service; details?:
         setConnected(value.trim() !== "");
         setKey("");
         setMessage(value.trim() ? "Saved in Windows Credential Manager." : "Removed.");
+        announceServicesChanged().catch(report);
       })
       .catch((error) => setMessage(errorText(error, "Couldn't save the key.")));
   };
@@ -80,7 +74,9 @@ export function ServicePanel({ service, details }: { service: Service; details?:
   return (
     <div className="panel-body card-panel">
       <h2 className="panel-title">{SERVICE_NAMES[service]}</h2>
-      <p className="panel-faint">{HELP[service]}</p>
+      {connected && <ServiceDetails service={service} extra={extraValue} />}
+      {connected && <h3 className="card-panel-subtitle">Key</h3>}
+      {!connected && <p className="panel-faint">{HELP[service]}</p>}
       <label className="card-field">
         <span className="panel-faint">
           {connected ? (
@@ -123,31 +119,157 @@ export function ServicePanel({ service, details }: { service: Service; details?:
             placeholder={extra.placeholder}
             spellCheck={false}
             onChange={(e) => setExtraValue(e.target.value)}
-            onBlur={() => update({ cards: { ...cards, [extra.field]: extraValue } }).catch(report)}
+            onBlur={() =>
+              extraValue !== String(cards[extra.field] ?? "") &&
+              update({ cards: { ...cards, [extra.field]: extraValue } }).catch(report)
+            }
           />
         </label>
       )}
       {message && <p className="panel-faint">{message}</p>}
-      {details && connected && <ServiceDetails service={service} />}
     </div>
   );
 }
 
-/** Linear's issues, listed under its setup. */
-function ServiceDetails({ service }: { service: Service }) {
-  const [count, setCount] = useState<Count | null>(null);
+const REVENUE: Service[] = ["stripe", "polar", "shopify", "gumroad", "paddle", "lemonSqueezy", "dodo"];
+const TRAFFIC: Service[] = ["plausible", "datafast", "dub"];
+
+const money = (n: number, currency: string) => {
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency, maximumFractionDigits: 2 }).format(
+      n,
+    );
+  } catch {
+    return `${n.toFixed(2)} ${currency}`;
+  }
+};
+const whole = (n: number) => new Intl.NumberFormat().format(Math.round(n));
+const sum = (list: number[]) => list.reduce((a, b) => a + b, 0);
+
+/** What the service's cards show, in more detail: the reason the popup opens once it's set up. */
+function ServiceDetails({ service, extra }: { service: Service; extra: string }) {
+  const [state, setState] = useState<{ data?: Revenue | Traffic | Count; error?: string }>({});
   useEffect(() => {
-    ipc.serviceCount(service).then(setCount).catch(report);
-  }, [service]);
-  if (!count?.items.length) return null;
+    let alive = true;
+    const read: Promise<Revenue | Traffic | Count> = REVENUE.includes(service)
+      ? ipc.serviceRevenue(service)
+      : TRAFFIC.includes(service)
+        ? ipc.serviceTraffic(service)
+        : ipc.serviceCount(service);
+    read
+      .then((data) => alive && setState({ data }))
+      .catch(
+        (error) =>
+          alive &&
+          setState({
+            error: typeof error === "string" ? error : errorText(error, "Couldn't load this right now."),
+          }),
+      );
+    return () => {
+      alive = false;
+    };
+  }, [service, extra]);
+
+  const { data, error } = state;
+  if (error) return <p className="prod-problem">{error}</p>;
+  if (!data) return <p className="panel-faint">Loading…</p>;
+
+  if ("total" in data) {
+    const days = data.daily.slice(-14);
+    const week = sum(days.slice(7));
+    const before = sum(days.slice(0, 7));
+    return (
+      <div className="card-panel-stats">
+        <Stat label="Last 30 days" value={money(data.total, data.currency)} />
+        <Stat label="Last 7 days" value={money(week, data.currency)} change={change(week, before)} />
+        <Stat label="Best day" value={money(Math.max(0, ...data.daily), data.currency)} />
+        {data.daily.length > 1 && (
+          <div className="card-panel-chart">
+            <Spark points={data.daily} width={300} height={60} color="#30d158" fill />
+            <span className="panel-faint">Daily, last {data.daily.length} days</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+  if ("week" in data) {
+    const unit = service === "dub" ? "Clicks" : "Visitors";
+    return (
+      <div className="card-panel-stats">
+        <Stat
+          label={`${unit} this week`}
+          value={whole(data.week)}
+          change={change(data.week, data.previous)}
+        />
+        <Stat label="Last week" value={whole(data.previous)} />
+        {data.daily.length > 1 && (
+          <div className="card-panel-chart">
+            <Spark points={data.daily} width={300} height={60} color="#64d2ff" fill />
+            <span className="panel-faint">Daily, last {data.daily.length} days</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+  const labels: Partial<Record<Service, [string, string?]>> = {
+    resend: ["Emails sent, last 7 days", "Delivered"],
+    linear: ["Issues assigned to you", "In progress"],
+    supabase: ["API requests today"],
+    youtube: ["Subscribers"],
+    instagram: ["Followers"],
+    x: ["Followers"],
+    deepseek: ["Balance"],
+  };
+  const [first, second] = labels[service] ?? ["Total"];
   return (
-    <ul className="card-panel-list">
-      {count.items.map((item) => (
-        <li key={item}>
-          <span className="card-panel-name">{item}</span>
-        </li>
-      ))}
-    </ul>
+    <div className="card-panel-stats">
+      <Stat
+        label={first}
+        value={
+          service === "deepseek" ? money(data.value, data.note === "CNY" ? "CNY" : "USD") : whole(data.value)
+        }
+      />
+      {second && data.second != null && <Stat label={second} value={whole(data.second)} />}
+      {data.note && NOTE_LABEL[service] && <Stat label={NOTE_LABEL[service]} value={data.note} />}
+      {data.items.length > 0 && (
+        <ul className="card-panel-list">
+          {data.items.map((item) => (
+            <li key={item}>
+              <span className="card-panel-name">{item}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** What a count's note is, for the services that send one worth showing. */
+const NOTE_LABEL: Partial<Record<Service, string>> = {
+  supabase: "Status",
+  youtube: "Channel",
+  instagram: "Account",
+  x: "Account",
+};
+
+function change(now: number, before: number) {
+  return before ? ((now - before) / Math.abs(before)) * 100 : undefined;
+}
+
+function Stat({ label, value, change }: { label: string; value: string; change?: number }) {
+  return (
+    <div className="card-panel-stat">
+      <span className="panel-faint">{label}</span>
+      <span className="card-panel-stat-value card-tabular">
+        {value}
+        {change != null && (
+          <span className={change >= 0 ? "card-green" : "card-red"}>
+            {" "}
+            {change >= 0 ? "▲" : "▼"} {Math.abs(change).toFixed(0)}%
+          </span>
+        )}
+      </span>
+    </div>
   );
 }
 

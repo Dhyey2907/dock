@@ -78,7 +78,7 @@ const readCodex = () => ipc.codexUsage();
 
 /** ChatGPT Usage: the Codex plan's windows, read from Codex's own files. */
 export function CodexCard() {
-  const { data } = useLoaded(readCodex, 60_000);
+  const { data, loading } = useLoaded(readCodex, 60_000);
   const now = useNow(60_000);
   const window = (w?: { windowMinutes: number }) =>
     !w ? "" : w.windowMinutes >= 7 * 1440 ? (w.windowMinutes >= 28 * 1440 ? "Monthly" : "Weekly") : "Session";
@@ -89,7 +89,7 @@ export function CodexCard() {
         <Bot color="#111" strokeWidth={2.2} />
       </IconTile>
       <span className="card-col card-grow">
-        {!data && <span className="card-faint">Codex not used on this PC</span>}
+        {!data && <span className="card-faint">{loading ? "Loading…" : "Codex not used on this PC"}</span>}
         {data?.primary && (
           <LimitRow
             label={window(data.primary)}

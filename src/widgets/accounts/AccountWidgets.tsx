@@ -560,6 +560,9 @@ export function GithubActionsPanel() {
     <div className="panel-body">
       <Header title="GitHub Actions" loading={loading} onRefresh={refresh} />
       {error && <Problem text={error} />}
+      {!loading && !error && (state?.runs ?? []).length === 0 && (
+        <p className="panel-faint">No workflow runs yet in the repos you watch.</p>
+      )}
       <Scroll>
         {(state?.runs ?? []).map((run) => (
           <li key={run.repo} className="account-row">

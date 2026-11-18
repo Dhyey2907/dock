@@ -113,6 +113,7 @@ export function BrightnessPanel() {
               max={100}
               value={monitor.percent}
               aria-label={`${monitor.name} brightness`}
+              style={{ "--fill": `${monitor.percent}%` } as React.CSSProperties}
               onChange={(e) => {
                 const percent = Number(e.target.value);
                 setData(data.map((m) => (m.id === monitor.id ? { ...m, percent } : m)));
