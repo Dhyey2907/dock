@@ -490,26 +490,28 @@ pub fn set_page_size(window: &tauri::WebviewWindow, width: f64, height: f64) -> 
         let scale = window.scale_factor()?;
         let want = ((width * scale).round() as i32, (height * scale).round() as i32);
         let hwnd = window.hwnd()?.0 as isize;
-        // Only the height is ever off (by a title bar's worth); the width is left as asked.
-        let mut height_px = want.1;
-        crate::apps::win::resize(hwnd, want.0, height_px);
+        // The window's frame can take some of the size (usually a title bar's worth of height,
+        // sometimes a border's worth of width), so grow it until the page itself is as asked.
+        let (mut width_px, mut height_px) = want;
+        crate::apps::win::resize(hwnd, width_px, height_px);
         for _ in 0..2 {
-            let Some((_, client_h)) = crate::apps::win::client_size(hwnd) else {
+            let Some((client_w, client_h)) = crate::apps::win::client_size(hwnd) else {
                 break;
             };
-            let extra = client_h - want.1;
-            if extra.abs() <= 1 {
+            let (extra_w, extra_h) = (client_w - want.0, client_h - want.1);
+            if extra_w.abs() <= 1 && extra_h.abs() <= 1 {
                 break;
             }
-            let next = height_px - extra;
+            let next = (width_px - extra_w, height_px - extra_h);
             // Never fight Windows down to nothing: a correction this big means something else
             // is going on, so keep the size asked for.
-            if next < want.1 / 2 || next > want.1 * 2 {
+            let sane = |n: i32, w: i32| n >= w / 2 && n <= w * 2;
+            if !sane(next.0, want.0) || !sane(next.1, want.1) {
                 crate::apps::win::resize(hwnd, want.0, want.1);
                 break;
             }
-            height_px = next;
-            crate::apps::win::resize(hwnd, want.0, height_px);
+            (width_px, height_px) = next;
+            crate::apps::win::resize(hwnd, width_px, height_px);
         }
         Ok(())
     }
