@@ -358,6 +358,12 @@ pub fn folder_open(app: AppHandle, window: WebviewWindow, id: String, anchor_x: 
     crate::apps::service::show_folder(&app, window.label(), &id, anchor_x)
 }
 
+/// Hovering a dock folder: open its popup until the cursor leaves the folder and the popup.
+#[tauri::command(async)]
+pub fn folder_peek(app: AppHandle, window: WebviewWindow, id: String, anchor_x: i32) -> AppResult<()> {
+    crate::apps::service::peek_folder(&app, window.label(), &id, anchor_x)
+}
+
 /// Save the dock's folders, leaving every other setting as it is now.
 #[tauri::command]
 pub fn dock_folders_set(app: AppHandle, folders: Vec<crate::settings::DockFolder>) -> AppResult<Settings> {

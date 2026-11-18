@@ -157,6 +157,7 @@ pub fn run() {
             commands::gallery_toggle,
             commands::overflow_toggle,
             commands::folder_open,
+            commands::folder_peek,
             commands::dock_folders_set,
             commands::folder_app_click,
             commands::panel_detach,

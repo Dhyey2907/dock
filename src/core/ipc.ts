@@ -98,6 +98,9 @@ export const ipc = {
   /** Open or close a dock folder's popup, centred on `anchorX` (screen pixels). */
   folderOpen: (id: string, anchorX: number) =>
     invoke<void>("folder_open", { id, anchorX: Math.round(anchorX) }),
+  /** Hovering a dock folder: open its popup until the cursor leaves the folder and the popup. */
+  folderPeek: (id: string, anchorX: number) =>
+    invoke<void>("folder_peek", { id, anchorX: Math.round(anchorX) }),
   /** Save the dock's folders without touching any other setting. */
   dockFoldersSet: (folders: DockFolder[]) => invoke<Settings>("dock_folders_set", { folders }),
   folderAppClick: (dock: string, key: string) => invoke<void>("folder_app_click", { dock, key }),

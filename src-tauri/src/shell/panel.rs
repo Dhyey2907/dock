@@ -246,6 +246,10 @@ pub fn toggle_folder(
     anchor_x: i32,
 ) -> AppResult<()> {
     let same = |open: &PanelContent| matches!(open, PanelContent::Folder { folder } if folder.id == view.id && folder.dock == view.dock);
+    // Clicking the folder that hovering opened keeps its popup open, as a normal popup.
+    if app.state::<PanelState>().peek.load(Ordering::SeqCst) && is_showing(app, same)? {
+        return pin(app);
+    }
     if is_showing(app, same)? {
         return close(app);
     }
@@ -259,6 +263,29 @@ pub fn toggle_folder(
         anchor_x,
         false,
     )
+}
+
+/// Hovering a dock folder: show its popup without taking the focus, the way a widget preview
+/// shows. It goes away when the cursor leaves the folder and the popup; a click in it keeps it.
+/// Nothing happens while another popup or menu (not a preview) is open.
+pub fn peek_folder(
+    app: &AppHandle,
+    view: crate::apps::service::FolderView,
+    anchor_x: i32,
+) -> AppResult<()> {
+    let state = app.state::<PanelState>();
+    let same = |open: &PanelContent| matches!(open, PanelContent::Folder { folder } if folder.id == view.id && folder.dock == view.dock);
+    if is_showing(app, same)? {
+        // Back on the folder: cancel a close that leaving it planned.
+        state.generation.fetch_add(1, Ordering::SeqCst);
+        return Ok(());
+    }
+    if is_open(app) && !state.peek.load(Ordering::SeqCst) {
+        return Ok(());
+    }
+    let dock = view.dock.clone();
+    let size = view.size();
+    show(app, &dock, PanelContent::Folder { folder: view }, size, anchor_x, true)
 }
 
 /// The overflow flyout's size: cards in rows of up to three.
