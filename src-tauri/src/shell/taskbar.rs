@@ -38,8 +38,17 @@ pub trait TaskbarApi {
 }
 
 /// Hide the taskbar the way `mode` says, saving its original state first if it isn't saved.
+#[cfg(test)]
 pub fn apply(api: &impl TaskbarApi, file: &Path, mode: TaskbarMode) -> AppResult<()> {
-    if read(file).is_none() {
+    apply_with(api, file, mode, true)
+}
+
+/// `apply`, choosing whether to turn on the taskbar's auto-hide. Off when the dock hides the
+/// taskbar on one screen only: Windows' auto-hide is one switch for every screen, so leaving
+/// it as the user had it keeps the other screens' taskbars pinned.
+pub fn apply_with(api: &impl TaskbarApi, file: &Path, mode: TaskbarMode, autohide: bool) -> AppResult<()> {
+    let saved = read(file);
+    if saved.is_none() {
         let saved = Saved {
             original_state: api.state(),
         };
@@ -51,7 +60,12 @@ pub fn apply(api: &impl TaskbarApi, file: &Path, mode: TaskbarMode) -> AppResult
         std::fs::write(&tmp, serde_json::to_vec(&saved)?)?;
         std::fs::rename(&tmp, file)?;
     }
-    api.set_state(api.state() | AUTOHIDE);
+    if autohide {
+        api.set_state(api.state() | AUTOHIDE);
+    } else if let Some(saved) = saved {
+        // Back to how the user had it (an earlier run may have turned auto-hide on).
+        api.set_state(saved.original_state);
+    }
     api.set_visible(mode == TaskbarMode::AutoHide);
     Ok(())
 }
@@ -99,8 +113,14 @@ pub fn set_dock_screen(settings: &crate::settings::Settings) {
     *ONLY_SCREEN.lock().unwrap_or_else(|e| e.into_inner()) = only;
 }
 
+/// Whether the dock hides the taskbar on its own screen only and leaves the others pinned
+/// (one dock, "Dock only" mode). The dock then sets its screen's work area itself, since the
+/// hidden taskbar still holds its strip without auto-hide.
+pub fn pins_other_screens(mode: TaskbarMode) -> bool {
+    mode == TaskbarMode::Hidden && only_screen().is_some()
+}
+
 /// The screen chosen by `set_dock_screen` (`None`: every screen).
-#[cfg_attr(not(windows), allow(dead_code))]
 fn only_screen() -> Option<String> {
     ONLY_SCREEN.lock().unwrap_or_else(|e| e.into_inner()).clone()
 }
@@ -141,7 +161,7 @@ pub fn apply_system(mode: TaskbarMode) {
     let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     ACTIVE.store(true, Ordering::SeqCst);
     #[cfg(windows)]
-    if let Err(error) = apply(&win::System, file, mode) {
+    if let Err(error) = apply_with(&win::System, file, mode, !pins_other_screens(mode)) {
         tracing::warn!(%error, "could not hide the Windows taskbar");
     }
     #[cfg(not(windows))]
@@ -171,7 +191,11 @@ pub fn restore_system() {
     let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     ACTIVE.store(false, Ordering::SeqCst);
     #[cfg(windows)]
-    restore(&win::System, file);
+    {
+        // The dock may have set its screen's work area in place of the taskbar's auto-hide.
+        super::workarea::release();
+        restore(&win::System, file);
+    }
     #[cfg(not(windows))]
     let _ = file;
 }
@@ -329,6 +353,18 @@ mod tests {
         apply(&fake, &dir.path().join(FILE_NAME), TaskbarMode::AutoHide).unwrap();
         assert_eq!(fake.state.get(), ALWAYS_ON_TOP | AUTOHIDE);
         assert!(fake.visible.get());
+    }
+
+    #[test]
+    fn pinning_other_screens_leaves_auto_hide_as_it_was() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(FILE_NAME);
+        let fake = Fake::new(0);
+        apply(&fake, &file, TaskbarMode::Hidden).unwrap();
+        assert_eq!(fake.state(), AUTOHIDE);
+        apply_with(&fake, &file, TaskbarMode::Hidden, false).unwrap();
+        assert_eq!(fake.state(), 0);
+        assert!(!fake.visible.get());
     }
 
     #[test]
