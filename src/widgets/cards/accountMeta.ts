@@ -1,3 +1,4 @@
+import type { CardSettings } from "../../core/generated/CardSettings";
 import type { Service } from "../../core/generated/Service";
 
 /** A service's mark: its colour and a letter (no logos). */
@@ -39,4 +40,15 @@ export const SERVICE_NAMES: Record<Service, string> = {
   instagram: "Instagram",
   x: "X",
   deepseek: "DeepSeek",
+};
+
+/** The extra, non-secret choice some services need (it changes what their cards read). */
+export const EXTRA: Partial<
+  Record<Service, { field: keyof CardSettings; label: string; placeholder: string }>
+> = {
+  shopify: { field: "shopifyStore", label: "Store address", placeholder: "your-store.myshopify.com" },
+  plausible: { field: "plausibleSite", label: "Site domain", placeholder: "example.com" },
+  supabase: { field: "supabaseProject", label: "Project reference ID", placeholder: "abcdefghijklmnop" },
+  youtube: { field: "youtubeChannel", label: "Channel ID", placeholder: "UC…" },
+  x: { field: "xUsername", label: "Username", placeholder: "@you" },
 };

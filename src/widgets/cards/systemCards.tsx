@@ -13,43 +13,45 @@ import { rate } from "./format";
 const load = (percent: number) => (percent >= 85 ? "#ff453a" : percent >= 60 ? "#ff9f0a" : "#0a84ff");
 
 /** System Stats: processor and memory as two live rings. */
-export function SystemStatsCard() {
-  const stats = useWidgets((s) => s.stats);
-  const cpu = Math.round(stats?.cpu ?? 0);
-  const ram = Math.round(stats?.ram ?? 0);
+/** A load ring; "—" until the first reading arrives (never a made-up 0). */
+function LoadRing({ label, value }: { label: string; value?: number }) {
+  const shown = value == null ? undefined : Math.round(value);
   return (
-    <Card>
-      <Ring value={cpu} size={50} color={load(cpu)}>
-        <span className="ring-number">{cpu}</span>
-        <span className="ring-unit">CPU</span>
-      </Ring>
-      <Ring value={ram} size={50} color={load(ram)}>
-        <span className="ring-number">{ram}</span>
-        <span className="ring-unit">RAM</span>
-      </Ring>
-    </Card>
+    <Ring value={shown ?? 0} size={50} color={load(shown ?? 0)}>
+      <span className="ring-number">{shown ?? "—"}</span>
+      <span className="ring-unit">{label}</span>
+    </Ring>
   );
 }
 
-function OneRing({ label, value }: { label: string; value: number }) {
+export function SystemStatsCard() {
+  const stats = useWidgets((s) => s.stats);
   return (
     <Card>
-      <Ring value={value} size={50} color={load(value)}>
-        <span className="ring-number">{value}</span>
-        <span className="ring-unit">{label}</span>
-      </Ring>
+      <LoadRing label="CPU" value={stats?.cpu} />
+      <LoadRing label="RAM" value={stats?.ram} />
     </Card>
   );
 }
 
 /** CPU: processor load as a ring. */
 export function CpuCard() {
-  return <OneRing label="CPU" value={Math.round(useWidgets((s) => s.stats?.cpu ?? 0))} />;
+  const cpu = useWidgets((s) => s.stats?.cpu);
+  return (
+    <Card>
+      <LoadRing label="CPU" value={cpu} />
+    </Card>
+  );
 }
 
 /** RAM: memory in use as a ring. */
 export function RamCard() {
-  return <OneRing label="RAM" value={Math.round(useWidgets((s) => s.stats?.ram ?? 0))} />;
+  const ram = useWidgets((s) => s.stats?.ram);
+  return (
+    <Card>
+      <LoadRing label="RAM" value={ram} />
+    </Card>
+  );
 }
 
 const readTemperature = () => ipc.cpuTemperature();
@@ -60,8 +62,8 @@ export function TemperatureCard() {
   const stats = useWidgets((s) => s.stats);
   const temp = data ?? null;
   const color = temp == null ? "#8e8e93" : temp >= 85 ? "#ff453a" : temp >= 70 ? "#ff9f0a" : "#30d158";
-  const cpu = Math.round(stats?.cpu ?? 0);
-  const ram = Math.round(stats?.ram ?? 0);
+  const cpu = stats?.cpu == null ? undefined : Math.round(stats.cpu);
+  const ram = stats?.ram == null ? undefined : Math.round(stats.ram);
   return (
     <Card>
       <Ring value={temp == null ? 0 : Math.min(100, temp)} size={50} color={color} gap={90}>
@@ -71,13 +73,13 @@ export function TemperatureCard() {
       <span className="card-col card-limits">
         <span className="card-limit">
           <span className="card-label card-dim">CPU</span>
-          <Meter value={cpu} color="#0a84ff" width={44} />
-          <span className="card-value">{cpu}%</span>
+          <Meter value={cpu ?? 0} color="#0a84ff" width={44} />
+          <span className="card-value">{cpu == null ? "—" : `${cpu}%`}</span>
         </span>
         <span className="card-limit">
           <span className="card-label card-dim">RAM</span>
-          <Meter value={ram} color="#0a84ff" width={44} />
-          <span className="card-value">{ram}%</span>
+          <Meter value={ram ?? 0} color="#0a84ff" width={44} />
+          <span className="card-value">{ram == null ? "—" : `${ram}%`}</span>
         </span>
       </span>
     </Card>
@@ -195,9 +197,14 @@ export function ThemeToggleCard() {
   const { data, setData } = useLoaded(readTheme, 30_000);
   const dark = data !== "light";
   const flip = () => {
+    if (data == null) return;
     const next: ThemeChoice = dark ? "light" : "dark";
     setData(next);
-    ipc.windowsThemeSet(next).catch(console.error);
+    // Put the switch back if Windows didn't take it.
+    ipc.windowsThemeSet(next).catch((error) => {
+      console.error(error);
+      setData(data);
+    });
   };
   return (
     <Card>
@@ -209,7 +216,7 @@ export function ThemeToggleCard() {
       >
         <span className="card-switch-knob">{dark ? <Moon /> : <Sun />}</span>
       </CardButton>
-      <span className="card-label">{dark ? "Dark" : "Light"}</span>
+      <span className="card-label">{data == null ? "Theme" : dark ? "Dark" : "Light"}</span>
     </Card>
   );
 }
