@@ -539,7 +539,7 @@ fn image_file(path: &str) -> Option<Vec<u8>> {
     super::favicon::to_png(&std::fs::read(path).ok()?)
 }
 
-/// The icon for `source` as a data URL, made once and kept in memory. A miss isn't kept:
+/// The icon for `source` (one source, or a chain of fallbacks) as a data URL, made once and kept in memory. A miss isn't kept:
 /// extraction can fail for a moment (an app mid-update, a site offline), and a later ask
 /// should retry.
 pub fn icon(app: &AppHandle, source: &str) -> Option<String> {
@@ -547,17 +547,20 @@ pub fn icon(app: &AppHandle, source: &str) -> Option<String> {
     if let Some(Some(cached)) = state.icons.lock().expect("apps lock").get(source) {
         return Some(cached.clone());
     }
-    let png = match source.split_once(':') {
-        Some(("image", path)) => image_file(path),
-        Some(("favicon", address)) => state
-            .favicon_dir
-            .get()
-            .and_then(|dir| super::favicon::icon(dir, address)),
-        #[cfg(windows)]
-        _ => super::win::icon_png(source, ICON_SIZE),
-        #[cfg(not(windows))]
-        _ => None,
-    };
+    // A chain of sources (see `icons`): the first that draws wins.
+    let png = super::icons::sources(source)
+        .into_iter()
+        .find_map(|one| match one.split_once(':') {
+            Some(("image", path)) => image_file(path),
+            Some(("favicon", address)) => state
+                .favicon_dir
+                .get()
+                .and_then(|dir| super::favicon::icon(dir, address)),
+            #[cfg(windows)]
+            _ => super::win::icon_png(one, ICON_SIZE),
+            #[cfg(not(windows))]
+            _ => None,
+        });
     let url = png.map(|png| {
         format!(
             "data:image/png;base64,{}",

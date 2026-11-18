@@ -132,7 +132,8 @@ impl History {
                     ClosedApp {
                         key: app.key.clone(),
                         name: app.name.clone(),
-                        icon: app.icon.clone(),
+                        // Its windows are gone, and a window handle may later name another app's.
+                        icon: super::icons::without_windows(&app.icon),
                         launch: launchable.launch.clone(),
                     },
                 );

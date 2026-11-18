@@ -14,13 +14,16 @@ use windows::{
         Graphics::{
             Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED},
             Gdi::{
-                DeleteObject, EnumDisplayMonitors, GetDC, GetDIBits, GetMonitorInfoW, GetObjectW,
-                MonitorFromWindow, ReleaseDC, BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS,
-                HBITMAP, HDC, HGDIOBJ, HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST,
+                CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, EnumDisplayMonitors, GdiFlush,
+                GetDC, GetDIBits, GetMonitorInfoW, GetObjectW, MonitorFromWindow, ReleaseDC, SelectObject,
+                BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP, HDC, HGDIOBJ,
+                HMONITOR, MONITORINFO, MONITORINFOEXW, MONITOR_DEFAULTTONEAREST,
             },
         },
         Storage::{
-            FileSystem::{GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW},
+            FileSystem::{
+                GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW, FILE_FLAGS_AND_ATTRIBUTES,
+            },
             Packaging::Appx::GetApplicationUserModelId,
         },
         System::{
@@ -46,18 +49,21 @@ use windows::{
             Shell::{
                 IShellItem, IShellItemImageFactory, IShellLinkW,
                 PropertiesSystem::{IPropertyStore, SHGetPropertyStoreForWindow},
-                SHCreateItemFromParsingName, ShellExecuteExW, ShellLink, SEE_MASK_FLAG_NO_UI,
-                SEE_MASK_NOASYNC, SHELLEXECUTEINFOW, SIGDN_NORMALDISPLAY, SIIGBF_ICONONLY,
+                SHCreateItemFromParsingName, SHDefExtractIconW, SHGetFileInfoW, ShellExecuteExW, ShellLink,
+                SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW, SHFILEINFOW, SHGFI_ICON,
+                SHGFI_LARGEICON, SIGDN_NORMALDISPLAY, SIIGBF_ICONONLY,
             },
             WindowsAndMessaging::{
-                EnumWindows, GetForegroundWindow, GetWindow, GetWindowLongW, GetWindowTextLengthW,
-                GetWindowTextW, GetWindowThreadProcessId, IsIconic, IsWindowVisible, PostMessageW,
-                SetForegroundWindow, ShowWindowAsync, CHILDID_SELF, EVENT_OBJECT_CLOAKED,
+                DestroyIcon, DrawIconEx, EnumWindows, FindWindowExW, GetClassLongPtrW, GetClassNameW,
+                GetForegroundWindow, GetWindow, GetWindowLongW, GetWindowTextLengthW, GetWindowTextW,
+                GetWindowThreadProcessId, IsIconic, IsWindowVisible, PostMessageW, SendMessageTimeoutW,
+                SetForegroundWindow, ShowWindowAsync, CHILDID_SELF, DI_NORMAL, EVENT_OBJECT_CLOAKED,
                 EVENT_OBJECT_CREATE, EVENT_OBJECT_HIDE, EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_NAMECHANGE,
                 EVENT_OBJECT_UNCLOAKED, EVENT_SYSTEM_FOREGROUND, EVENT_SYSTEM_MINIMIZEEND,
-                EVENT_SYSTEM_MINIMIZESTART, GWL_EXSTYLE, GW_OWNER, OBJID_WINDOW, SHOW_WINDOW_CMD,
+                EVENT_SYSTEM_MINIMIZESTART, GCLP_HICON, GCLP_HICONSM, GWL_EXSTYLE, GW_OWNER, HICON, ICON_BIG,
+                ICON_SMALL, ICON_SMALL2, OBJID_WINDOW, SHOW_WINDOW_CMD, SMTO_ABORTIFHUNG, SMTO_BLOCK,
                 SW_MINIMIZE, SW_RESTORE, SW_SHOWNORMAL, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
-                WM_CLOSE,
+                WM_CLOSE, WM_GETICON,
             },
         },
     },
@@ -142,11 +148,22 @@ pub fn read_pins() -> Vec<Pin> {
             PinRef::Shortcut(file) => {
                 let path = folder.join(&file).to_string_lossy().into_owned();
                 let (exe, app_id) = resolve_shortcut(&path);
+                // The shortcut's own icon, else its program's or app id's (a shortcut whose
+                // icon file was moved or deleted draws nothing).
+                let icon = super::icons::chain(
+                    [
+                        Some(format!("lnk:{path}")),
+                        exe.as_ref().map(|exe| format!("exe:{exe}")),
+                        app_id.as_ref().map(|id| format!("aumid:{id}")),
+                    ]
+                    .into_iter()
+                    .flatten(),
+                );
                 Some(Pin {
                     name: file.trim_end_matches(".lnk").trim_end_matches(".LNK").to_string(),
                     app_id,
                     exe,
-                    icon: format!("lnk:{path}"),
+                    icon,
                     launch: Launch::Shortcut(path),
                 })
             }
@@ -290,6 +307,38 @@ fn process_app_id(pid: u32) -> Option<String> {
     }
 }
 
+/// A Store app's window belongs to ApplicationFrameHost, which draws its frame; the app itself
+/// runs in another process that owns the frame's CoreWindow child. Without this every Store
+/// app would show (and group) as "Application Frame Host" with its blank icon.
+fn hosted_app_pid(hwnd: HWND) -> Option<u32> {
+    // SAFETY: read-only queries on a window and its children.
+    unsafe {
+        let mut class = [0u16; 64];
+        let len = GetClassNameW(hwnd, &mut class) as usize;
+        if String::from_utf16_lossy(&class[..len]) != "ApplicationFrameWindow" {
+            return None;
+        }
+        let mut frame_pid = 0;
+        GetWindowThreadProcessId(hwnd, Some(&mut frame_pid));
+        let mut child: Option<HWND> = None;
+        loop {
+            let next = FindWindowExW(
+                Some(hwnd),
+                child,
+                w!("Windows.UI.Core.CoreWindow"),
+                PCWSTR::null(),
+            )
+            .ok()?;
+            let mut pid = 0;
+            GetWindowThreadProcessId(next, Some(&mut pid));
+            if pid != 0 && pid != frame_pid {
+                return Some(pid);
+            }
+            child = Some(next);
+        }
+    }
+}
+
 /// The window's own app id (set by apps like Chrome profiles), else its package's.
 fn window_app_id(hwnd: HWND, pid: u32) -> Option<String> {
     // SAFETY: COM calls on a live window's property store, released when dropped.
@@ -368,6 +417,7 @@ pub fn windows() -> Vec<WinInfo> {
             let mut title = [0u16; 512];
             // SAFETY: fills a local buffer of the given length.
             let len = unsafe { GetWindowTextW(hwnd, &mut title) } as usize;
+            let pid = hosted_app_pid(hwnd).unwrap_or(pid);
             let exe = process_exe(pid);
             let app_id = window_app_id(hwnd, pid).or_else(|| {
                 exe.as_deref()
@@ -454,14 +504,20 @@ pub fn foreground() -> isize {
 
 // ---------- Icons ----------
 
-/// The icon for `source` ("lnk:<path>", "exe:<path>" or "aumid:<app id>") as a `size`-pixel PNG.
+/// The icon for one `source` ("lnk:<path>", "exe:<path>", "path:<path>", "aumid:<app id>" or
+/// "hwnd:<window>") as a `size`-pixel PNG.
 pub fn icon_png(source: &str, size: i32) -> Option<Vec<u8>> {
     com_init();
-    let parsing = match source.split_once(':')? {
-        ("lnk" | "exe" | "path", path) => path.to_string(),
-        ("aumid", id) => format!("shell:AppsFolder\\{id}"),
-        _ => return None,
-    };
+    match source.split_once(':')? {
+        ("lnk" | "exe" | "path", path) => shell_item_png(path, size).or_else(|| file_icon_png(path, size)),
+        ("aumid", id) => shell_item_png(&format!("shell:AppsFolder\\{id}"), size),
+        ("hwnd", hwnd) => window_icon_png(hwnd.parse().ok()?, size),
+        _ => None,
+    }
+}
+
+/// The icon the shell draws for an item (a file, or an app in the Apps folder).
+fn shell_item_png(parsing: &str, size: i32) -> Option<Vec<u8>> {
     // SAFETY: COM calls on objects owned by this function; the bitmap is read into a local
     // buffer sized from its own header and deleted before returning.
     unsafe {
@@ -475,6 +531,118 @@ pub fn icon_png(source: &str, size: i32) -> Option<Vec<u8>> {
         let (width, height, rgba) = pixels?;
         encode_png(width, height, &rgba)
     }
+}
+
+/// A file's icon read straight from it, for when the shell item can't be made (a program the
+/// dock may not look inside, a shortcut pointing at a drive that's gone).
+fn file_icon_png(path: &str, size: i32) -> Option<Vec<u8>> {
+    let wide = HSTRING::from(path);
+    // SAFETY: the icon handles are written by the calls into locals and destroyed after drawing.
+    unsafe {
+        let mut icon = HICON::default();
+        let extracted =
+            SHDefExtractIconW(&wide, 0, 0, Some(&mut icon), None, size as u32).is_ok() && !icon.is_invalid();
+        if !extracted {
+            let mut info = SHFILEINFOW::default();
+            let got = SHGetFileInfoW(
+                &wide,
+                FILE_FLAGS_AND_ATTRIBUTES(0),
+                Some(&mut info),
+                std::mem::size_of::<SHFILEINFOW>() as u32,
+                SHGFI_ICON | SHGFI_LARGEICON,
+            );
+            if got == 0 || info.hIcon.is_invalid() {
+                return None;
+            }
+            icon = info.hIcon;
+        }
+        let png = hicon_png(icon, size);
+        let _ = DestroyIcon(icon);
+        png
+    }
+}
+
+/// The icon a window shows in its title bar and taskbar button: what it set with WM_SETICON,
+/// else its window class's.
+fn window_icon_png(hwnd: isize, size: i32) -> Option<Vec<u8>> {
+    let handle = HWND(hwnd as *mut c_void);
+    // SAFETY: plain queries on a window handle; a hung window can't stall us past the timeout.
+    // The icons belong to the window, so they aren't destroyed here.
+    unsafe {
+        if !windows::Win32::UI::WindowsAndMessaging::IsWindow(Some(handle)).as_bool() {
+            return None;
+        }
+        let asked = |kind: u32| {
+            let mut result = 0usize;
+            let sent = SendMessageTimeoutW(
+                handle,
+                WM_GETICON,
+                WPARAM(kind as usize),
+                LPARAM(0),
+                SMTO_ABORTIFHUNG | SMTO_BLOCK,
+                200,
+                Some(&mut result),
+            );
+            (sent.0 != 0 && result != 0).then_some(HICON(result as *mut c_void))
+        };
+        let class = |index| {
+            let value = GetClassLongPtrW(handle, index);
+            (value != 0).then_some(HICON(value as *mut c_void))
+        };
+        let icon = asked(ICON_BIG)
+            .or_else(|| class(GCLP_HICON))
+            .or_else(|| asked(ICON_SMALL2))
+            .or_else(|| asked(ICON_SMALL))
+            .or_else(|| class(GCLP_HICONSM))?;
+        hicon_png(icon, size)
+    }
+}
+
+/// An icon handle drawn at `size` pixels, as a PNG with its transparency kept.
+unsafe fn hicon_png(icon: HICON, size: i32) -> Option<Vec<u8>> {
+    let draw = |background: u8| -> Option<Vec<u8>> {
+        let info = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: size,
+                biHeight: -size, // top-down rows
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        // SAFETY: (caller) `icon` is a live icon. The DIB section's pixels are `size`² 32-bit
+        // pixels, copied out before the bitmap and memory DC are deleted.
+        unsafe {
+            let dc = CreateCompatibleDC(None);
+            if dc.is_invalid() {
+                return None;
+            }
+            let mut bits: *mut c_void = std::ptr::null_mut();
+            let Ok(bitmap) = CreateDIBSection(Some(dc), &info, DIB_RGB_COLORS, &mut bits, None, 0) else {
+                let _ = DeleteDC(dc);
+                return None;
+            };
+            let old = SelectObject(dc, HGDIOBJ(bitmap.0));
+            let len = size as usize * size as usize * 4;
+            let pixels = std::slice::from_raw_parts_mut(bits.cast::<u8>(), len);
+            pixels.fill(background);
+            let drawn = DrawIconEx(dc, 0, 0, icon, size, size, 0, None, DI_NORMAL).is_ok();
+            let _ = GdiFlush();
+            let out = pixels.to_vec();
+            SelectObject(dc, old);
+            let _ = DeleteObject(HGDIOBJ(bitmap.0));
+            let _ = DeleteDC(dc);
+            drawn.then_some(out)
+        }
+    };
+    let rgba = super::icons::unblend(&draw(0)?, &draw(255)?);
+    if rgba.chunks_exact(4).all(|p| p[3] == 0) {
+        return None;
+    }
+    encode_png(size as u32, size as u32, &rgba)
 }
 
 /// A 32-bit bitmap's pixels as straight (not premultiplied) RGBA.
