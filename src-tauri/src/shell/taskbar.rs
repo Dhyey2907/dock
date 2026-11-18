@@ -105,19 +105,25 @@ static REVEALING: AtomicBool = AtomicBool::new(false);
 /// The one screen whose taskbar the dock hides (its device name, "" for the main screen), when
 /// the dock is on one screen only; `None` hides the taskbar on every screen.
 static ONLY_SCREEN: Mutex<Option<String>> = Mutex::new(None);
+/// One dock, along the bottom: the other screens' taskbars can stay pinned.
+static PINS_OTHERS: AtomicBool = AtomicBool::new(false);
 
 /// Which taskbars to hide: with one dock, only the one on its screen, so other screens keep
 /// the Windows taskbar; with a dock on every screen, all of them.
 pub fn set_dock_screen(settings: &crate::settings::Settings) {
     let only = (settings.docks_on == crate::settings::DocksOn::One).then(|| settings.screen.clone());
+    PINS_OTHERS.store(
+        only.is_some() && settings.edge == crate::settings::Edge::Bottom,
+        Ordering::SeqCst,
+    );
     *ONLY_SCREEN.lock().unwrap_or_else(|e| e.into_inner()) = only;
 }
 
-/// Whether the dock hides the taskbar on its own screen only and leaves the others pinned
-/// (one dock, "Dock only" mode). The dock then sets its screen's work area itself, since the
-/// hidden taskbar still holds its strip without auto-hide.
+/// Whether the other screens' taskbars stay pinned: one dock along the bottom, "Dock only" mode.
+/// Without auto-hide the hidden taskbar keeps its strip, which the dock's own strip covers. A dock
+/// along the top couldn't cover it, so that case still uses auto-hide.
 pub fn pins_other_screens(mode: TaskbarMode) -> bool {
-    mode == TaskbarMode::Hidden && only_screen().is_some()
+    mode == TaskbarMode::Hidden && PINS_OTHERS.load(Ordering::SeqCst)
 }
 
 /// The screen chosen by `set_dock_screen` (`None`: every screen).
@@ -191,11 +197,7 @@ pub fn restore_system() {
     let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     ACTIVE.store(false, Ordering::SeqCst);
     #[cfg(windows)]
-    {
-        // The dock may have set its screen's work area in place of the taskbar's auto-hide.
-        super::workarea::release();
-        restore(&win::System, file);
-    }
+    restore(&win::System, file);
     #[cfg(not(windows))]
     let _ = file;
 }

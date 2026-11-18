@@ -93,11 +93,13 @@ fn applied(app: &AppHandle, before: Settings, settings: Settings) -> AppResult<S
     if before.launch_at_startup != settings.launch_at_startup {
         sync_autostart(&app, settings.launch_at_startup);
     }
-    let screens_changed = before.docks_on != settings.docks_on || before.screen != settings.screen;
-    if screens_changed {
+    let taskbars_changed = before.docks_on != settings.docks_on
+        || before.screen != settings.screen
+        || before.edge != settings.edge;
+    if taskbars_changed {
         shell::taskbar::set_dock_screen(&settings);
     }
-    if (before.taskbar_mode != settings.taskbar_mode || screens_changed)
+    if (before.taskbar_mode != settings.taskbar_mode || taskbars_changed)
         && !shell::using_windows_taskbar(&app)
     {
         shell::taskbar::apply_system(settings.taskbar_mode);

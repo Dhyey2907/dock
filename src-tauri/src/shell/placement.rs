@@ -61,14 +61,14 @@ pub fn reserved_rect(monitor: Rect, dock: Rect, edge: Edge) -> Rect {
     }
 }
 
-/// The monitor without the dock's strip along `edge`: where maximized windows may go.
-pub fn work_area(monitor: Rect, strip: Rect, edge: Edge) -> Rect {
-    let height = monitor.height.saturating_sub(strip.height);
-    let y = match edge {
-        Edge::Bottom => monitor.y,
-        Edge::Top => monitor.y + (monitor.height - height) as i32,
-    };
-    Rect { y, height, ..monitor }
+/// The part of a bottom `strip` above `free_bottom`, where a hidden taskbar's own strip begins.
+/// Empty when the taskbar's strip already covers it.
+pub fn above_taskbar(strip: Rect, free_bottom: i32) -> Rect {
+    let bottom = free_bottom.min(strip.y + strip.height as i32);
+    Rect {
+        height: (bottom - strip.y).max(0) as u32,
+        ..strip
+    }
 }
 
 /// Height in physical pixels of the strip an auto-hidden dock leaves to catch the cursor.
@@ -198,25 +198,20 @@ mod tests {
     }
 
     #[test]
-    fn work_area_leaves_out_the_dock_strip() {
-        let side = Rect {
-            x: 2560,
-            y: 0,
-            width: 1920,
-            height: 1080,
-        };
+    fn claims_only_what_the_hidden_taskbar_leaves() {
         let strip = Rect {
-            x: 2560,
-            y: 1080 - 64,
-            width: 1920,
-            height: 64,
+            x: 0,
+            y: 1520,
+            width: 2560,
+            height: 80,
         };
-        let bottom = work_area(side, strip, Edge::Bottom);
-        assert_eq!((bottom.x, bottom.y, bottom.width, bottom.height), (2560, 0, 1920, 1016));
-        let top = work_area(side, Rect { y: 0, ..strip }, Edge::Top);
-        assert_eq!((top.y, top.height), (64, 1016));
-        let nothing = work_area(side, Rect { height: 0, ..strip }, Edge::Bottom);
-        assert_eq!(nothing, side);
+        // A taller dock claims the slice above the taskbar's strip.
+        assert_eq!(above_taskbar(strip, 1528), Rect { height: 8, ..strip });
+        // No taskbar strip (auto-hide was already on): the whole strip.
+        assert_eq!(above_taskbar(strip, 1600), strip);
+        // The taskbar's strip is at least as tall as the dock: nothing to claim.
+        assert_eq!(above_taskbar(strip, 1520).height, 0);
+        assert_eq!(above_taskbar(strip, 1500).height, 0);
     }
 
     #[test]

@@ -12,8 +12,6 @@ pub mod taskbar;
 pub mod tray;
 #[cfg(windows)]
 mod watch;
-#[cfg(windows)]
-mod workarea;
 pub mod winkeys;
 
 use std::{
@@ -76,10 +74,8 @@ struct DockState {
     /// The strip last claimed from Windows, so unchanged layouts don't re-claim it (each claim
     /// changes the work area, which would come back as another layout change).
     reserved: Option<(Rect, Edge)>,
-    /// The last strip handed to Windows was empty. Kept through `relayout_all`: with the
-    /// taskbar hidden on this screen only, re-claiming nothing would make Explorer recompute
-    /// the work area each time, undoing the one the dock sets and starting another relayout.
-    claims_nothing: bool,
+    /// That strip was claimed above a hidden taskbar's own (see `place_one`).
+    above_taskbar: bool,
     /// Where the dock last went, as sent to the page.
     geometry: Option<DockGeometry>,
 }
@@ -92,7 +88,7 @@ impl DockState {
             revealed: false,
             fullscreen: false,
             reserved: None,
-            claims_nothing: false,
+            above_taskbar: false,
             geometry: None,
         }
     }
@@ -421,49 +417,36 @@ pub fn place_one(app: &AppHandle, label: &str) -> AppResult<()> {
         }
     };
     // With the taskbar hidden on this screen only (the others stay pinned), the hidden taskbar
-    // still holds its strip, so the dock sets the screen's work area itself and its app bar
-    // claims nothing (Windows would put a claim beside the taskbar's strip, not over it).
-    let sets_work_area = !shell.hidden_by_user.load(Ordering::SeqCst)
+    // keeps its strip: Explorer owns that and puts it back if anyone overrides it. So the dock
+    // leaves it alone and claims just the part of its own strip above it.
+    let above_taskbar = strip.height > 0
+        && !shell.hidden_by_user.load(Ordering::SeqCst)
         && taskbar::pins_other_screens(settings.taskbar_mode);
-    let claim = if sets_work_area {
-        Rect { height: 0, ..strip }
-    } else {
-        strip
-    };
     let (moved, reserve) = {
         let mut docks = shell.docks();
         let Some(state) = docks.get_mut(label) else {
             return Ok(());
         };
         let moved = state.geometry.replace(geometry) != Some(geometry);
-        let reserve = if sets_work_area {
-            !state.claims_nothing
-        } else {
-            state.reserved != Some((claim, settings.edge))
-        };
-        state.reserved = Some((claim, settings.edge));
-        if reserve {
-            state.claims_nothing = claim.height == 0;
-        }
+        let reserve = state.reserved != Some((strip, settings.edge)) || state.above_taskbar != above_taskbar;
+        state.reserved = Some((strip, settings.edge));
+        state.above_taskbar = above_taskbar;
         (moved, reserve)
     };
     if moved {
         app.emit_to(label, DOCK_GEOMETRY, geometry)?;
     }
     if reserve {
-        tracing::debug!(label, ?claim, "claiming the dock's strip");
+        tracing::debug!(label, ?strip, above_taskbar, "claiming the dock's strip");
         #[cfg(windows)]
-        appbar::reserve(
-            windows::Win32::Foundation::HWND(window.hwnd()?.0),
-            claim,
-            settings.edge,
-        );
-    }
-    #[cfg(windows)]
-    if sets_work_area {
-        workarea::hold(screen, placement::work_area(screen, strip, settings.edge));
-    } else {
-        workarea::release();
+        {
+            let hwnd = windows::Win32::Foundation::HWND(window.hwnd()?.0);
+            if above_taskbar {
+                appbar::reserve_above_taskbar(hwnd, strip);
+            } else {
+                appbar::reserve(hwnd, strip, settings.edge);
+            }
+        }
     }
     Ok(())
 }

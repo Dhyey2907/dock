@@ -12,7 +12,7 @@ use windows::Win32::{
     },
 };
 
-use super::placement::Rect;
+use super::placement::{above_taskbar, Rect};
 use crate::settings::Edge;
 
 /// The message Windows sends the dock for app-bar notices (`ABN_*` in wParam).
@@ -65,6 +65,33 @@ pub fn reserve(hwnd: HWND, rect: Rect, edge: Edge) {
             Edge::Bottom => data.rc.top = data.rc.bottom - height,
             Edge::Top => data.rc.bottom = data.rc.top + height,
         }
+        SHAppBarMessage(ABM_SETPOS, &mut data);
+    }
+}
+
+/// Claim the part of a bottom `strip` that a hidden taskbar's own strip doesn't already hold, so
+/// windows stop at the dock while Explorer keeps its strip undisturbed.
+pub fn reserve_above_taskbar(hwnd: HWND, strip: Rect) {
+    let mut data = data(hwnd);
+    data.uEdge = ABE_BOTTOM;
+    data.rc = RECT {
+        left: strip.x,
+        top: strip.y,
+        right: strip.x + strip.width as i32,
+        bottom: strip.y + strip.height as i32,
+    };
+    data.lParam = LPARAM(0);
+    // SAFETY: the documented QUERYPOS/SETPOS handshake on our own registered app bar; `data`
+    // is a correctly sized local that Windows adjusts in place.
+    unsafe {
+        // Windows moves the bottom up to where the free space ends (ignoring this bar itself).
+        SHAppBarMessage(ABM_QUERYPOS, &mut data);
+        let claim = above_taskbar(strip, data.rc.bottom);
+        data.rc.top = if claim.height == 0 {
+            data.rc.bottom
+        } else {
+            claim.y
+        };
         SHAppBarMessage(ABM_SETPOS, &mut data);
     }
 }
