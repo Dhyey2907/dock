@@ -61,6 +61,16 @@ pub fn reserved_rect(monitor: Rect, dock: Rect, edge: Edge) -> Rect {
     }
 }
 
+/// The monitor without the dock's strip along `edge`: where maximized windows may go.
+pub fn work_area(monitor: Rect, strip: Rect, edge: Edge) -> Rect {
+    let height = monitor.height.saturating_sub(strip.height);
+    let y = match edge {
+        Edge::Bottom => monitor.y,
+        Edge::Top => monitor.y + (monitor.height - height) as i32,
+    };
+    Rect { y, height, ..monitor }
+}
+
 /// Height in physical pixels of the strip an auto-hidden dock leaves to catch the cursor.
 pub const SLIVER: u32 = 3;
 
@@ -185,6 +195,28 @@ mod tests {
         let strip = reserved_rect(side, b, Edge::Bottom);
         assert_eq!((strip.x, strip.width, strip.y), (2560, 1920, 1080 - 64));
         assert_eq!(sliver_rect(side, Edge::Bottom).x, 2560);
+    }
+
+    #[test]
+    fn work_area_leaves_out_the_dock_strip() {
+        let side = Rect {
+            x: 2560,
+            y: 0,
+            width: 1920,
+            height: 1080,
+        };
+        let strip = Rect {
+            x: 2560,
+            y: 1080 - 64,
+            width: 1920,
+            height: 64,
+        };
+        let bottom = work_area(side, strip, Edge::Bottom);
+        assert_eq!((bottom.x, bottom.y, bottom.width, bottom.height), (2560, 0, 1920, 1016));
+        let top = work_area(side, Rect { y: 0, ..strip }, Edge::Top);
+        assert_eq!((top.y, top.height), (64, 1016));
+        let nothing = work_area(side, Rect { height: 0, ..strip }, Edge::Bottom);
+        assert_eq!(nothing, side);
     }
 
     #[test]
