@@ -486,8 +486,8 @@ impl FolderView {
     }
 }
 
-/// Open (or close) the popup of the folder `id` on the dock `label`.
-pub fn show_folder(app: &AppHandle, label: &str, id: &str, anchor_x: i32) -> AppResult<()> {
+/// The popup contents of the folder `id` on the dock `label`.
+fn folder_view(app: &AppHandle, label: &str, id: &str) -> AppResult<FolderView> {
     let settings = app.state::<SettingsStore>().get();
     let folder = settings
         .apps
@@ -496,7 +496,7 @@ pub fn show_folder(app: &AppHandle, label: &str, id: &str, anchor_x: i32) -> App
         .find(|f| f.id == id)
         .ok_or_else(|| AppError::InvalidInput("unknown folder".into()))?;
     let apps = list(app, label);
-    let view = FolderView {
+    Ok(FolderView {
         dock: label.to_string(),
         id: folder.id.clone(),
         name: folder.name.clone(),
@@ -511,10 +511,24 @@ pub fn show_folder(app: &AppHandle, label: &str, id: &str, anchor_x: i32) -> App
                 running: !a.windows.is_empty(),
             })
             .collect(),
-    };
+    })
+}
+
+/// Open (or close) the popup of the folder `id` on the dock `label`.
+pub fn show_folder(app: &AppHandle, label: &str, id: &str, anchor_x: i32) -> AppResult<()> {
+    let view = folder_view(app, label, id)?;
     #[cfg(windows)]
     let _ = super::preview::hide(app);
     crate::shell::panel::toggle_folder(app, view, anchor_x)
+}
+
+/// Hovering a folder: open its popup without taking the focus. It closes when the cursor
+/// leaves the folder and its popup.
+pub fn peek_folder(app: &AppHandle, label: &str, id: &str, anchor_x: i32) -> AppResult<()> {
+    let view = folder_view(app, label, id)?;
+    #[cfg(windows)]
+    let _ = super::preview::hide(app);
+    crate::shell::panel::peek_folder(app, view, anchor_x)
 }
 
 /// An app in a folder's popup was clicked: close the popup and do what clicking its icon does.
