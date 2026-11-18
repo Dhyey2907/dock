@@ -14,15 +14,25 @@ import {
 } from "lucide-react";
 
 import { ipc } from "../../core/ipc";
-import type { Quote } from "../../core/generated/Quote";
+import { useSettings } from "../../settings/store";
 import { useLoaded } from "../useLoaded";
 import { Card, CardButton, DotGrid, IconTile, Meter, Spark } from "./parts";
 import { bytes } from "./format";
+import { change, COINS, coinLabel, money } from "./quotes";
 
 const readQuotes = () => ipc.stockQuotes();
 
-function change(q: Quote) {
-  return q.previousClose ? ((q.price - q.previousClose) / q.previousClose) * 100 : 0;
+/** The tickers from Settings, so a change in the popup reads again at once. */
+function useQuotes() {
+  const tickers = useSettings((s) => s.settings?.cards.stocks.join(",") ?? "");
+  const loaded = useLoaded(readQuotes, 120_000, tickers);
+  return { ...loaded, tickers: tickers ? tickers.split(",") : [] };
+}
+
+/** What a stock card says while it has no price: loading, no ticker, or couldn't reach it. */
+function quoteNote(failed: boolean, tickers: string[]) {
+  if (tickers.length === 0) return "Add a ticker";
+  return failed ? "Couldn't get prices" : "Loading…";
 }
 
 function Change({ value }: { value: number }) {
@@ -33,22 +43,19 @@ function Change({ value }: { value: number }) {
   );
 }
 
-const money = (n: number, currency = "USD") =>
-  new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency,
-    maximumFractionDigits: n >= 1000 ? 0 : 2,
-  }).format(n);
-
 /** Stock: one ticker's price and daily change. */
 export function StockCard() {
-  const { data, failed } = useLoaded(readQuotes, 120_000);
+  const { data, failed, tickers } = useQuotes();
   const q = data?.[0];
   return (
     <Card>
       <span className="card-col">
-        <span className="card-label">{q?.symbol ?? "…"}</span>
-        <span className="card-big card-tabular">{q ? money(q.price, q.currency) : failed ? "—" : "…"}</span>
+        <span className="card-label">{q?.symbol ?? tickers[0] ?? "Stock"}</span>
+        {q ? (
+          <span className="card-big card-tabular">{money(q.price, q.currency)}</span>
+        ) : (
+          <span className="card-faint">{quoteNote(failed, tickers)}</span>
+        )}
       </span>
       {q && <Change value={change(q)} />}
     </Card>
@@ -57,16 +64,22 @@ export function StockCard() {
 
 /** Stock Chart: one ticker with today's line. */
 export function StockChartCard() {
-  const { data } = useLoaded(readQuotes, 120_000);
+  const { data, failed, tickers } = useQuotes();
   const q = data?.[0];
   const up = q ? change(q) >= 0 : true;
   return (
     <Card className="card-wide card-chart">
       <span className="card-row card-between">
-        <span className="card-label">{q?.symbol ?? "…"}</span>
+        <span className="card-label">{q?.symbol ?? tickers[0] ?? "Stock"}</span>
         <span className="card-col card-end">
-          <span className="card-label card-tabular">{q ? money(q.price, q.currency) : "…"}</span>
-          {q && <Change value={change(q)} />}
+          {q ? (
+            <>
+              <span className="card-label card-tabular">{money(q.price, q.currency)}</span>
+              <Change value={change(q)} />
+            </>
+          ) : (
+            <span className="card-faint">{quoteNote(failed, tickers)}</span>
+          )}
         </span>
       </span>
       <Spark points={q?.points ?? []} width={200} height={22} color={up ? "#30d158" : "#ff453a"} fill />
@@ -76,7 +89,7 @@ export function StockChartCard() {
 
 /** Stock Watchlist: three tickers at a glance. */
 export function StockWatchlistCard() {
-  const { data } = useLoaded(readQuotes, 120_000);
+  const { data, failed, tickers } = useQuotes();
   return (
     <Card>
       <span className="card-col card-list">
@@ -89,7 +102,11 @@ export function StockWatchlistCard() {
             </span>
           </span>
         ))}
-        {!data && <span className="card-faint">Loading quotes…</span>}
+        {(!data || data.length === 0) && (
+          <span className="card-faint">
+            {data ? "No prices for those tickers" : quoteNote(failed, tickers)}
+          </span>
+        )}
       </span>
     </Card>
   );
@@ -99,15 +116,26 @@ const readCoin = () => ipc.coinPrice();
 
 /** Metric: a live price, such as BTC/USD. */
 export function MetricCard() {
-  const { data, failed } = useLoaded(readCoin, 120_000);
+  const coin = useSettings((s) => s.settings?.cards.metric || "bitcoin");
+  const { data, failed } = useLoaded(readCoin, 120_000, coin);
+  const id = data?.id ?? coin;
+  const known = COINS[id];
   return (
     <Card>
-      <IconTile color="#f7931a">
-        <Bitcoin strokeWidth={2.4} />
+      <IconTile color={known?.color ?? "#3a3a3c"}>
+        {id === "bitcoin" ? (
+          <Bitcoin strokeWidth={2.4} />
+        ) : (
+          <span className="card-mark card-coin-mark">{(known?.symbol ?? id).slice(0, 1).toUpperCase()}</span>
+        )}
       </IconTile>
       <span className="card-col">
-        <span className="card-label card-dim">{data?.id ?? "bitcoin"}</span>
-        <span className="card-big card-tabular">{data ? money(data.usd) : failed ? "—" : "…"}</span>
+        <span className="card-label card-dim">{coinLabel(id)} · USD</span>
+        {data ? (
+          <span className="card-big card-tabular">{money(data.usd)}</span>
+        ) : (
+          <span className="card-faint">{failed ? "Couldn't get the price" : "Loading…"}</span>
+        )}
       </span>
       {data && <Change value={data.change24h} />}
     </Card>
@@ -118,12 +146,15 @@ const readGithub = () => ipc.githubContributions();
 
 /** GitHub Activity: the contribution grid and streak. */
 export function GithubActivityCard() {
-  const { data, failed } = useLoaded(readGithub, 900_000);
-  if (!data) {
+  const user = useSettings((s) => s.settings?.cards.githubUser ?? "");
+  const { data, failed } = useLoaded(readGithub, 900_000, user);
+  if (!data || !user) {
     return (
       <Card>
         <GitBranch />
-        <span className="card-faint">{failed ? "Add your GitHub username" : "Loading…"}</span>
+        <span className="card-faint">
+          {!user ? "Add your GitHub username" : failed ? `Couldn't reach GitHub for ${user}` : "Loading…"}
+        </span>
       </Card>
     );
   }
@@ -157,13 +188,14 @@ const readLeetcode = () => ipc.leetcodeStats();
 
 /** LeetCode Stats: problems solved. */
 export function LeetcodeCard() {
-  const { data, failed } = useLoaded(readLeetcode, 900_000);
+  const user = useSettings((s) => s.settings?.cards.leetcodeUser ?? "");
+  const { data, failed } = useLoaded(readLeetcode, 900_000, user);
   return (
     <Card>
       <IconTile color="#ffa116">
         <Code2 strokeWidth={2.4} />
       </IconTile>
-      {data ? (
+      {data && user ? (
         <span className="card-col">
           <span className="card-big">{data.total} solved</span>
           <span className="card-row card-gap card-small">
@@ -173,7 +205,9 @@ export function LeetcodeCard() {
           </span>
         </span>
       ) : (
-        <span className="card-faint">{failed ? "Add your LeetCode username" : "Loading…"}</span>
+        <span className="card-faint">
+          {!user ? "Add your LeetCode username" : failed ? `Couldn't reach LeetCode for ${user}` : "Loading…"}
+        </span>
       )}
     </Card>
   );
@@ -185,7 +219,7 @@ const readRecent = () => ipc.recentFiles();
 
 /** Recently Opened: the files you used last. */
 export function RecentFilesCard() {
-  const { data } = useLoaded(readRecent, 60_000);
+  const { data, failed } = useLoaded(readRecent, 60_000);
   const latest = data?.[0];
   return (
     <Card>
@@ -194,7 +228,9 @@ export function RecentFilesCard() {
       </IconTile>
       <span className="card-col card-text">
         <span className="card-label card-dim">Recent</span>
-        <span className="card-line">{latest?.name ?? "Nothing yet"}</span>
+        <span className="card-line">
+          {latest?.name ?? (data ? "Nothing yet" : failed ? "Couldn't read" : "…")}
+        </span>
       </span>
     </Card>
   );
@@ -254,7 +290,7 @@ const readDrives = () => ipc.drives();
 
 /** Storage: free space on the system drive. */
 export function StorageCard() {
-  const { data } = useLoaded(readDrives, 300_000);
+  const { data, failed } = useLoaded(readDrives, 300_000);
   const drive = data?.find((d) => d.name === "C:") ?? data?.[0];
   const used = drive && drive.total ? ((drive.total - drive.free) / drive.total) * 100 : 0;
   return (
@@ -265,7 +301,9 @@ export function StorageCard() {
       <span className="card-col card-grow">
         <span className="card-row card-between">
           <span className="card-label">{drive?.name ?? "Drive"}</span>
-          <span className="card-faint">{drive ? `${bytes(drive.free)} free` : "…"}</span>
+          <span className="card-faint">
+            {drive ? `${bytes(drive.free)} free` : failed ? "Couldn't read" : "…"}
+          </span>
         </span>
         <Meter value={used} color={used > 90 ? "#ff453a" : "#0a84ff"} width={100} />
       </span>
@@ -277,9 +315,15 @@ const readShots = () => ipc.screenshotsList();
 
 /** Recent Screenshots: the newest ones as pictures. */
 export function ScreenshotsCard() {
-  const { data } = useLoaded(readShots, 60_000);
+  const { data, failed } = useLoaded(readShots, 60_000);
   return (
     <Card>
+      {!data && (
+        <>
+          <ImageIcon className="card-faint" />
+          <span className="card-faint">{failed ? "Couldn't read screenshots" : "Loading…"}</span>
+        </>
+      )}
       {(data ?? []).map((shot) => (
         <CardButton
           key={shot.path}
@@ -299,7 +343,7 @@ const readDownloads = () => ipc.downloadsList();
 
 /** Downloads: the newest file, one click to open. */
 export function DownloadsCard() {
-  const { data } = useLoaded(readDownloads, 30_000);
+  const { data, failed } = useLoaded(readDownloads, 30_000);
   const latest = data?.[0];
   return (
     <Card>
@@ -317,7 +361,7 @@ export function DownloadsCard() {
             <span className="card-line">{latest.name}</span>
           </CardButton>
         ) : (
-          <span className="card-line">Nothing yet</span>
+          <span className="card-line">{data ? "Nothing yet" : failed ? "Couldn't read" : "…"}</span>
         )}
       </span>
     </Card>

@@ -8,12 +8,14 @@ import {
   CloudSnow,
   CloudSun,
   Droplets,
+  MapPinOff,
   Moon,
   Sun,
   Wind,
   type LucideIcon,
 } from "lucide-react";
 
+import type { Weather } from "../../core/generated/Weather";
 import { useWidgets } from "../store";
 import { useNow } from "../useNow";
 import { Card } from "./parts";
@@ -59,12 +61,44 @@ function Icon({ name, className = "" }: { name?: string; className?: string }) {
   );
 }
 
+/** Why there's no weather to show, in a few words for a card (the popup says more). */
+const NOTICE: Record<Exclude<Weather["status"], "ready">, string> = {
+  noAccess: "Location is off",
+  placeNotFound: "Town not found",
+  unavailable: "Weather offline",
+};
+
+/** The weather when it's ready; otherwise `undefined`, and the card shows `WeatherNotice`. */
+function useReadyWeather() {
+  const weather = useWidgets((s) => s.weather);
+  return { weather: weather?.status === "ready" ? weather : undefined, raw: weather };
+}
+
+/** A card's stand-in when there's no weather yet, or it can't be had: says why. */
+function WeatherNotice({ weather }: { weather?: Weather }) {
+  const reason = !weather ? "Getting the weather…" : weather.status === "ready" ? "" : NOTICE[weather.status];
+  return (
+    <Card>
+      {weather?.status === "noAccess" ? (
+        <MapPinOff className="card-faint" />
+      ) : (
+        <Cloud className="card-faint" />
+      )}
+      <span className="card-col">
+        <span className="card-label">Weather</span>
+        <span className="card-faint">{reason}</span>
+      </span>
+    </Card>
+  );
+}
+
 const weekday = (iso: string) => new Date(`${iso}T12:00`).toLocaleDateString(undefined, { weekday: "short" });
 const deg = (n?: number) => (n == null ? "—" : `${n}°`);
 
 /** Weather: the temperature now, with today's high and low. */
 export function WeatherCard() {
-  const weather = useWidgets((s) => s.weather);
+  const { weather, raw } = useReadyWeather();
+  if (!weather) return <WeatherNotice weather={raw} />;
   const today = weather?.days[0];
   return (
     <Card>
@@ -81,7 +115,8 @@ export function WeatherCard() {
 
 /** Weather Details: wind, rain and the day's range. */
 export function WeatherDetailsCard() {
-  const weather = useWidgets((s) => s.weather);
+  const { weather, raw } = useReadyWeather();
+  if (!weather) return <WeatherNotice weather={raw} />;
   const today = weather?.days[0];
   return (
     <Card>
@@ -119,7 +154,9 @@ function Day({ date, icon, high, low }: { date: string; icon: string; high: numb
 
 /** Weather Forecast: the next four days. */
 export function WeatherForecastCard() {
-  const days = useWidgets((s) => s.weather?.days) ?? NONE;
+  const { weather, raw } = useReadyWeather();
+  const days = weather?.days ?? NONE;
+  if (days.length < 2) return <WeatherNotice weather={raw} />;
   return (
     <Card className="card-days">
       {days.slice(1, 5).map((d) => (
@@ -131,7 +168,8 @@ export function WeatherForecastCard() {
 
 /** Today & Forecast: today next to the next three days. */
 export function TodayForecastCard() {
-  const weather = useWidgets((s) => s.weather);
+  const { weather, raw } = useReadyWeather();
+  if (!weather) return <WeatherNotice weather={raw} />;
   return (
     <Card className="card-days">
       <span className="card-col card-today">
@@ -148,13 +186,14 @@ export function TodayForecastCard() {
 
 /** Weather Status: the conditions in words, with your town. */
 export function WeatherStatusCard() {
-  const weather = useWidgets((s) => s.weather);
+  const { weather, raw } = useReadyWeather();
+  if (!weather) return <WeatherNotice weather={raw} />;
   return (
     <Card>
       <Icon name={weather?.icon} className="card-weather-big" />
       <span className="card-col">
-        <span className="card-label">{weather?.condition ?? "—"}</span>
-        <span className="card-faint">{weather?.place ?? "Here"}</span>
+        <span className="card-label">{weather.condition ?? "—"}</span>
+        <span className="card-faint">{weather.place ?? "Your area"}</span>
       </span>
     </Card>
   );
@@ -162,7 +201,9 @@ export function WeatherStatusCard() {
 
 /** Hourly: the next six hours. */
 export function HourlyCard() {
-  const hours = useWidgets((s) => s.weather?.hours) ?? NONE;
+  const { weather, raw } = useReadyWeather();
+  const hours = weather?.hours ?? NONE;
+  if (!weather) return <WeatherNotice weather={raw} />;
   return (
     <Card className="card-days">
       {hours.map((h) => (
@@ -181,8 +222,9 @@ export function HourlyCard() {
 
 /** Sunrise & Sunset: the sun on its arc between the two. */
 export function SunriseSunsetCard() {
-  const weather = useWidgets((s) => s.weather);
+  const { weather, raw } = useReadyWeather();
   const now = useNow(60_000);
+  if (!weather?.sunrise || !weather.sunset) return <WeatherNotice weather={raw} />;
   const rise = weather?.sunrise ? Date.parse(weather.sunrise) : NaN;
   const set = weather?.sunset ? Date.parse(weather.sunset) : NaN;
   const t =

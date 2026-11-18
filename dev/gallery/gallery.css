@@ -1,0 +1,48 @@
+html.gallery,
+html.gallery body {
+  overflow: auto !important;
+  background: #2a2740 !important;
+  font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  margin: 0;
+}
+.gallery-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  padding: 16px;
+  align-items: flex-start;
+}
+.gallery-item {
+  margin: 0;
+}
+.gallery-item figcaption {
+  font: 11px/1.4 monospace;
+  color: #cfd3dc;
+  margin-bottom: 4px;
+}
+.gallery-item .dock {
+  justify-content: flex-start;
+}
+.dock-bar-sample {
+  background: rgba(20, 22, 28, 0.55);
+}
+.gallery-panels .panel {
+  width: 360px;
+  max-height: 560px;
+  overflow: auto;
+  position: relative;
+}
+.gallery-error {
+  color: #ff6b6b;
+  font: 12px monospace;
+}
+html.gallery,
+html.gallery body,
+html.gallery #root {
+  height: auto !important;
+  min-height: 100%;
+}
+.gallery-item {
+  display: flex;
+  flex-direction: column;
+}

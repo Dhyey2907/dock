@@ -66,8 +66,20 @@ const answers: Record<string, unknown> = {
   fxRate: 1,
 };
 
-const ipc = new Proxy({}, { get: (_t, name: string) => vi.fn(async () => answers[name] ?? null) });
-vi.mock("../../core/ipc", () => ({ ipc, events: {} }));
+const calls: Record<string, ReturnType<typeof vi.fn>> = {};
+const ipc = new Proxy(
+  {},
+  { get: (_t, name: string) => (calls[name] ??= vi.fn(async () => answers[name] ?? null)) },
+);
+/** Fires the "a key changed" event the account cards listen for. */
+const servicesChanged: (() => void)[] = [];
+const events = {
+  onServicesChanged: async (handler: () => void) => {
+    servicesChanged.push(handler);
+    return () => {};
+  },
+};
+vi.mock("../../core/ipc", () => ({ ipc, events, announceServicesChanged: async () => {} }));
 
 const { useWidgets } = await import("../store");
 const { useProductivity } = await import("../productivity/store");
@@ -187,6 +199,54 @@ describe("card widgets", () => {
     } finally {
       useWidgets.setState(filled.widgets);
       useProductivity.setState(filled.productivity);
+    }
+  });
+
+  it("an account card reads again as soon as a key is saved", async () => {
+    const Card = CARD_WIDGETS.stripe!.Card;
+    render(<Card />);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const before = calls.serviceRevenue.mock.calls.length;
+    await act(async () => {
+      servicesChanged.forEach((fire) => fire());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(calls.serviceRevenue.mock.calls.length).toBeGreaterThan(before);
+  });
+
+  it("a stock card says when prices can't be had, instead of loading forever", async () => {
+    calls.stockQuotes.mockRejectedValueOnce(new Error("offline"));
+    const Stock = CARD_WIDGETS.stock!.Card;
+    const { container } = render(<Stock />);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(container.textContent).toContain("Couldn't get prices");
+    expect(container.textContent).toContain("AAPL");
+  });
+
+  it("the metric card names the coin it shows", async () => {
+    answers.coinPrice = { id: "ethereum", usd: 3400, change24h: 1 };
+    const Metric = CARD_WIDGETS.metric!.Card;
+    const { container } = render(<Metric />);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(container.textContent).toContain("ETH");
+    expect(container.textContent).not.toContain("bitcoin");
+  });
+
+  it("weather cards say why there's no weather", async () => {
+    const weather = useWidgets.getState().weather;
+    useWidgets.setState({ weather: { status: "noAccess", days: [], hours: [], unit: "celsius" } } as never);
+    try {
+      const Forecast = CARD_WIDGETS.weatherForecast!.Card;
+      const { container } = render(<Forecast />);
+      expect(container.textContent).toContain("Location is off");
+    } finally {
+      useWidgets.setState({ weather } as never);
     }
   });
 

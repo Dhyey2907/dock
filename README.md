@@ -38,7 +38,7 @@ Build the installer (the output goes to `src-tauri/target/release/bundle/`):
 pnpm tauri build
 ```
 
-Other scripts: `pnpm test` (Vitest), `pnpm test:rust` (cargo tests), `pnpm check` (types, lint, format and tests) and `pnpm gen:types` (regenerates the TypeScript types from the Rust ones with ts-rs).
+Other scripts: `pnpm gallery` (every widget card and popup in a browser at localhost:1430, with sample data; add `?state=empty` or `?state=fail` to see how they look with nothing to show or when reads fail, and `?view=panels` for the popups), `pnpm test` (Vitest), `pnpm test:rust` (cargo tests), `pnpm check` (types, lint, format and tests) and `pnpm gen:types` (regenerates the TypeScript types from the Rust ones with ts-rs).
 
 ## Settings
 

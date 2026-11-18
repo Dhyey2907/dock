@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Bell, GitPullRequest, Mail, Play, Star } from "lucide-react";
+import { Bell, Camera, GitPullRequest, Mail, Play, Star } from "lucide-react";
 
-import { ipc } from "../../core/ipc";
-import { errorText } from "../../core/ipcFeatures";
+import { events, ipc } from "../../core/ipc";
+import { errorText, subscribe } from "../../core/ipcFeatures";
 import type { Count } from "../../core/generated/Count";
 import type { Revenue } from "../../core/generated/Revenue";
 import type { Service } from "../../core/generated/Service";
 import type { Traffic } from "../../core/generated/Traffic";
 import { useSettings } from "../../settings/store";
-import { MARKS, SERVICE_NAMES } from "./accountMeta";
+import { EXTRA, MARKS, SERVICE_NAMES } from "./accountMeta";
 import { Card, IconTile, Ring, Spark } from "./parts";
 
 /** How often account cards ask again (the backend also keeps answers for ten minutes). */
@@ -20,6 +20,8 @@ function Mark({ service }: { service: Service }) {
     <IconTile color={mark.color}>
       {service === "youtube" ? (
         <Play fill="#fff" color="#fff" />
+      ) : service === "instagram" ? (
+        <Camera color="#fff" strokeWidth={2.2} />
       ) : (
         <span className="card-mark" style={{ color: mark.ink ?? "#fff" }}>
           {mark.letter}
@@ -29,13 +31,29 @@ function Mark({ service }: { service: Service }) {
   );
 }
 
-/** Read `read` now and every `every` ms; keeps the error's words for the card. */
+/**
+ * Read `read` now and every `every` ms; keeps the error's words for the card. Reads again at once
+ * when `key` changes (a store address, a site) or a key is saved or removed anywhere, so a card
+ * fills in as soon as it's set up instead of on its next round.
+ */
 function useAsk<T>(key: string, read: () => Promise<T>, every = EVERY) {
   const [state, setState] = useState<{ data?: T; error?: string }>({});
+  const [round, setRound] = useState(0);
   const reader = useRef(read);
   useEffect(() => {
     reader.current = read;
   });
+  useEffect(
+    () =>
+      subscribe(() =>
+        events.onServicesChanged(() => {
+          // A removed key must not leave the old numbers up.
+          setState({});
+          setRound((r) => r + 1);
+        }),
+      ),
+    [],
+  );
   useEffect(() => {
     let alive = true;
     const run = () =>
@@ -45,9 +63,11 @@ function useAsk<T>(key: string, read: () => Promise<T>, every = EVERY) {
         .catch(
           (error) =>
             alive &&
-            setState({
+            // A passing failure keeps the last numbers; only a card with none shows why.
+            setState((last) => ({
+              data: last.data,
               error: typeof error === "string" ? error : errorText(error, "Couldn't load this right now."),
-            }),
+            })),
         );
     run();
     const timer = window.setInterval(run, every);
@@ -55,8 +75,14 @@ function useAsk<T>(key: string, read: () => Promise<T>, every = EVERY) {
       alive = false;
       window.clearInterval(timer);
     };
-  }, [key, every]);
+  }, [key, every, round]);
   return state;
+}
+
+/** The part of a service's cache key that its extra setting (a store, a site) adds. */
+function useExtra(service: Service) {
+  const extra = EXTRA[service];
+  return useSettings((s) => (extra ? String(s.settings?.cards[extra.field] ?? "") : ""));
 }
 
 const money = (n: number, currency: string) => {
@@ -103,7 +129,8 @@ function Waiting({ service, error, children }: { service: Service; error?: strin
 
 /** "Stripe": the last 30 days' net revenue. */
 export function RevenueCard({ service }: { service: Service }) {
-  const { data, error } = useAsk<Revenue>(`revenue/${service}`, () => ipc.serviceRevenue(service));
+  const extra = useExtra(service);
+  const { data, error } = useAsk<Revenue>(`revenue/${service}/${extra}`, () => ipc.serviceRevenue(service));
   if (!data) return <Waiting service={service} error={error} />;
   return (
     <Card>
@@ -119,7 +146,8 @@ export function RevenueCard({ service }: { service: Service }) {
 
 /** "Stripe Chart": this week's revenue over a 14-day line, and its change on last week. */
 export function RevenueChartCard({ service }: { service: Service }) {
-  const { data, error } = useAsk<Revenue>(`revenue/${service}`, () => ipc.serviceRevenue(service));
+  const extra = useExtra(service);
+  const { data, error } = useAsk<Revenue>(`revenue/${service}/${extra}`, () => ipc.serviceRevenue(service));
   if (!data) return <Waiting service={service} error={error} />;
   const days = data.daily.slice(-14);
   const week = days.slice(7).reduce((a, b) => a + b, 0);
@@ -129,7 +157,8 @@ export function RevenueChartCard({ service }: { service: Service }) {
       <span className="card-row card-between">
         <span className="card-row">
           <span className="card-dot" style={{ background: MARKS[service].color }} />
-          <span className="card-label">Net revenue</span>
+          <span className="card-label">{SERVICE_NAMES[service]}</span>
+          <span className="card-faint card-small">this week</span>
         </span>
         <span className="card-col card-end">
           <span className="card-label card-tabular">{money(week, data.currency)}</span>
@@ -174,7 +203,8 @@ export function TotalRevenueCard() {
 
 /** Plausible, DataFast, Dub: this week's visitors (or clicks), the trend and a line. */
 export function TrafficCard({ service, unit }: { service: Service; unit: string }) {
-  const { data, error } = useAsk<Traffic>(`traffic/${service}`, () => ipc.serviceTraffic(service));
+  const extra = useExtra(service);
+  const { data, error } = useAsk<Traffic>(`traffic/${service}/${extra}`, () => ipc.serviceTraffic(service));
   if (!data) return <Waiting service={service} error={error} />;
   return (
     <Card className="card-wide">
@@ -199,16 +229,17 @@ export function TrafficCard({ service, unit }: { service: Service; unit: string 
 
 /** Resend, Linear, Supabase, YouTube, Instagram, X, DeepSeek: a headline number and a note. */
 export function CountCard({ service }: { service: Service }) {
-  const { data, error } = useAsk<Count>(`count/${service}`, () => ipc.serviceCount(service));
+  const extra = useExtra(service);
+  const { data, error } = useAsk<Count>(`count/${service}/${extra}`, () => ipc.serviceCount(service));
   if (!data) return <Waiting service={service} error={error} />;
   const lines: Record<string, [string, string]> = {
-    resend: ["emails · 7 days", `${data.second ?? 0} delivered`],
-    linear: ["issues assigned", `${data.second ?? 0} in progress`],
-    supabase: ["requests today", data.note ?? ""],
-    youtube: ["subscribers", data.note ?? ""],
-    instagram: ["followers", data.note ? `@${data.note}` : ""],
-    x: ["followers", data.note ?? ""],
-    deepseek: ["balance", data.note ?? ""],
+    resend: ["Emails · 7 days", `${data.second ?? 0} delivered`],
+    linear: ["Issues assigned", `${data.second ?? 0} in progress`],
+    supabase: ["Requests today", data.note ?? ""],
+    youtube: ["Subscribers", data.note ?? ""],
+    instagram: ["Followers", data.note ? `@${data.note}` : ""],
+    x: ["Followers", data.note ?? ""],
+    deepseek: ["Balance", data.note ?? ""],
   };
   const [label, note] = lines[service] ?? ["", ""];
   const value =

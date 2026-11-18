@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 import type { DockFolder } from "./generated/DockFolder";
@@ -310,6 +310,8 @@ export function isMainDock(): boolean {
   }
 }
 
+const SERVICES_CHANGED = "services-changed";
+
 export const events = {
   onSettingsChanged: on<Settings>("settings-changed"),
   onDockRevealed: onThisWindow<boolean>("dock-revealed"),
@@ -343,4 +345,11 @@ export const events = {
   onAppLaunching: on<string>("app-launching"),
   onPreviewOpen: on<PreviewContent>("preview-open"),
   onPreviewClosed: on<null>("preview-closed"),
+  /** An account card's key was saved or removed (in the popup or Settings). */
+  onServicesChanged: on<null>(SERVICES_CHANGED),
 };
+
+/** Tell every window an account key changed, so its cards read again at once. */
+export function announceServicesChanged(): Promise<void> {
+  return emit(SERVICES_CHANGED, null);
+}

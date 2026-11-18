@@ -4,9 +4,11 @@ import { ipc } from "../../core/ipc";
 import type { CardSettings } from "../../core/generated/CardSettings";
 import { useSettings } from "../../settings/store";
 import { useLoaded } from "../useLoaded";
+import { useNow } from "../useNow";
 import { useStopwatch } from "./clockStore";
-import { bytes, duration } from "./format";
-import { Bars, Meter } from "./parts";
+import { bytes, duration, until } from "./format";
+import { change, coinLabel, money } from "./quotes";
+import { Bars, Meter, Spark } from "./parts";
 
 function report(error: unknown) {
   console.error("card action failed", error);
@@ -81,12 +83,32 @@ export function WorldClocksPanel() {
   );
 }
 
-/** Stocks: which tickers. */
+/** Stocks: today's prices, and which tickers. */
 export function StocksPanel() {
   const [cards, save] = useCards();
+  const { data, failed } = useLoaded(ipc.stockQuotes, 120_000, cards?.stocks.join(","));
   if (!cards) return null;
   return (
     <Panel title="Stocks">
+      {data && data.length > 0 && (
+        <ul className="card-panel-list card-panel-quotes">
+          {data.map((q) => {
+            const c = change(q);
+            return (
+              <li key={q.symbol}>
+                <span className="card-panel-name">{q.symbol}</span>
+                <Spark points={q.points} width={90} height={22} color={c >= 0 ? "#30d158" : "#ff453a"} />
+                <span className="card-tabular">{money(q.price, q.currency)}</span>
+                <span className={`card-tabular ${c >= 0 ? "card-green" : "card-red"}`}>
+                  {c >= 0 ? "+" : ""}
+                  {c.toFixed(2)}%
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {failed && !data && <p className="prod-problem">Couldn't get prices right now.</p>}
       <Field
         label="Tickers, separated by commas"
         value={cards.stocks.join(", ")}
@@ -100,12 +122,33 @@ export function StocksPanel() {
   );
 }
 
-/** Metric: which coin. */
+/** Metric: the price now, and which coin. */
 export function MetricPanel() {
   const [cards, save] = useCards();
+  const { data, failed } = useLoaded(ipc.coinPrice, 120_000, cards?.metric);
   if (!cards) return null;
   return (
     <Panel title="Live price">
+      {data && (
+        <div className="card-panel-stats">
+          <div className="card-panel-stat">
+            <span className="panel-faint">{coinLabel(data.id)} in US dollars</span>
+            <span className="card-panel-stat-value card-tabular">{money(data.usd)}</span>
+          </div>
+          <div className="card-panel-stat">
+            <span className="panel-faint">Last 24 hours</span>
+            <span
+              className={`card-panel-stat-value card-tabular ${data.change24h >= 0 ? "card-green" : "card-red"}`}
+            >
+              {data.change24h >= 0 ? "+" : ""}
+              {data.change24h.toFixed(2)}%
+            </span>
+          </div>
+        </div>
+      )}
+      {failed && !data && (
+        <p className="prod-problem">Couldn't get a price for "{cards.metric}". Check the id below.</p>
+      )}
       <Field
         label="Coin (CoinGecko id)"
         value={cards.metric}
@@ -120,7 +163,11 @@ export function MetricPanel() {
 /** Currency: which pair, and a converter. */
 export function CurrencyPanel() {
   const [cards, save] = useCards();
-  const { data } = useLoaded(ipc.currencyRate);
+  const { data, failed } = useLoaded(
+    ipc.currencyRate,
+    undefined,
+    `${cards?.currencyFrom}${cards?.currencyTo}`,
+  );
   const [amount, setAmount] = useState("1");
   if (!cards) return null;
   const value = Number(amount);
@@ -139,6 +186,7 @@ export function CurrencyPanel() {
           {(value * data.rate).toLocaleString(undefined, { maximumFractionDigits: 2 })} {data.to}
         </p>
       )}
+      {failed && !data && <p className="prod-problem">Couldn't get today's rate for that pair.</p>}
       {data?.date && <p className="panel-faint">Rate from {data.date}.</p>}
     </Panel>
   );
@@ -336,12 +384,20 @@ export function WebSearchPanel() {
 
 /** Codex: the plan's windows in detail. */
 export function CodexPanel() {
-  const { data } = useLoaded(ipc.codexUsage, 60_000);
+  const { data, loading } = useLoaded(ipc.codexUsage, 60_000);
+  const now = useNow(60_000);
+  const resets = (at: number) =>
+    `resets in ${until(at * 1000, now)} · ${new Date(at * 1000).toLocaleString(undefined, {
+      weekday: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    })}`;
   const label = (minutes: number) =>
     minutes >= 28 * 1440 ? "Monthly" : minutes >= 7 * 1440 ? "Weekly" : `${Math.round(minutes / 60)}-hour`;
   return (
     <Panel title="ChatGPT (Codex) limits">
-      {!data && (
+      {!data && loading && <p className="panel-faint">Reading Codex's files…</p>}
+      {!data && !loading && (
         <p className="panel-faint">Codex hasn't been used on this PC, so there's nothing to read yet.</p>
       )}
       {data && <p className="panel-faint">Plan: {data.plan || "unknown"} · read from Codex's own files.</p>}
@@ -352,7 +408,7 @@ export function CodexPanel() {
               <span>{label(w.windowMinutes)}</span>
               <Meter value={w.usedPercent} width={150} />
               <span className="card-tabular">{Math.round(w.usedPercent)}%</span>
-              <span className="panel-faint">resets {new Date(w.resetsAt * 1000).toLocaleString()}</span>
+              <span className="panel-faint">{resets(w.resetsAt)}</span>
             </div>
           ),
       )}
